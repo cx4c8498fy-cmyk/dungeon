@@ -1,0 +1,2345 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+import pygame
+import sys
+import os
+import random
+import time
+import json
+import glob
+from pygame.locals import *
+from game_data import *
+from assets import load_images, load_sounds, load_floor_variants, load_wall_variants
+
+
+def load_floorlist(base_path):
+    floorlist = []
+    for i in range(3):
+        with open(base_path + "/savedata/data{}.json".format(i+1), "r") as f:
+            loaddata = json.load(f)
+            floorlist.append(loaddata["floor"])
+    return floorlist
+
+
+class Game:
+    def __init__(self):
+        self.path = os.path.dirname(os.path.abspath(sys.argv[0]))
+
+        images = load_images(self.path)
+        self.imgTitle = images.title
+        self.wall_variantsA = images.wallAs
+        self.wall_variantsB = images.wallBs
+        self.imgWall = self.wall_variantsA[0]
+        self.imgWall2 = self.wall_variantsB[0]
+        self.wall_item = None
+        self.imgDark = images.dark
+        self.imgBtlBG = images.btl_bg
+        self.imgEnemy = images.enemy
+        self.imgItem = images.items
+        self.imgFloor = images.floors
+        self.imgPlayer = images.players
+        self.imgEffect = images.effects
+        self.imgFire = pygame.image.load(self.path + "/image/fire.png")
+        self.imgPoison = pygame.image.load(self.path + "/image/poison.png")
+
+        self.floor_variants = load_floor_variants(self.path, 0)
+        if not self.floor_variants:
+            self.floor_variants = [self.imgFloor[0]]
+        self.floor_variants_flipped = [pygame.transform.flip(img, True, False) for img in self.floor_variants]
+        self.imgFloor[0] = self.floor_variants[0]
+
+        self.floorlist = load_floorlist(self.path)
+
+        self.idx = 0
+        self.tmr = 0
+        self.floor = 0
+        self.welcome = 0
+        self.boss = 0
+
+        self.pl_x = 0
+        self.pl_y = 0
+        self.pl_d = 0
+        self.pl_a = 0
+        self.pl_lifemax = 0
+        self.pl_life = 0
+        self.pl_str = 0
+        self.pl_mag = 0
+        self.pl_exp = 0
+        self.pl_shield = [[0, 0], [0, 0], [0, 0]]
+        self.pl_armor = [[0, 0], [0, 0], [0, 0]]
+        self.pl_sword = [[0, 0], [0, 0], [0, 0]]
+        self.potion = 0
+        self.blazegem = 0
+        self.guard = 0
+        self.treasure = 0
+        self.trap = 0
+        self.wpn_lev = 0
+
+        self.emy_name = ""
+        self.lev = 0
+        self.emy_lifemax = 0
+        self.emy_life = 0
+        self.emy_str = 0
+        self.emy_x = 0
+        self.emy_y = 0
+        self.emy_step = 0
+        self.emy_blink = 0
+        self.emy_typ = 0
+
+        self.dmg_eff = 0
+        self.menu_cmd = 0
+        self.save_cmd = 0
+        self.btl_cmd = 0
+        self.pow_up = 1
+        self.poison = 0
+        self.madoka = 0
+        self.burn_turns = 0
+        self.inferno = 0
+        self.boss_mode = "normal"
+        self.guard_remain = 0
+        self.change = 0
+        self.wall_item = None
+
+        self.maze = [[0 for j in range(MAZE_W)] for i in range(MAZE_H)]
+        self.dungeon = [[0 for j in range(DUNGEON_W)] for i in range(DUNGEON_H)]
+
+        self.message = [""] * 10
+        self.init_floor_variant_map()
+        self.init_floor_flip_map()
+        self.prologue_lines = PROLOGUE_LINES
+        self.boss_pos = None
+        self.boss_area = set()
+        self.boss_talk_lines = []
+        self.boss_talk_index = 0
+        self.boss_map_cache = {}
+        self.prev_return = False
+        self.prev_a = False
+        self.boss_talk_char_count = 0
+        self.boss_talk_last_tick = 0
+        self.move_bgm_path = ""
+        self.move_bgm_pos_ms = 0
+        self.move_bgm_start_time = 0.0
+        self.emy_skip_turn = False
+        self.item_wall_pos = None
+        self.item_wall_used = False
+        self.item_wall_used = False
+        self.item_talk_lines = []
+        self.item_talk_index = 0
+        self.item_talk_char_count = 0
+        self.item_talk_last_tick = 0
+        self.item_event_phase = 0
+        self.item_choice = 0
+        self.item_reward = None
+        self.item_event_kind = ""
+        self.item_wall_pos = None
+        self.wall_item = None
+        self.event_wall_pos = None
+        self.event_talk_lines = []
+        self.event_talk_index = 0
+        self.event_talk_char_count = 0
+        self.event_talk_last_tick = 0
+        self.wall_event = None
+
+    def init_floor_variant_map(self):
+        count = max(len(self.floor_variants), 1)
+        self.floor_var_map = [[random.randint(0, count - 1) for j in range(DUNGEON_W)] for i in range(DUNGEON_H)]
+
+    def init_floor_flip_map(self):
+        self.floor_flip_map = [[random.randint(0, 1) for j in range(DUNGEON_W)] for i in range(DUNGEON_H)]
+
+    def set_floor_assets(self, floor_index, floor_value):
+        self.floor_variants = load_floor_variants(self.path, floor_index)
+        if not self.floor_variants:
+            self.floor_variants = [self.imgFloor[0]]
+        self.floor_variants_flipped = [pygame.transform.flip(img, True, False) for img in self.floor_variants]
+        self.imgFloor[0] = self.floor_variants[0]
+        self.imgFloor[2] = pygame.image.load(self.path + "/image/cocoon" + str(floor_index) + ".png")
+        wall_set = (floor_value - 1) // 10
+        self.wall_variantsA = load_wall_variants(self.path, "wallA", wall_set)
+        if not self.wall_variantsA:
+            self.wall_variantsA = [self.imgWall]
+        self.wall_variantsB = load_wall_variants(self.path, "wallB", wall_set)
+        if not self.wall_variantsB:
+            self.wall_variantsB = [self.imgWall2]
+        self.imgWall = self.wall_variantsA[0]
+        self.imgWall2 = self.wall_variantsB[0]
+        item_path = os.path.join(self.path, "image", "wallA{}_item.png".format(wall_set))
+        self.wall_item = pygame.image.load(item_path) if os.path.exists(item_path) else None
+        event_path = os.path.join(self.path, "image", "wallA{}_event.png".format(wall_set))
+        self.wall_event = pygame.image.load(event_path) if os.path.exists(event_path) else None
+
+    def set_floor_assets_for_current_floor(self):
+        floor_index = (self.floor - 1) // 10
+        self.set_floor_assets(floor_index, self.floor)
+
+    def set_floor_assets_for_transition(self, floor_value):
+        floor_index = (floor_value - 1) // 10
+        self.set_floor_assets(floor_index, floor_value)
+
+    def is_boss_tile(self, x, y):
+        return (x, y) in self.boss_area
+
+    def boss_in_front(self):
+        if not self.boss_area:
+            return False
+        dx = 0
+        dy = 0
+        if self.pl_d == 0:
+            dy = -1
+        elif self.pl_d == 1:
+            dy = 1
+        elif self.pl_d == 2:
+            dx = -1
+        elif self.pl_d == 3:
+            dx = 1
+        tx = self.pl_x + dx
+        ty = self.pl_y + dy
+        return (tx, ty) in self.boss_area
+
+    def stair_in_front(self):
+        dx = 0
+        dy = 0
+        if self.pl_d == 0:
+            dy = -1
+        elif self.pl_d == 1:
+            dy = 1
+        elif self.pl_d == 2:
+            dx = -1
+        elif self.pl_d == 3:
+            dx = 1
+        tx = self.pl_x + dx
+        ty = self.pl_y + dy
+        if 0 <= tx < DUNGEON_W and 0 <= ty < DUNGEON_H:
+            return self.dungeon[ty][tx] == 3
+        return False
+
+    def place_boss(self):
+        self.boss_pos = None
+        self.boss_area = set()
+        candidates = []
+        for y in range(3, DUNGEON_H - 5):
+            for x in range(3, DUNGEON_W - 4):
+                if (self.dungeon[y][x] == 0 and self.dungeon[y][x + 1] == 0 and
+                    self.dungeon[y + 1][x] == 0 and self.dungeon[y + 1][x + 1] == 0 and
+                    self.dungeon[y + 2][x] == 0 and self.dungeon[y + 2][x + 1] == 0):
+                    candidates.append((x, y))
+        if candidates:
+            x, y = random.choice(candidates)
+            self.boss_pos = (x, y)
+            self.boss_area = {(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)}
+            return
+        x = random.randint(3, DUNGEON_W - 4)
+        y = random.randint(3, DUNGEON_H - 5)
+        for ry in range(0, 3):
+            for rx in range(0, 2):
+                self.dungeon[y + ry][x + rx] = 0
+        self.boss_pos = (x, y)
+        self.boss_area = {(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)}
+
+    def init_boss_talk(self):
+        boss_id = 9 + int(self.floor // 10)
+        if 90 < self.floor < 100:
+            boss_id = 9 + int(self.floor % 10)
+        boss_map_id = boss_id - 9
+        self.boss_talk_lines = BOSS_TALK[boss_map_id]
+        self.boss_talk_index = 0
+        self.boss_talk_char_count = 0
+        self.boss_talk_last_tick = pygame.time.get_ticks()
+
+    def init_item_event(self):
+        self.item_event_phase = 0
+        self.item_choice = 0
+        self.item_reward = None
+        self.item_talk_index = 0
+        self.item_talk_char_count = 0
+        self.item_talk_last_tick = pygame.time.get_ticks()
+        if (self.floor // 10) % 2 == 0:
+            self.item_event_kind = "item"
+            self.item_talk_lines = [
+                "迷える子羊よ。そなたに恵みをもたらしましょう。",
+                "あなたが必要としているものは何ですか？",
+            ]
+        else:
+            self.item_event_kind = "weapon"
+            self.item_talk_lines = [
+                "迷える子羊よ。そなたに恵みをもたらしましょう。",
+                "あなたが必要としているものは何ですか？",
+            ]
+
+    def init_event_talk(self):
+        event_id = (self.floor - 1) // 10
+        if 0 <= event_id < len(EVENT_TALK):
+            self.event_talk_lines = EVENT_TALK[event_id]
+        else:
+            self.event_talk_lines = ["Event talk missing."]
+        self.event_talk_index = 0
+        self.event_talk_char_count = 0
+        self.event_talk_last_tick = pygame.time.get_ticks()
+
+    def get_boss_map_image(self):
+        boss_id = 9 + int(self.floor // 10)
+        if 90 < self.floor < 100:
+            boss_id = 9 + int(self.floor % 10)
+        boss_map_id = boss_id - 9
+        if boss_map_id not in self.boss_map_cache:
+            path = self.path + "/image/boss_map" + str(boss_map_id) + ".png"
+            self.boss_map_cache[boss_map_id] = pygame.image.load(path)
+        return self.boss_map_cache[boss_map_id]
+
+    def make_dungeon (self ):
+        XP =[0 ,1 ,0 ,-1 ]
+        YP =[-1 ,0 ,1 ,0 ]
+
+        #周りの壁
+        for x in range (MAZE_W ):
+            self.maze [0 ][x ]=1 
+            self.maze [MAZE_H -1 ][x ]=1 
+        for y in range (1 ,MAZE_H -1 ):
+            self.maze [y ][0 ]=1 
+            self.maze [y ][MAZE_W -1 ]=1 
+            #中を何もない状態に
+        for y in range (1 ,MAZE_H -1 ):
+            for x in range (1 ,MAZE_W -1 ):
+                self.maze [y ][x ]=0 
+                #柱
+        for y in range (2 ,MAZE_H -2 ,2 ):
+            for x in range (2 ,MAZE_W -2 ,2 ):
+                self.maze [y ][x ]=1 
+                #柱から壁を作る
+        for y in range (2 ,MAZE_H -2 ,2 ):
+            for x in range (2 ,MAZE_W -2 ,2 ):
+                d =random .randint (0 ,3 )
+                if x >2 :
+                    d =random .randint (0 ,2 )
+                self.maze [y +YP [d ]][x +XP [d ]]=1 
+
+                #迷路からダンジョンを生成
+        for y in range (DUNGEON_H ):
+            for x in range (DUNGEON_W ):
+                self.dungeon [y ][x ]=9 
+                #部屋と通路の配置
+        for y in range (1 ,MAZE_H -1 ):
+            for x in range (1 ,MAZE_W -1 ):
+                dx =x *3 +1 
+                dy =y *3 +1 
+                if self.maze [y ][x ]==0 :
+                    if self.floor %10 ==0 or self.floor >90 :
+                        bossfloor =80 
+                    else :
+                        bossfloor =0 
+                    if random .randint (0 ,99 )<20 +bossfloor :
+                        for ry in range (-1 ,2 ):
+                            for rx in range (-1 ,2 ):
+                                self.dungeon [dy +ry ][dx +rx ]=0 
+                    else :#通路を作る
+                        self.dungeon [dy ][dx ]=0 
+                        if self.maze [y -1 ][x ]==0 :
+                            self.dungeon [dy -1 ][dx ]=0 
+                        if self.maze [y +1 ][x ]==0 :
+                            self.dungeon [dy +1 ][dx ]=0 
+                        if self.maze [y ][x -1 ]==0 :
+                            self.dungeon [dy ][dx -1 ]=0 
+                        if self.maze [y ][x +1 ]==0 :
+                            self.dungeon [dy ][dx +1 ]=0 
+        self.init_floor_variant_map()
+        self.init_floor_flip_map()
+
+    def draw_dungeon (self ,bg ,fnt ):
+        bg .fill (BLACK )
+        for y in range (-4 ,6 ):
+            for x in range (-5 ,6 ):
+                X =(x +5 )*80 
+                Y =(y +4 )*80 
+                dx =self.pl_x +x 
+                dy =self.pl_y +y 
+                if 0 <=dx <DUNGEON_W and 0 <=dy <DUNGEON_H :
+                    if self.dungeon [dy ][dx ]<=7 :
+                        tile = self.dungeon [dy ][dx ]
+                        if tile in (0 ,1 ,2 ,4 ):
+                            variant = self.floor_var_map [dy ][dx ]
+                            if self.floor_flip_map [dy ][dx ]:
+                                bg .blit (self.floor_variants_flipped [variant ],[X ,Y ])
+                            else :
+                                bg .blit (self.floor_variants [variant ],[X ,Y ])
+                            if tile !=0 :
+                                bg .blit (self.imgFloor [tile ],[X ,Y ])
+                        else :
+                            bg .blit (self.imgFloor [tile ],[X ,Y ])
+                    if self.dungeon [dy ][dx ]==9 :
+                        if self.event_wall_pos and (dx, dy) == self.event_wall_pos and self.wall_event:
+                            bg .blit (self.wall_event ,[X ,Y -40 ])
+                        elif self.item_wall_pos and (dx, dy) == self.item_wall_pos and self.wall_item:
+                            bg .blit (self.wall_item ,[X ,Y -40 ])
+                        else:
+                            bg .blit (self.imgWall ,[X ,Y -40 ])
+                        if dy >=1 and self.dungeon [dy -1 ][dx ]==9 :
+                            bg .blit (self.imgWall2 ,[X ,Y -80 ])
+                    if self.boss_pos and dx == self.boss_pos[0] + 1 and dy == self.boss_pos[1] + 1:
+                        boss_map = self.get_boss_map_image()
+                        bx = X - 80
+                        by = Y - 80
+                        bg .blit (boss_map ,[bx ,by ])
+                if x ==0 and y ==0 :# 主人公キャラの表示
+                    bg .blit (self.imgPlayer [self.pl_a ],[X ,Y -40 ])
+        bg .blit (self.imgDark ,[0 ,0 ])# 四隅が暗闇の画像を重ねる
+        self.draw_para (bg ,fnt )# 主人公の能力を表示
+
+    def put_event (self ):
+    # 階段かボスの配置
+        self.boss_pos = None
+        self.boss_area = set()
+        self.item_wall_pos = None
+        self.item_wall_used = False
+        self.event_wall_pos = None
+        if self.floor %10 ==0 or self.floor >90 :
+            self.place_boss()
+        if not self.boss_pos:
+            while True :
+                x =random .randint (3 ,DUNGEON_W -4 )
+                y =random .randint (3 ,DUNGEON_H -4 )
+                if (self.dungeon [y ][x ]==0 ):
+                    for ry in range (-1 ,2 ):# 階段の周囲を床にする
+                        for rx in range (-1 ,2 ):
+                            self.dungeon [y +ry ][x +rx ]=0 
+                    self.dungeon [y ][x ]=3 
+                    break 
+                # 宝箱と繭と武器の配置
+        for i in range (60 ):
+            x =random .randint (3 ,DUNGEON_W -4 )
+            y =random .randint (3 ,DUNGEON_H -4 )
+            if (self.dungeon [y ][x ]==0 )and not self.is_boss_tile (x ,y ):
+                self.dungeon [y ][x ]=random .choice ([1 ,1 ,1 ,1 ,1 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,4 ,4 ])
+                # ダメージ、回復床の配置
+        if self.floor >50 :
+            for i in range (7 +int (self.floor //90 )*(self.floor -83 )):
+                x =random .randint (3 ,DUNGEON_W -4 )
+                y =random .randint (3 ,DUNGEON_H -4 )
+                if (self.dungeon [y ][x ]==0 )and not self.is_boss_tile (x ,y ):
+                    if random .random ()>0.5 :
+                        self.dungeon [y ][x ]=5 
+                    else :
+                        self.dungeon [y ][x ]=6 
+                        # プレイヤーの初期位置
+        while True :
+            self.pl_x =random .randint (3 ,DUNGEON_W -4 )
+            self.pl_y =random .randint (3 ,DUNGEON_H -4 )
+            if (self.dungeon [self.pl_y ][self.pl_x ]==0 )and not self.is_boss_tile (self.pl_x ,self.pl_y ):
+                break 
+        self.pl_d =1 
+        self.pl_a =2 
+        if self.floor %10 ==7 and self.wall_item:
+            wall_cells = [
+                (x, y)
+                for y in range(DUNGEON_H - 1)
+                for x in range(DUNGEON_W)
+                if self.dungeon[y][x] == 9 and self.dungeon[y + 1][x] == 0
+            ]
+            if wall_cells:
+                self.item_wall_pos = random.choice(wall_cells)
+        if self.floor %10 ==4 and self.wall_event:
+            wall_cells = [
+                (x, y)
+                for y in range(DUNGEON_H - 1)
+                for x in range(DUNGEON_W)
+                if self.dungeon[y][x] == 9 and self.dungeon[y + 1][x] == 0
+            ]
+            if wall_cells:
+                self.event_wall_pos = random.choice(wall_cells)
+
+    def move_player (self ,key ):
+
+        if self.dungeon [self.pl_y ][self.pl_x ]==1 :# 宝箱に載った
+            self.dungeon [self.pl_y ][self.pl_x ]=0 
+            self.treasure =random .choice ([0 ,0 ,1 ,1 ,1 ,2 ])
+            if self.treasure ==0 :
+                self.potion =self.potion +1 
+            if self.treasure ==1 :
+                self.blazegem =self.blazegem +1 
+            if self.treasure ==2 :
+                self.guard =self.guard +1 
+            self.idx =3 
+            self.tmr =0 
+            return 
+        if self.dungeon [self.pl_y ][self.pl_x ]==4 :# 武器箱に載った
+            self.dungeon [self.pl_y ][self.pl_x ]=0 
+            w_a =WEP_APPEAR [(self.floor -1 )//10 ]
+            self.trap =random .randint (2 ,4 +w_a )#最大で2~10を用意
+            low =max (1 ,self.floor -14 )
+            self.wpn_lev =random .randint (low ,self.floor )
+            if self.trap %3 ==2 :
+                if self.pl_shield [(w_a +2 )//3 ][0 ]==0 :
+                    self.trap =2 +3 *((w_a +2 )//3 )
+                self.pl_shield [self.trap //3 ][0 ]=1 
+                self.pl_shield [self.trap //3 ][1 ]=max (self.wpn_lev ,self.pl_shield [self.trap //3 ][1 ])
+            if self.trap %3 ==0 :
+                if self.pl_armor [(w_a +1 )//3 ][0 ]==0 :
+                    self.trap =3 +3 *((w_a +1 )//3 )
+                self.pl_armor [self.trap //3 -1 ][0 ]=1 
+                self.pl_armor [self.trap //3 -1 ][1 ]=max (self.wpn_lev ,self.pl_armor [self.trap //3 -1 ][1 ])
+            if self.trap %3 ==1 :
+                if self.pl_sword [(w_a )//3 ][0 ]==0 :
+                    self.trap =4 +3 *((w_a )//3 )
+                self.pl_sword [self.trap //3 -1 ][0 ]=1 
+                self.pl_sword [self.trap //3 -1 ][1 ]=max (self.wpn_lev ,self.pl_sword [self.trap //3 -1 ][1 ])
+            self.idx =4 
+            self.tmr =0 
+            return 
+        if self.dungeon [self.pl_y ][self.pl_x ]==5 :# ダメージ床
+            self.dungeon [self.pl_y ][self.pl_x ]=0 
+            self.trap =0 
+            pygame .mixer .Sound (self.path +"/sound/ohd_se_attack.wav").play ()
+            self.pl_life =self.pl_life -10 *((self.floor -1 )//10 )+30 
+            self.idx =4 
+            self.tmr =0 
+            if self.pl_life <=0 :
+                self.pl_life =0 
+                pygame .mixer .music .stop ()
+                self.idx =9 
+                self.tmr =0 
+            return 
+        if self.dungeon [self.pl_y ][self.pl_x ]==6 :# 回復床
+            self.dungeon [self.pl_y ][self.pl_x ]=0 
+            self.trap =1 
+            pygame .mixer .Sound (self.path +"/sound/ohd_se_potion.wav").play ()
+            self.pl_life =min (self.pl_life -20 +10 *((self.floor -1 )//10 ),self.pl_lifemax )
+            self.idx =4 
+            self.tmr =0 
+            return 
+        if self.dungeon [self.pl_y ][self.pl_x ]==2 :# 繭に載った
+            self.dungeon [self.pl_y ][self.pl_x ]=0 
+            r =random .randint (0 ,99 )
+            if r <35 :# 食料
+                self.treasure =random .choice ([3 ,3 ,3 ,3 ,3 ,4 ,4 ,4 ,4 ,4 ,5 ])
+                if self.treasure ==3 :
+                    self.pl_life =min (self.pl_life +40 ,self.pl_lifemax )
+                if self.treasure ==4 :
+                    self.pl_life =min (self.pl_life +20 ,self.pl_lifemax )
+                    self.pl_mag =self.pl_mag +40 
+                if self.treasure ==5 :
+                    self.pl_mag =self.pl_mag +120 
+                self.idx =3 
+                self.tmr =0 
+            else :# 敵出現
+                self.idx =10 
+                self.tmr =0 
+            return 
+        if key [K_m ]==1 :# メニュー
+            self.idx =5 
+
+            # 方向キーで上下左右に移動
+        x =self.pl_x 
+        y =self.pl_y 
+        if key [K_UP ]==1 :
+            self.pl_d =0 
+            if self.dungeon [self.pl_y -1 ][self.pl_x ]!=9 and self.dungeon [self.pl_y -1 ][self.pl_x ]!=3 and not self.is_boss_tile (self.pl_x ,self.pl_y -1 ):
+                self.pl_y =self.pl_y -1 
+        if key [K_DOWN ]==1 :
+            self.pl_d =1 
+            if self.dungeon [self.pl_y +1 ][self.pl_x ]!=9 and self.dungeon [self.pl_y +1 ][self.pl_x ]!=3 and not self.is_boss_tile (self.pl_x ,self.pl_y +1 ):
+                self.pl_y =self.pl_y +1 
+        if key [K_LEFT ]==1 :
+            self.pl_d =2 
+            if self.dungeon [self.pl_y ][self.pl_x -1 ]!=9 and self.dungeon [self.pl_y ][self.pl_x -1 ]!=3 and not self.is_boss_tile (self.pl_x -1 ,self.pl_y ):
+                self.pl_x =self.pl_x -1 
+        if key [K_RIGHT ]==1 :
+            self.pl_d =3 
+            if self.dungeon [self.pl_y ][self.pl_x +1 ]!=9 and self.dungeon [self.pl_y ][self.pl_x +1 ]!=3 and not self.is_boss_tile (self.pl_x +1 ,self.pl_y ):
+                self.pl_x =self.pl_x +1 
+        self.pl_a =self.pl_d *2 
+        if self.pl_x !=x or self.pl_y !=y :
+            self.pl_a =self.pl_a +self.tmr %2 # 移動したら足踏みのアニメーション
+
+    def draw_text (self ,bg ,txt ,x ,y ,fnt ,col ):
+        sur =fnt .render (txt ,True ,BLACK )
+        bg .blit (sur ,[x +1 ,y +2 ])
+        sur =fnt .render (txt ,True ,col )
+        bg .blit (sur ,[x ,y ])
+
+    def draw_text_alpha (self ,bg ,txt ,x ,y ,fnt ,col ,alpha ):
+        shadow =fnt .render (txt ,True ,BLACK )
+        shadow .set_alpha (alpha )
+        bg .blit (shadow ,[x +1 ,y +2 ])
+        text =fnt .render (txt ,True ,col )
+        text .set_alpha (alpha )
+        bg .blit (text ,[x ,y ])
+
+    def start_new_game (self ):
+        self.floor =1 
+        self.set_floor_assets_for_current_floor ()
+        self.make_dungeon ()
+        self.put_event ()
+        self.welcome =15 
+        self.pl_lifemax =300 
+        self.pl_life =self.pl_lifemax 
+        self.pl_str =100 
+        self.pl_mag =0 
+        self.pl_exp =0 
+        self.potion =0 
+        self.blazegem =0 
+        self.guard =0 
+        self.idx =1 
+        self.tmr =0 
+        self.pl_shield =[[0 ,0 ],[0 ,0 ],[0 ,0 ]]
+        self.pl_armor =[[0 ,0 ],[0 ,0 ],[0 ,0 ]]
+        self.pl_sword =[[0 ,0 ],[0 ,0 ],[0 ,0 ]]
+        self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
+        self.move_bgm_pos_ms =0 
+        self.move_bgm_start_time =time .time ()
+        pygame .mixer .music .load (self.move_bgm_path )
+        pygame .mixer .music .play (-1 )
+
+    def draw_prologue (self ,bg ,fnt ,key ):
+        line_duration =20 
+        fade_in =15 
+        end_hold =30 
+        end_fade =60 
+        max_lines =12 
+        line_height =32 
+        start_y =90 
+        total_duration =len (self.prologue_lines )*line_duration 
+
+        if key [K_s ]:
+            self.start_new_game ()
+            return 
+
+        line_index =self.tmr //line_duration 
+        phase =self.tmr %line_duration 
+        if key [K_RETURN ]or key [K_RIGHT ]:
+            if line_index <len (self.prologue_lines )and phase <fade_in :
+                self.tmr =line_index *line_duration +fade_in 
+                phase =fade_in 
+
+        bg .fill (BLACK )
+        self.draw_text (bg ,"[S]kip",780 ,20 ,fnt ,WHITE )
+
+        if self.tmr >=total_duration :
+            end_phase =self.tmr -total_duration 
+            if end_phase >=end_hold +end_fade :
+                self.start_new_game ()
+                return 
+            if end_phase <end_hold :
+                alpha =255 
+            else :
+                alpha =int (255 *(1 -(end_phase -end_hold )/end_fade ))
+            visible_start =max (0 ,len (self.prologue_lines )-max_lines )
+            for i in range (visible_start ,len (self.prologue_lines )):
+                txt =self.prologue_lines [i ]
+                if txt :
+                    y =start_y +(i -visible_start )*line_height 
+                    self.draw_text_alpha (bg ,txt ,60 ,y ,fnt ,WHITE ,alpha )
+            return 
+
+        visible_start =max (0 ,line_index -(max_lines -1 ))
+        for i in range (visible_start ,line_index ):
+            txt =self.prologue_lines [i ]
+            if txt :
+                y =start_y +(i -visible_start )*line_height 
+                self.draw_text (bg ,txt ,60 ,y ,fnt ,WHITE )
+        if phase <fade_in :
+            alpha =int (255 *phase /fade_in )
+        else :
+            alpha =255 
+        txt =self.prologue_lines [line_index ]
+        if txt :
+            y =start_y +(line_index -visible_start )*line_height 
+            self.draw_text_alpha (bg ,txt ,60 ,y ,fnt ,WHITE ,alpha )
+
+    def get_font (self ,size ):
+        font_dir =os .path .join (self.path ,"fonts")
+        if os .path .isdir (font_dir ):
+            patterns =[
+                os .path .join (font_dir ,"**","*.otf"),
+                os .path .join (font_dir ,"**","*.ttf"),
+            ]
+            font_paths =[]
+            for pattern in patterns :
+                font_paths .extend (glob .glob (pattern ,recursive =True ))
+            font_paths =sorted (font_paths )
+            preferred =None 
+            for path in font_paths :
+                if "PixelMplus12-Regular.ttf" in path :
+                    preferred =path 
+                    break 
+            if preferred is None :
+                for path in font_paths :
+                    if "Regular" in os .path .basename (path ):
+                        preferred =path 
+                        break 
+            if preferred :
+                try :
+                    return pygame .font .Font (preferred ,size )
+                except Exception :
+                    pass 
+            for font_path in font_paths :
+                try :
+                    return pygame .font .Font (font_path ,size )
+                except Exception :
+                    pass 
+        candidates =[
+            "Hiragino Sans",
+            "Hiragino Kaku Gothic ProN",
+            "Yu Gothic",
+            "Meiryo",
+            "MS Gothic",
+        ]
+        for name in candidates :
+            font =pygame .font .SysFont (name ,size )
+            if font :
+                return font 
+            path =pygame .font .match_font (name )
+            if path :
+                return pygame .font .Font (path ,size )
+        return pygame .font .Font (None ,size )
+
+    def draw_para (self ,bg ,fnt ):
+        X =10
+        Y =565 
+        W =325 
+        H =140 
+        win =pygame .Surface ((W ,H ),pygame .SRCALPHA )
+        win .fill ((0 ,0 ,0 ,100 ))
+        # pygame .draw .rect (win ,WHITE ,[0 ,0 ,W ,H ],2 )
+        bg .blit (win ,[X ,Y ])
+
+        self.draw_text (bg ,"POT",X +10 ,Y +8 ,fnt ,WHITE )
+        self.draw_text (bg ,str (self.potion ),X +50 ,Y +8 ,fnt ,WHITE )
+        self.draw_text (bg ,"GEM",X +110 ,Y +8 ,fnt ,WHITE )
+        self.draw_text (bg ,str (self.blazegem ),X +150 ,Y +8 ,fnt ,WHITE )
+        self.draw_text (bg ,"GRD",X +210 ,Y +8 ,fnt ,WHITE )
+        self.draw_text (bg ,str (self.guard ),X +250 ,Y +8 ,fnt ,WHITE )
+
+        col =WHITE 
+        if self.pl_life <int (self.pl_lifemax /5 )and self.tmr %2 ==0 :col =RED 
+        self.draw_text (bg ,"LIFE",X +10 ,Y +44 ,fnt ,WHITE )
+        self.draw_text (bg ,"{}/{}".format (self.pl_life ,self.pl_lifemax ),X +73 ,Y +44 ,fnt ,col )
+        self.draw_text (bg ,"MP",X +10 ,Y +69 ,fnt ,WHITE )
+        self.draw_text (bg ,str (self.pl_mag ),X +73 ,Y +69 ,fnt ,WHITE )
+        self.draw_text (bg ,"STR",X +10 ,Y +95 ,fnt ,WHITE )
+        self.draw_text (bg ,str (self.pl_str ),X +73 ,Y +95 ,fnt ,WHITE )
+        self.draw_text (bg ,"EXP",X +10 ,Y +120 ,fnt ,WHITE )
+        self.draw_text (bg ,str (self.pl_exp )+"/"+str ((self.pl_lifemax -250 )*20 ),X +73 ,Y +120 ,fnt ,WHITE )
+
+        self.draw_text (bg ,"盾",X +180 ,Y +46 ,fnt ,WHITE )
+        self.draw_text (bg ,"{}-{}-{}".format (self.pl_shield [0 ][1 ],self.pl_shield [1 ][1 ],self.pl_shield [2 ][1 ]),X +240 ,Y +46 ,fnt ,WHITE )
+        self.draw_text (bg ,"鎧",X +180 ,Y +71 ,fnt ,WHITE )
+        self.draw_text (bg ,"{}-{}-{}".format (self.pl_armor [0 ][1 ],self.pl_armor [1 ][1 ],self.pl_armor [2 ][1 ]),X +240 ,Y +71 ,fnt ,WHITE )
+        self.draw_text (bg ,"剣",X +180 ,Y +97 ,fnt ,WHITE )
+        self.draw_text (bg ,"{}-{}-{}".format (self.pl_sword [0 ][1 ],self.pl_sword [1 ][1 ],self.pl_sword [2 ][1 ]),X +240 ,Y +97 ,fnt ,WHITE )
+
+    def init_battle (self ):
+        self.emy_skip_turn = False
+        self.emy_typ =random .randint (0 ,EMY_APPEAR [self.floor -1 ])
+        geta =((self.floor -1 )//90 )*(9 -self.emy_typ )*10 
+        if self.emy_typ ==10 :
+            self.emy_typ =22 
+            geta =0 
+        self.lev =random .randint (1 ,self.floor )
+        self.imgEnemy =pygame .image .load (self.path +"/image/enemy"+str (self.emy_typ )+"_"+str ((self.floor -1 )//30 )+".png")
+        self.emy_name =EMY_NAME [self.emy_typ ]+" LV"+str (self.lev )
+        self.emy_lifemax =int ((73 *(self.emy_typ +1 )+EMY_LIFE [self.emy_typ ])*(1.2 *((self.floor -1 )//30 )+1 ))+(self.lev -1 )*8 +geta *3 
+        self.emy_life =self.emy_lifemax 
+        self.emy_str =int (self.emy_lifemax /7 +EMY_STR [self.emy_typ ]*(0.5 *((self.floor -1 )//30 )+1 ))+geta 
+        self.emy_x =440 -self.imgEnemy .get_width ()/2 
+        self.emy_y =570 -self.imgEnemy .get_height ()
+
+    def init_bossbattle (self ):
+        self.emy_skip_turn = False
+        base_typ =9 +int (self.floor //10 )
+        if 90 <self.floor <100 :
+            base_typ =9 +int (self.floor %10 )
+        elif self.floor ==100 :
+            base_typ =20 
+        self.emy_typ =base_typ + self.change#10~
+        geta =((self.floor -1 )//90 )*(19 -self.emy_typ )*30 
+        self.imgEnemy =pygame .image .load (self.path +"/image/boss_"+str (self.emy_typ -9 )+".png")
+        self.emy_name =EMY_NAME [self.emy_typ ]
+        self.emy_lifemax =EMY_LIFE [self.emy_typ ]+geta *20 
+        self.emy_life =self.emy_lifemax 
+        self.emy_str =EMY_STR [self.emy_typ ]+geta 
+        self.emy_x =440 -self.imgEnemy .get_width ()/2 
+        self.emy_y =550 -self.imgEnemy .get_height ()
+
+    def draw_bar (self ,bg ,x ,y ,w ,h ,val ,ma ):
+        pygame .draw .rect (bg ,WHITE ,[x -2 ,y -2 ,w +4 ,h +4 ])
+        pygame .draw .rect (bg ,BLACK ,[x ,y ,w ,h ])
+        if val >0 :
+            pygame .draw .rect (bg ,(0 ,128 ,255 ),[x ,y ,w *val /ma ,h ])
+
+    def draw_battle (self ,bg ,fnt ):
+        bx =0 
+        by =0 
+        if self.dmg_eff >0 :
+            self.dmg_eff =self.dmg_eff -1 
+            bx =random .randint (-20 ,20 )
+            by =random .randint (-10 ,10 )
+        bg .blit (self.imgBtlBG ,[bx ,by ])
+        if self.emy_life >0 and self.emy_blink %2 ==0 :
+            bg .blit (self.imgEnemy ,[self.emy_x ,self.emy_y +self.emy_step ])
+        if self.burn_turns >0 :
+            fx = self.emy_x + self.imgEnemy.get_width() - self.imgFire.get_width()
+            fy = self.emy_y + self.emy_step - self.imgFire.get_height() // 2
+            bg .blit (self.imgFire ,[fx ,fy ])
+        self.draw_bar (bg ,340 ,580 ,200 ,10 ,self.emy_life ,self.emy_lifemax )
+        if self.emy_blink >0 :
+            self.emy_blink =self.emy_blink -1 
+        if self.guard_remain >0 :
+            bg .blit (self.imgItem [2 ],[380 ,645 ])
+        if self.poison >0 :
+            bg .blit (self.imgPoison,[460 ,645 ])
+        for i in range (10 ):# 戦闘メッセージの表示
+            self.draw_text (bg ,self.message [i ],600 ,100 +i *50 ,fnt ,WHITE )
+        if self.boss ==0 :
+            self.draw_text (bg ,"Lv."+str (self.lev ),490 ,592 ,fnt ,WHITE )# レベルの表示
+        if self.emy_typ ==16 or self.emy_typ ==21 :
+            self.draw_text (bg ,"Magia : "+str (self.madoka )+"/1000",420 ,592 ,fnt ,WHITE )
+        self.draw_para (bg ,fnt )# 主人公の能力を表示
+
+    def menu_command (self ,bg ,fnt ,key ):
+        ent =False 
+        if key [K_s ]:# Sキー 
+            self.menu_cmd =0 
+            ent =True 
+        if key [K_t ]:# Tキー
+            self.menu_cmd =1 
+            ent =True 
+        if key [K_c ]:# Cキー
+            self.menu_cmd =2 
+            ent =True 
+        if key [K_UP ]and self.menu_cmd >0 :#↑キー
+            self.menu_cmd -=1 
+        if key [K_DOWN ]and self.menu_cmd <2 :#↓キー
+            self.menu_cmd +=1 
+        if key [K_SPACE ]or key [K_RETURN ]:
+            ent =True 
+        for i in range (3 ):
+            c =WHITE 
+            if self.menu_cmd ==i :
+                c =BLINK [self.tmr %6 ]
+            self.draw_text (bg ,MENU [i ],300 ,220 +i *80 ,fnt ,c )
+        return ent 
+
+    def save_command (self ,bg ,fnt ,key ):
+        ent =False 
+        SAVE =["data[1] : 地下 {}階".format (self.floorlist [0 ]),
+        "data[2] : 地下 {}階".format (self.floorlist [1 ]),
+        "data[3] : 地下 {}階".format (self.floorlist [2 ])]
+        if key [K_1 ]:# 1キー 
+            self.save_cmd =0 
+            ent =True 
+        if key [K_2 ]:# 2キー
+            self.save_cmd =1 
+            ent =True 
+        if key [K_3 ]:# 3キー
+            self.save_cmd =2 
+            ent =True 
+        if key [K_UP ]and self.save_cmd >0 :#↑キー
+            self.save_cmd -=1 
+        if key [K_DOWN ]and self.save_cmd <2 :#↓キー
+            self.save_cmd +=1 
+        if key [K_SPACE ]or key [K_RETURN ]:
+            ent =True 
+        for i in range (3 ):
+            c =WHITE 
+            if self.save_cmd ==i :
+                c =BLINK [self.tmr %6 ]
+            self.draw_text (bg ,SAVE [i ],340 ,270 +i *40 ,fnt ,c )
+        return ent 
+
+    def battle_command (self ,bg ,fnt ,key ):
+        ent =False 
+        if key [K_a ]:# Aキー
+            self.btl_cmd =0 
+            ent =True 
+        if key [K_m ]:# Mキー 
+            self.btl_cmd =1 
+            ent =True 
+        if key [K_p ]:# Pキー
+            self.btl_cmd =2 
+            ent =True 
+        if key [K_b ]:# Bキー
+            self.btl_cmd =3 
+            ent =True 
+        if key [K_g ]:# Gキー
+            self.btl_cmd =4 
+            ent =True 
+        if key [K_r ]:# Rキー
+            self.btl_cmd =5 
+            ent =True 
+        if key [K_i ]:# Iキー
+            self.btl_cmd =6 
+            ent =True 
+        if key [K_UP ]and self.btl_cmd >0 :#↑キー
+            self.btl_cmd -=1 
+        if key [K_DOWN ]and self.btl_cmd <6 :#↓キー
+            self.btl_cmd +=1 
+        if key [K_SPACE ]or key [K_RETURN ]:
+            ent =True 
+        for i in range (7 ):
+            c =WHITE 
+            if self.btl_cmd ==i :
+                c =BLINK [self.tmr %6 ]
+            self.draw_text (bg ,COMMAND [i ],20 ,140 +i *60 ,fnt ,c )
+        return ent 
+
+    def init_message (self ):
+        for i in range (10 ):
+            self.message [i ]=""
+
+    def set_message (self ,msg ):
+        for i in range (10 ):
+            if self.message [i ]=="":
+                self.message [i ]=msg 
+                return 
+        for i in range (9 ):
+            self.message [i ]=self.message [i +1 ]
+        self.message [9 ]=msg 
+
+    def emy_action (self ,bg ):
+        action =True 
+        if self.emy_typ ==4 or self.emy_typ ==8 or self.emy_typ ==15 :
+            self.pow_up =1 
+            if random .random ()>0.7 :
+                self.pow_up ={4:2 ,8:2 ,15:3 }[self.emy_typ ]
+                self.set_message ("Enemy power up!")
+            action =False 
+        if self.emy_typ ==5 or self.emy_typ ==12:
+            suck = {5:5+self.lev, 12:104}[self.emy_typ] + random .randint (1 ,self.emy_typ )
+            suck = min(suck, self.pl_mag)
+            self.set_message ("MP down! -{}".format (suck ))
+            self.pl_mag =self.pl_mag -suck 
+            action =False 
+        if self.emy_typ ==6 :
+            if random .random ()>0.5 :
+                self.emy_life =0 #表示を消去
+                self.idx =18 
+                self.tmr =0 
+            action =False 
+        if self.emy_typ ==7 or self.boss_mode == "ice":
+            cure = self.emy_lifemax //10 + random.randint (-self.emy_lifemax//100, self.emy_lifemax//100)
+            cure += {7:0, 18:-3100}[self.emy_typ]
+            self.set_message ("Enemy recover. +{}".format (int (min (cure ,self.emy_lifemax -self.emy_life ))))
+            pygame .mixer .Sound (self.path +"/sound/ohd_se_potion.wav").play ()
+            self.emy_life =min (self.emy_life +cure ,self.emy_lifemax )
+            action =False 
+        self.poison =max (self.poison -1 ,0 )
+        if self.emy_typ ==11:
+            if random .random ()>0.84:
+                self.poison =2
+                self.set_message ("Poison!")
+                action =False 
+        if self.poison >0 :
+            self.set_message ("Poison damage -{}".format (self.poison *40 ))
+            self.pl_life =self.pl_life -self.poison *40 
+            if self.pl_life <=0 :
+                self.pl_life =0 
+                self.idx =15 
+                self.tmr =0
+            action =False 
+        return action 
+
+    def run (self ):
+        dmg =0 
+        lif_p =0 
+        str_p =0 
+
+        pygame .init ()
+        pygame .display .set_caption ("One hour Dungeon")
+        screen =pygame .display .set_mode ((880 ,720 ))
+        clock =pygame .time .Clock ()
+        font =self.get_font (25 )
+        fontS =self.get_font (18 )
+
+        se =load_sounds (self.path )# 効果音とジングル
+
+        while True :
+            for event in pygame .event .get ():
+                if event .type ==QUIT :
+                    pygame .quit ()
+                    sys .exit ()
+
+            self.tmr =self.tmr +1 
+            key =pygame .key .get_pressed ()
+            accept = (key [K_RETURN ]and not self.prev_return )or (key [K_a ]and not self.prev_a )
+
+            if self.idx ==0 :# タイトル画面
+                if self.tmr ==1 :
+                    pygame .mixer .music .load (self.path +"/sound/ohd_bgm_title.wav")
+                    pygame .mixer .music .play (-1 )
+                screen .fill (BLACK )
+                screen .blit (self.imgTitle ,[40 ,60 ])
+                self.draw_text (screen ,"[N]ew game",320 ,520 ,font ,WHITE )
+                self.draw_text (screen ,"[L]oad game",320 ,600 ,font ,WHITE )
+                if self.tmr >=10 :
+                    if key [K_n ]==1 :
+                        self.idx =-2 
+                        self.tmr =0 
+                    if key [K_l ]==1 :
+                        self.idx =-1 
+            
+            elif self.idx ==-2 :# プロローグ
+                self.draw_prologue (screen ,fontS ,key )
+
+            elif self.idx ==-1 :#データのロード
+                screen .fill (BLACK )
+                screen .blit (self.imgTitle ,[40 ,60 ])
+                pygame .draw .rect (screen ,BLACK ,[280 ,180 ,320 ,300 ])
+                self.draw_text (screen ,"Choose load data.",320 ,200 ,font ,WHITE )
+                self.draw_text (screen ,"[B]ack to title.",320 ,420 ,font ,WHITE )
+                if key [K_b ]==1 :
+                    self.idx =0 
+                    self.tmr =2 
+                if self.save_command (screen ,font ,key )==True :
+                    with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"r")as f :
+                        loaddata =json .load (f )
+                        self.floor =loaddata ["floor"]
+                        if self.floor >0 :
+                            self.dungeon =loaddata ["dungeon"]
+                            self.pl_x =loaddata ["pl_x"]
+                            self.pl_y =loaddata ["pl_y"]
+                            self.welcome =15 
+                            self.pl_lifemax =loaddata ["pl_lifemax"]
+                            self.pl_life =loaddata ["pl_life"]
+                            self.pl_str =loaddata ["pl_str"]
+                            self.pl_mag =loaddata ["pl_mag"]
+                            self.pl_exp =loaddata ["pl_exp"]
+                            self.potion =loaddata ["potion"]
+                            self.blazegem =loaddata ["blazegem"]
+                            self.guard =loaddata ["guard"]
+                            self.idx =1 
+                            self.pl_shield =loaddata ["shield"]
+                            self.pl_armor =loaddata ["armor"]
+                            self.pl_sword =loaddata ["sword"]
+                            if "boss_pos" in loaddata and loaddata ["boss_pos"] is not None:
+                                bx, by = loaddata ["boss_pos"]
+                                self.boss_pos = (bx, by)
+                                self.boss_area = {(bx, by), (bx + 1, by), (bx, by + 1), (bx + 1, by + 1)}
+                            else:
+                                self.boss_pos = None
+                                self.boss_area = set()
+                            if "item_wall_pos" in loaddata and loaddata ["item_wall_pos"] is not None:
+                                ix, iy = loaddata ["item_wall_pos"]
+                                self.item_wall_pos = (ix, iy)
+                            else:
+                                self.item_wall_pos = None
+                            self.item_wall_used = bool(loaddata.get("item_wall_used", False))
+                            if "event_wall_pos" in loaddata and loaddata ["event_wall_pos"] is not None:
+                                ex, ey = loaddata ["event_wall_pos"]
+                                self.event_wall_pos = (ex, ey)
+                            else:
+                                self.event_wall_pos = None
+                            self.item_event_phase = 0
+                            self.item_choice = 0
+                            self.item_reward = None
+                            self.item_event_kind = ""
+                            self.item_talk_lines = []
+                            self.item_talk_index = 0
+                            self.item_talk_char_count = 0
+                            self.item_talk_last_tick = pygame.time.get_ticks()
+                            self.set_floor_assets_for_current_floor ()
+                            self.init_floor_variant_map ()
+                            self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
+                            self.move_bgm_pos_ms =0 
+                            self.move_bgm_start_time =time .time ()
+                            pygame .mixer .music .load (self.move_bgm_path )
+                            pygame .mixer .music .play (-1 )
+
+            elif self.idx ==1 :# プレイヤーの移動
+                self.move_player (key )
+                self.draw_dungeon (screen ,fontS )
+                self.draw_text (screen ,"地下 {}階".format (self.floor),60 ,40 ,fontS ,WHITE )
+                self.draw_text (screen ,"[M]enu ",740 ,40 ,fontS ,WHITE )
+                if accept and self.event_wall_pos:
+                    if self.pl_d == 0 and (self.pl_x, self.pl_y - 1) == self.event_wall_pos:
+                        self.init_event_talk ()
+                        self.idx =44 
+                        self.tmr =0 
+                if accept and self.item_wall_pos and not self.item_wall_used:
+                    if self.pl_d == 0 and (self.pl_x, self.pl_y - 1) == self.item_wall_pos:
+                        print("[DEBUG] itemWall start floor={}, pos={}, used={}".format(self.floor, self.item_wall_pos, self.item_wall_used))
+                        self.init_item_event ()
+                        print("[DEBUG] itemWall init kind={}, lines={}, phase={}".format(self.item_event_kind, len(self.item_talk_lines), self.item_event_phase))
+                        self.idx =43 
+                        self.tmr =0 
+                if accept and self.stair_in_front ():
+                    self.idx =2 
+                    self.tmr =0 
+                if accept and self.boss_in_front ():
+                    self.init_boss_talk ()
+                    self.idx =42 
+                    self.tmr =0 
+                    self.boss =1 
+                if self.welcome >0 :
+                    self.welcome =self.welcome -1 
+                    self.draw_text (screen ,"地下 {}階".format (self.floor ),300 ,180 ,font ,CYAN )
+
+            elif self.idx ==42 :# ボス会話
+                self.draw_dungeon (screen ,fontS )
+                pygame .draw .rect (screen ,BLACK ,[40 ,520 ,800 ,160 ])
+                pygame .draw .rect (screen ,WHITE ,[40 ,520 ,800 ,160 ],2 )
+                if self.boss_talk_index <len (self.boss_talk_lines ):
+                    line = self.boss_talk_lines [self.boss_talk_index ]
+                    now = pygame.time.get_ticks()
+                    if self.boss_talk_char_count < len(line) and now - self.boss_talk_last_tick >= 100:
+                        self.boss_talk_char_count += 1
+                        self.boss_talk_last_tick = now
+                    visible = line [:self.boss_talk_char_count ]
+                    parts = visible.split("\n")
+                    for i, part in enumerate(parts):
+                        self.draw_text (screen ,part ,60 ,560 + i * 28 ,fontS ,WHITE )
+                self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
+                if accept:
+                    if self.boss_talk_index <len (self.boss_talk_lines ):
+                        line = self.boss_talk_lines [self.boss_talk_index ]
+                        if self.boss_talk_char_count < len(line):
+                            self.boss_talk_char_count = len(line)
+                        else:
+                            if self.floor ==40 and self.boss_talk_index ==0 :
+                                se [2 ].play ()
+                                self.pl_life =self.pl_lifemax 
+                            self.boss_talk_index +=1 
+                            self.boss_talk_char_count = 0
+                            self.boss_talk_last_tick = pygame.time.get_ticks()
+                    if self.boss_talk_index >=len (self.boss_talk_lines ):
+                        self.idx =10 
+                        self.tmr =0 
+
+            elif self.idx ==43 :# itemWallイベント
+                self.draw_dungeon (screen ,fontS )
+                dialog_alpha = 255
+                if self.item_event_phase == 1:
+                    dialog_alpha = 100
+                dialog = pygame.Surface((800, 160), pygame.SRCALPHA)
+                dialog.fill((0, 0, 0, dialog_alpha))
+                screen.blit(dialog, [40, 525])
+                pygame .draw .rect (screen ,WHITE ,[40 ,525 ,800 ,160 ],2 )
+                if self.item_event_kind == "weapon":
+                    if self.item_event_phase == 0:
+                        if self.item_talk_index <len (self.item_talk_lines ):
+                            line = self.item_talk_lines [self.item_talk_index ]
+                            now = pygame.time.get_ticks()
+                            if self.item_talk_char_count < len(line) and now - self.item_talk_last_tick >= 100:
+                                self.item_talk_char_count += 1
+                                self.item_talk_last_tick = now
+                            visible = line [:self.item_talk_char_count ]
+                            parts = visible.split("\n")
+                            for i, part in enumerate(parts):
+                                self.draw_text (screen ,part ,60 ,560 + i * 28 ,fontS ,WHITE )
+                        self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
+                        if accept:
+                            if self.item_talk_index <len (self.item_talk_lines ):
+                                line = self.item_talk_lines [self.item_talk_index ]
+                                if self.item_talk_char_count < len(line):
+                                    self.item_talk_char_count = len(line)
+                                else:
+                                    self.item_talk_index +=1 
+                                    self.item_talk_char_count = 0
+                                    self.item_talk_last_tick = pygame.time.get_ticks()
+                            if self.item_talk_index >=len (self.item_talk_lines ):
+                                self.item_event_phase = 1
+                    elif self.item_event_phase == 1:
+                        w_a =WEP_APPEAR [(self.floor -1 )//10 ]
+                        options = list(range(2, 4 + w_a + 1))
+                        if self.item_choice >= len(options):
+                            self.item_choice = max(0, len(options) - 1)
+                        line_h = 22
+                        box_h = 15 + line_h * len(options)
+                        pygame .draw .rect (screen ,BLACK ,[520 ,505-box_h ,280 ,box_h ])
+                        pygame .draw .rect (screen ,WHITE ,[520 ,505-box_h ,280 ,box_h ],2 )
+                        for i, trap_id in enumerate(options):
+                            if i == self.item_choice:
+                                self.draw_text (screen ,"▶",540 ,513 + i * 22 -box_h ,fontS ,WHITE )
+                            self.draw_text (screen ,TRAP_NAME [trap_id ],560 ,513 + i * 22 -box_h,fontS ,WHITE )
+                        if key [K_UP ]and self.item_choice >0 :
+                            self.item_choice -=1 
+                        if key [K_DOWN ]and self.item_choice <len (options )-1 :
+                            self.item_choice +=1 
+                        if accept:
+                            self.item_reward = options [self.item_choice ]
+                            self.trap = self.item_reward
+                            self.wpn_lev = self.floor
+                            if self.trap %3 ==2 :
+                                if self.pl_shield [(w_a +2 )//3 ][0 ]==0 :
+                                    self.trap =2 +3 *((w_a +2 )//3 )
+                                self.pl_shield [self.trap //3 ][0 ]=1 
+                                self.pl_shield [self.trap //3 ][1 ]=max (self.wpn_lev ,self.pl_shield [self.trap //3 ][1 ])
+                            if self.trap %3 ==0 :
+                                if self.pl_armor [(w_a +1 )//3 ][0 ]==0 :
+                                    self.trap =3 +3 *((w_a +1 )//3 )
+                                self.pl_armor [self.trap //3 -1 ][0 ]=1 
+                                self.pl_armor [self.trap //3 -1 ][1 ]=max (self.wpn_lev ,self.pl_armor [self.trap //3 -1 ][1 ])
+                            if self.trap %3 ==1 :
+                                if self.pl_sword [(w_a )//3 ][0 ]==0 :
+                                    self.trap =4 +3 *((w_a )//3 )
+                                self.pl_sword [self.trap //3 -1 ][0 ]=1 
+                                self.pl_sword [self.trap //3 -1 ][1 ]=max (self.wpn_lev ,self.pl_sword [self.trap //3 -1 ][1 ])
+                            self.item_event_phase = 2
+                    elif self.item_event_phase == 2:
+                        self.draw_text (screen ,TRAP_NAME [self.trap ]+" Lv. "+str (self.wpn_lev ),320 ,230 ,font ,WHITE )
+                        self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
+                        if accept:
+                            self.item_wall_used = True
+                            self.idx =1 
+                            self.tmr =0 
+                else:
+                    if self.item_event_phase in (0, 2):
+                        if self.item_talk_index <len (self.item_talk_lines ):
+                            line = self.item_talk_lines [self.item_talk_index ]
+                            now = pygame.time.get_ticks()
+                            if self.item_talk_char_count < len(line) and now - self.item_talk_last_tick >= 100:
+                                self.item_talk_char_count += 1
+                                self.item_talk_last_tick = now
+                            visible = line [:self.item_talk_char_count ]
+                            parts = visible.split("\n")
+                            for i, part in enumerate(parts):
+                                self.draw_text (screen ,part ,60 ,560 + i * 28 ,fontS ,WHITE )
+                        self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
+                        if accept:
+                            if self.item_talk_index <len (self.item_talk_lines ):
+                                line = self.item_talk_lines [self.item_talk_index ]
+                                if self.item_talk_char_count < len(line):
+                                    self.item_talk_char_count = len(line)
+                                else:
+                                    self.item_talk_index +=1 
+                                    self.item_talk_char_count = 0
+                                    self.item_talk_last_tick = pygame.time.get_ticks()
+                            if self.item_talk_index >=len (self.item_talk_lines ):
+                                if self.item_event_phase == 0:
+                                    self.item_event_phase = 1
+                                elif self.item_event_phase == 2:
+                                    self.item_event_phase = 3
+                    elif self.item_event_phase == 1:
+                        options = ["[P]otion", "[B]laze gem", "[G]uard"]
+                        line_h = 25
+                        box_h = 15 + line_h * len(options)
+                        pygame .draw .rect (screen ,BLACK ,[520 ,420 ,280 ,box_h ])
+                        pygame .draw .rect (screen ,WHITE ,[520 ,420 ,280 ,box_h ],2 )
+                        for i, option in enumerate(options):
+                            if i == self.item_choice:
+                                self.draw_text (screen ,"▶",540 ,435 + i * 25 ,fontS ,WHITE )
+                            self.draw_text (screen ,option ,560 ,435 + i * 25 ,fontS ,WHITE )
+                        if key [K_UP ]and self.item_choice >0 :
+                            self.item_choice -=1 
+                        if key [K_DOWN ]and self.item_choice <2 :
+                            self.item_choice +=1 
+                        if key [K_p ]:
+                            self.item_choice =0 
+                            self.item_reward =0 
+                        if key [K_b ]:
+                            self.item_choice =1 
+                            self.item_reward =1 
+                        if key [K_g ]:
+                            self.item_choice =2 
+                            self.item_reward =2 
+                        if accept and self.item_reward is None:
+                            self.item_reward = self.item_choice
+                        if self.item_reward is not None:
+                            if self.item_reward ==0 :
+                                self.potion =self.potion +3 
+                            if self.item_reward ==1 :
+                                self.blazegem =self.blazegem +3 
+                            if self.item_reward ==2 :
+                                self.guard =self.guard +3 
+                            self.item_talk_lines = ["よろしい。そなたに差し上げます。\n神のお恵みを"]
+                            self.item_talk_index = 0
+                            self.item_talk_char_count = 0
+                            self.item_talk_last_tick = pygame.time.get_ticks()
+                            self.item_event_phase = 2
+                    elif self.item_event_phase == 3:
+                        reward = self.item_reward if self.item_reward is not None else self.item_choice
+                        screen .blit (self.imgItem [reward ],[320 ,220 ])
+                        self.draw_text (screen ,TRE_NAME [reward ]+" x 3",380 ,230 ,font ,WHITE )
+                        self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
+                        if accept:
+                            self.item_wall_used = True
+                            self.idx =1 
+                            self.tmr =0 
+
+            elif self.idx ==44 :# eventWall会話
+                self.draw_dungeon (screen ,fontS )
+                pygame .draw .rect (screen ,BLACK ,[40 ,520 ,800 ,160 ])
+                pygame .draw .rect (screen ,WHITE ,[40 ,520 ,800 ,160 ],2 )
+                if self.event_talk_index <len (self.event_talk_lines ):
+                    line = self.event_talk_lines [self.event_talk_index ]
+                    now = pygame.time.get_ticks()
+                    if self.event_talk_char_count < len(line) and now - self.event_talk_last_tick >= 100:
+                        self.event_talk_char_count += 1
+                        self.event_talk_last_tick = now
+                    visible = line [:self.event_talk_char_count ]
+                    parts = visible.split("\n")
+                    for i, part in enumerate(parts):
+                        self.draw_text (screen ,part ,60 ,560 + i * 28 ,fontS ,WHITE )
+                self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
+                if accept:
+                    if self.event_talk_index <len (self.event_talk_lines ):
+                        line = self.event_talk_lines [self.event_talk_index ]
+                        if self.event_talk_char_count < len(line):
+                            self.event_talk_char_count = len(line)
+                        else:
+                            self.event_talk_index +=1 
+                            self.event_talk_char_count = 0
+                            self.event_talk_last_tick = pygame.time.get_ticks()
+                    if self.event_talk_index >=len (self.event_talk_lines ):
+                        self.idx =1 
+                        self.tmr =0 
+
+            elif self.idx ==2 :# 画面切り替え
+                self.draw_dungeon (screen ,fontS )
+                if 1 <=self.tmr and self.tmr <=5 :
+                    h =80 *self.tmr 
+                    pygame .draw .rect (screen ,BLACK ,[0 ,0 ,880 ,h ])
+                    pygame .draw .rect (screen ,BLACK ,[0 ,720 -h ,880 ,h ])
+                if self.tmr ==5 :
+                    self.floor =self.floor +1 
+                    if self.floor %10 ==1 :
+                        self.set_floor_assets_for_transition (self.floor )
+                        self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
+                        self.move_bgm_pos_ms =0 
+                        self.move_bgm_start_time =time .time ()
+                        pygame .mixer .music .load (self.move_bgm_path )
+                        pygame .mixer .music .play (-1 )
+                    self.welcome =15 
+                    self.make_dungeon ()
+                    self.put_event ()
+                if 6 <=self.tmr and self.tmr <=9 :
+                    h =80 *(10 -self.tmr )
+                    pygame .draw .rect (screen ,BLACK ,[0 ,0 ,880 ,h ])
+                    pygame .draw .rect (screen ,BLACK ,[0 ,720 -h ,880 ,h ])
+                if self.tmr ==10 :
+                    self.idx =1 
+
+            elif self.idx ==3 :# アイテム入手もしくはトラップ
+                self.draw_dungeon (screen ,fontS )
+                screen .blit (self.imgItem [self.treasure ],[320 ,220 ])
+                self.draw_text (screen ,TRE_NAME [self.treasure ],380 ,230 ,font ,WHITE )
+                if self.tmr ==10 :
+                    self.idx =1 
+
+            elif self.idx ==4 :# 武器入手もしくはダメージ床
+                self.draw_dungeon (screen ,fontS )
+                if self.trap ==0 :
+                    self.draw_text (screen ,TRAP_NAME [self.trap ]+" {}".format (30 -10 *((self.floor -1 )//10 )),320 ,230 ,font ,WHITE )
+                elif self.trap ==1 :
+                    self.draw_text (screen ,TRAP_NAME [self.trap ]+" +{}".format (-20 +10 *((self.floor -1 )//10 )),320 ,230 ,font ,WHITE )
+                else :
+                    self.draw_text (screen ,TRAP_NAME [self.trap ]+" Lv. "+str (self.wpn_lev ),320 ,230 ,font ,WHITE )
+                if self.tmr ==10 :
+                    self.idx =1 
+
+            elif self.idx ==5 :#メニュー
+                self.draw_dungeon (screen ,fontS )
+                pygame .draw .rect (screen ,BLACK ,[280 ,180 ,320 ,300 ])
+                if self.menu_command (screen ,font ,key )==True :
+                    if self.menu_cmd ==0 :#savedata
+                        self.idx =6 
+                    if self.menu_cmd ==1 :#go_title
+                        self.idx =8 
+                        self.tmr =0 
+                    if self.menu_cmd ==2 :#close
+                        self.idx =1 
+                        self.tmr =0 
+
+            elif self.idx ==6 :#セーブデータ選択
+                self.draw_dungeon (screen ,fontS )
+                pygame .draw .rect (screen ,BLACK ,[280 ,180 ,320 ,300 ])
+                self.draw_text (screen ,"Choose save data.",300 ,200 ,font ,WHITE )
+                self.draw_text (screen ,"[B]ack to menu.",300 ,420 ,font ,WHITE )
+                if self.save_command (screen ,font ,key )==True :
+                    self.idx =7 
+                    self.tmr =0 
+                if key [K_b ]==1 :
+                    self.idx =5 
+
+            elif self.idx ==7 :#確認とセーブ
+                self.draw_dungeon (screen ,fontS )
+                pygame .draw .rect (screen ,BLACK ,[280 ,180 ,320 ,300 ])
+                if self.tmr ==1 :
+                    d ={
+                    "floor":self.floor ,
+                    "pl_lifemax":self.pl_lifemax ,
+                    "pl_life":self.pl_life ,
+                    "pl_mag":self.pl_mag ,
+                    "pl_str":self.pl_str ,
+                    "pl_exp":self.pl_exp ,
+                    "potion":self.potion ,
+                    "blazegem":self.blazegem ,
+                    "guard":self.guard ,
+                    "shield":self.pl_shield ,
+                    "armor":self.pl_armor ,
+                    "sword":self.pl_sword ,
+                    "dungeon":self.dungeon ,
+                    "pl_x":self.pl_x ,
+                    "pl_y":self.pl_y ,
+                    "boss_pos":self.boss_pos ,
+                    "item_wall_pos":self.item_wall_pos ,
+                    "item_wall_used":self.item_wall_used ,
+                    "event_wall_pos":self.event_wall_pos 
+                    }
+                if self.floorlist [self.save_cmd ]>0 :
+                    self.draw_text (screen ,"上書きしますか？",340 ,240 ,font ,WHITE )
+                    self.draw_text (screen ,"[Y]es / [N]o",340 ,380 ,font ,WHITE )
+                    if key [K_y ]==1 :
+                        with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
+                            json .dump (d ,f )
+                        se [9 ].play ()
+                        self.floorlist [self.save_cmd ]=self.floor 
+                        self.idx =6 
+                else :
+                    with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
+                        json .dump (d ,f )
+                    se [9 ].play ()
+                    self.floorlist [self.save_cmd ]=self.floor 
+                    self.idx =6 
+                if key [K_n ]==1 :
+                    self.idx =6 
+
+            elif self.idx ==8 :#タイトルへ
+                self.draw_dungeon (screen ,fontS )
+                pygame .draw .rect (screen ,BLACK ,[280 ,180 ,320 ,300 ])
+                self.draw_text (screen ,"Back to the title.",300 ,240 ,font ,WHITE )
+                self.draw_text (screen ,"Check data saving.",300 ,320 ,font ,WHITE )
+                self.draw_text (screen ,"[Y]es / [N]o",300 ,400 ,font ,WHITE )
+                if key [K_y ]==1 :
+                    pygame .mixer .music .stop ()
+                    self.idx =0 
+                    self.tmr =0 
+                if key [K_n ]==1 :
+                    self.idx =5 
+
+            elif self.idx ==9 :# ゲームオーバー
+                if self.tmr <=30 :
+                    PL_TURN =[2 ,4 ,0 ,6 ]
+                    self.pl_a =PL_TURN [self.tmr %4 ]
+                    if self.tmr ==30 :self.pl_a =8 # 倒れた絵
+                    self.draw_dungeon (screen ,fontS )
+                elif self.tmr ==31 :
+                    se [3 ].play ()
+                    self.draw_text (screen ,"You died.",340 ,240 ,font ,RED )
+                    self.draw_text (screen ,"Game over.",340 ,380 ,font ,RED )
+                elif self.tmr ==100 :
+                    self.idx =0 
+                    self.tmr =0 
+
+            elif self.idx ==10 :# 戦闘開始
+                if self.tmr ==1 :
+                    if self.move_bgm_path :
+                        now =time .time ()
+                        self.move_bgm_pos_ms =int ((now -self.move_bgm_start_time )*1000 )
+                    self.imgBtlBG =pygame .image .load (self.path +"/image/btlbg{}.png".format (self.boss ))
+                    if self.boss ==1 :
+                        self.init_bossbattle ()
+                        pygame .mixer .music .load (self.path +"/sound/bgm_battle_1.wav")
+                        pygame .mixer .music .play (-1 )
+                        self.init_message ()
+                        if self.emy_typ ==16 :
+                            self.madoka =0 
+                    else :
+                        self.init_battle ()
+                        pygame .mixer .music .load (self.path +"/sound/bgm_battle_0.wav")
+                        pygame .mixer .music .play (-1 )
+                        self.init_message ()
+                elif self.tmr <=4 :
+                    bx =(4 -self.tmr )*220 
+                    by =0 
+                    screen .blit (self.imgBtlBG ,[bx ,by ])
+                    self.draw_para (screen ,fontS )
+                elif self.tmr <=16 :
+                    self.draw_battle (screen ,fontS )
+                    self.draw_text (screen ,self.emy_name +" appear!",300 ,200 ,font ,WHITE )
+                else :
+                    self.idx =11 
+                    self.tmr =0 
+
+            elif self.idx ==11 :# プレイヤーのターン（入力待ち）
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    self.set_message ("Your turn.")
+                    self.guard_remain =max (self.guard_remain -1 ,0 )
+                if self.battle_command (screen ,font ,key )==True :
+                    if self.btl_cmd ==0 :#Attack
+                        self.idx =12 
+                        self.tmr =0 
+                    if self.btl_cmd ==1 and self.pl_mag >100 :#Magic
+                        self.idx =19 
+                        self.tmr =0 
+                    if self.btl_cmd ==2 and self.potion >0 :#Potion
+                        self.idx =20 
+                        self.tmr =0 
+                    if self.btl_cmd ==3 and self.blazegem >0 :#Blaze gem
+                        self.idx =21 
+                        self.tmr =0 
+                    if self.btl_cmd ==4 and self.guard >0 :#Guard
+                        self.idx =24 
+                        self.tmr =0 
+                    if self.btl_cmd ==5 :#Run
+                        self.idx =14 
+                        self.tmr =0 
+                    if self.btl_cmd ==6 :#Info
+                        self.idx =23 
+                        self.tmr =0 
+
+            elif self.idx ==12 :# プレイヤーの攻撃
+                self.draw_battle (screen ,fontS )
+                cri =0 
+                if self.tmr ==1 :
+                    self.set_message ("You attack!")
+                    se [0 ].play ()
+                    if self.pl_sword [0 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            cri =1 
+                            self.set_message ("クリティカルヒット！")
+                    dmg =self.pl_str +random .randint (0 ,9 )-EMY_APRO [self.emy_typ ]
+                    dmg =int (dmg *(1 +0.01 *cri *self.pl_sword [0 ][1 ]))+2 *self.pl_sword [0 ][1 ]+self.pl_sword [2 ][1 ]
+                    dmg =max (1 +cri ,int (dmg /(2 *self.poison +1 )))
+                    if self.emy_typ ==8 or self.emy_typ ==10 :
+                        if random .random ()>0.7 :
+                            self.set_message ("Protected! Damege down!")
+                            dmg =int (dmg /2 )
+                    if self.guard_remain >0 and self.emy_typ ==20 :
+                        dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
+                if 2 <=self.tmr <=4 :
+                    screen .blit (self.imgEffect [0 ],[700 -self.tmr *120 ,-100 +self.tmr *120 ])
+                if self.tmr ==5 :
+                    self.emy_blink =5 
+                    self.set_message (str (dmg )+"pts of damage!")
+                if self.tmr ==11 :
+                    self.emy_life =self.emy_life -dmg 
+                    if self.emy_life <=0 :
+                        self.emy_life =0 
+                        self.idx =16 
+                        self.tmr =0
+                if self.tmr ==12 :
+                    if self.emy_typ ==18 :
+                        self.boss_mode = "normal"
+                    if self.burn_turns >0 :
+                        se [0 ].play ()
+                        burn_dmg = 400 +random .randint (-50 ,50 )
+                        self.set_message ("Burn counter -{}".format (burn_dmg ))
+                        self.pl_life =self.pl_life -burn_dmg 
+                        if self.pl_life <=0 :
+                            self.pl_life =0 
+                            self.idx =15 
+                            self.tmr =0 
+                    else:
+                        self.tmr == self.tmr + 2
+                if self.tmr ==16 :
+                    self.idx =13 
+                    self.tmr =0 
+
+            elif self.idx ==13 :# 敵のターン、敵の攻撃
+                self.draw_battle (screen ,fontS )
+                defence =self.pl_shield [0 ][1 ]+self.pl_shield [1 ][1 ]+self.pl_shield [2 ][1 ]+self.pl_armor [0 ][1 ]+self.pl_armor [1 ][1 ]+self.pl_armor [2 ][1 ]
+                defence =int (defence /2 )
+                if self.tmr ==1 :
+                    self.set_message ("Enemy turn.")
+                    pro =0 
+                    cou =0 
+                    if self.emy_skip_turn :
+                        self.emy_skip_turn = False
+                        self.set_message ("Enemy is recovering.")
+                        self.tmr =self.tmr+10
+                    if self.emy_typ ==12 and self.burn_turns >0 :
+                        self.idx =32 
+                        self.tmr =0 
+                        continue
+                if self.tmr ==5 :
+                    self.set_message (self.emy_name +" attack!")
+                    se [0 ].play ()
+                    self.emy_step =30 
+                if self.tmr ==9 :
+                    if self.pl_shield [0 ][0 ]==1 :
+                        if random .random ()>0.7 and self.emy_typ !=20 :
+                            pro =0.3 +0.01 *self.pl_shield [0 ][1 ]
+                            self.set_message ("Shield protect!")
+                    if self.pl_shield [1 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            cou =self.pl_shield [1 ][1 ]
+                    if self.emy_typ ==20 :
+                        dmg_tmp =dmg 
+                    dmg =max (self.emy_str +random .randint (0 ,9 )-defence ,1 )
+                    dmg =int (dmg /(1 +pro ))*self.pow_up 
+                    if self.emy_typ ==18 and self.boss_mode == "fire":
+                        dmg =int (dmg *1.3 )
+                    if self.guard_remain >0 :
+                        if self.emy_typ ==14 or self.emy_typ ==17 :
+                            self.set_message ("Guard crush!")
+                            self.guard_remain =0 
+                        else :
+                            dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
+                    if self.emy_typ ==2 or self.emy_typ ==10 or (self.emy_typ ==18 and self.boss_mode == "normal"):
+                        if random .random ()>0.7 :
+                            self.set_message ("Crirical!")
+                            dmg =int (dmg *{2:1.5, 10:2, 18:2.5}[self.emy_typ] )
+                    if self.emy_typ ==17 :
+                        self.inferno -= 15 + random .randint (0 ,10 )
+                    if self.emy_typ ==20 :
+                        dmg =dmg_tmp 
+                    if self.emy_typ ==21 :
+                        dmg = int(dmg * self.emy_lifemax/self.emy_life)
+                    self.set_message (str (dmg )+"pts of damage!")
+                    self.dmg_eff =5 
+                    self.emy_step =0 
+                if self.tmr ==12 :
+                    self.pl_life =self.pl_life -dmg 
+                    if self.pl_life <=0 :
+                        self.pl_life =0 
+                        self.idx =15 
+                        self.tmr =0 
+                    if cou >0 :
+                        self.emy_blink =2 
+                        dmg =int (self.pl_str //10 +self.pl_str *self.pl_shield [1 ][1 ]*0.003 +random .randint (0 ,self.pl_shield [1 ][1 ]//5 ))
+                        self.set_message (str (dmg )+"pts of counter!")
+                        self.emy_life =self.emy_life -dmg 
+                        if self.emy_life <=0 :
+                            self.emy_life =0 
+                            self.idx =16 
+                            self.tmr =0 
+                if self.tmr ==14 :
+                    if self.emy_action (screen ):
+                        self.tmr =self.tmr +3 
+                if self.tmr ==18 :
+                    if self.pl_armor [0 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
+                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
+                            self.set_message ("Armor cure +{}".format (cure ))
+                            se [2 ].play ()
+                        else :
+                            self.tmr =self.tmr +1 
+                    if self.pl_armor [1 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
+                            self.pl_mag =self.pl_mag +mgup 
+                            self.set_message ("Armor magic +{}".format (mgup ))
+                            se [9 ].play ()
+                        else :
+                            self.tmr =self.tmr +1 
+                    if self.emy_typ ==6 and self.idx ==18 :
+                        self.tmr =0 
+                if self.tmr ==21 :
+                    self.idx =11 
+                    self.tmr =0 
+
+            elif self.idx ==14 :# 逃げられる？
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :self.set_message ("...")
+                if self.tmr ==2 :self.set_message ("......")
+                if self.tmr ==3 :self.set_message (".........")
+                if self.tmr ==4 :self.set_message ("............")
+                if self.tmr ==5 :
+                    if self.boss ==1 :
+                        self.set_message ("You failed to flee.")
+                    elif random .randint (0 ,99 )<60 -60 *self.boss +40 *(self.emy_typ //22 ):
+                        self.idx =22 
+                    else :
+                        self.set_message ("You failed to flee.")
+                if self.tmr ==10 :
+                    if self.emy_typ ==16 or self.emy_typ ==21 :
+                        self.idx =26 
+                        self.tmr =0 
+                    if self.emy_typ ==20 :
+                        self.idx =30 
+                        self.tmr =0 
+                    else :
+                        self.idx =13 
+                        self.tmr =0 
+
+            elif self.idx ==15 :# 敗北
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    pygame .mixer .music .stop ()
+                    self.guard_remain =0 
+                    self.poison =0 
+                    self.madoka =0 
+                    self.pow_up =1 
+                    self.burn_turns =0 
+                    self.inferno =0
+                    self.boss_mode = "normal"
+                    self.change = 0
+                    self.set_message ("You lose.")
+                if self.tmr ==11 :
+                    self.idx =9 
+                    self.tmr =29 
+
+            elif self.idx ==16 :# 勝利
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    self.guard_remain =0 
+                    self.poison =0 
+                    self.madoka =0 
+                    self.pow_up =1 
+                    self.burn_turns =0 
+                    self.inferno =0
+                    self.boss_mode = "normal"
+                    if self.emy_typ ==20 :
+                        self.idx =27 
+                        self.tmr =0
+                if self.tmr ==2 :
+                    self.change = 0
+                    self.set_message ("You win!")
+                    pygame .mixer .music .stop ()
+                    if self.boss ==1 :
+                        se [7 ].play ()
+                    else :
+                        se [5 ].play ()
+                    self.pl_exp =self.pl_exp +int ((500 +self.emy_typ *50 +EMY_EXP [self.emy_typ ])*(0.7 *((self.floor -1 )//30 )+1 ))
+                    self.pl_mag =self.pl_mag +self.emy_typ *2 +self.boss *300 
+                    if self.emy_typ ==22 :
+                        self.idx =31 
+                        self.tmr =0 
+                if self.tmr ==15 :
+                    if self.boss ==1 :
+                        time .sleep (3 )
+                    self.idx =22 
+                    if self.pl_exp >=(self.pl_lifemax -250 )*20 :
+                        self.idx =17 
+                        self.tmr =0 
+
+            elif self.idx ==17 :# レベルアップ
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    self.set_message ("Level up!")
+                    se [4 ].play ()
+                    lif_p =random .randint (10 ,20 )
+                    str_p =random .randint (7 ,9 )
+                    mag_p =random .randint (15 ,30 )
+                    self.pl_exp =self.pl_exp -(self.pl_lifemax -250 )*20 
+                if self.tmr ==13 :
+                    self.set_message ("Max life + "+str (lif_p ))
+                    self.pl_lifemax =self.pl_lifemax +lif_p 
+                    self.pl_life =self.pl_life +lif_p 
+                if self.tmr ==15 :
+                    self.set_message ("MP + "+str (mag_p ))
+                    self.pl_mag =self.pl_mag +mag_p 
+                if self.tmr ==17 :
+                    self.set_message ("Str + "+str (str_p ))
+                    self.pl_str =self.pl_str +str_p 
+                if self.tmr ==23 :
+                    if self.pl_exp >(self.pl_lifemax -250 )*20 :
+                        self.idx =17 
+                        self.tmr =0 
+                    else :
+                        self.idx =22 
+
+            elif self.idx ==18 :#敵の逃亡
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    self.set_message ("敵は逃げていった")
+                if self.tmr ==10 :
+                    self.guard_remain =0 
+                    self.idx =22 
+
+            elif self.idx ==19 :# プレイヤーの魔法
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    ice =0 
+                    self.set_message ("You magic!")
+                    se [6 ].play ()
+                    if self.pl_sword [1 ][0 ]==1 :
+                        if random .random ()>0.95 -0.003 *self.pl_sword [1 ][1 ]:
+                            ice =1 
+                    dmg =int (self.pl_str *1.5 )+random .randint (0 ,9 )-EMY_MPRO [self.emy_typ ]+2 *self.pl_sword [1 ][1 ]+self.pl_sword [2 ][1 ]
+                    if self.guard_remain >0 and self.emy_typ ==20 :
+                        dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
+                    dmg =max (1 ,dmg )
+                    if self.boss_mode == "ice":
+                        dmg =0 
+                if 2 <=self.tmr <=4 :
+                    screen .blit (self.imgEffect [2 ],[250 -self.tmr *12 ,-150 +self.tmr *50 ])
+                if self.tmr ==5 :
+                    self.emy_blink =5 
+                    self.set_message (str (dmg )+"pts of damage!")
+                if self.tmr ==11 :
+                    self.emy_life =self.emy_life -dmg 
+                    self.pl_mag =max (0 ,self.pl_mag -100 )
+                    if self.emy_life <=0 :
+                        self.emy_life =0 
+                        self.idx =16 
+                        self.tmr =0 
+                if self.tmr ==13 :
+                    if self.emy_typ ==18 :
+                        self.boss_mode = "ice"
+                    if ice ==1 :
+                        self.set_message ("Stick ice!")
+                        self.set_message ("Enemy frozon!")
+                    else :
+                        self.tmr =self.tmr +3
+                if self.tmr ==18 :
+                    self.poison =max (self.poison -1 ,0 )
+                    if ice*self.poison >0 :
+                        self.set_message ("Poison damage -{}".format (self.poison *40 ))
+                        self.pl_life =self.pl_life -self.poison *40 
+                        if self.pl_life <=0 :
+                            self.pl_life =0 
+                            self.idx =15 
+                            self.tmr =0
+                    else:
+                        self.tmr =self.tmr +4
+                if self.tmr ==24 :
+                    if ice ==1 :
+                        if self.pl_armor [0 ][0 ]==1 :
+                            if random .random ()>0.7 :
+                                cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
+                                self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
+                                self.set_message ("Armor cure +{}".format (cure ))
+                                se [2 ].play ()
+                            else :
+                                self.tmr =self.tmr +1 
+                        if self.pl_armor [1 ][0 ]==1 :
+                            if random .random ()>0.7 :
+                                mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
+                                self.pl_mag =self.pl_mag +mgup 
+                                self.set_message ("Armor magic +{}".format (mgup ))
+                                se [9 ].play ()
+                            else :
+                                self.tmr =self.tmr +1 
+                    elif self.emy_typ ==21 :
+                        self.idx =34
+                        self.tmr =0
+                    else :
+                        self.idx =13 
+                        self.tmr =0 
+                if self.tmr ==26 :
+                    self.idx =11 
+                    self.tmr =0 
+
+            elif self.idx ==20 :# Potion
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    cure =min (500 +3 *self.pl_armor [2 ][1 ],self.pl_lifemax -self.pl_life )
+                    if self.emy_typ ==13 :
+                        self.set_message ("ポーションを無効化されている！")
+                        cure =0 
+                    else:
+                        self.set_message ("Potion +{}".format (cure ))
+                        se [2 ].play ()
+                if self.tmr ==6 :
+                    self.pl_life =min (self.pl_lifemax ,self.pl_life +cure )
+                    self.potion =self.potion -1 
+                if self.tmr ==11 :
+                    if self.emy_typ ==16 or self.emy_typ ==21 :
+                        self.idx =26 
+                        self.tmr =0 
+                    elif self.emy_typ ==20 :
+                        self.idx =28 
+                        self.tmr =0 
+                    else :
+                        self.idx =13 
+                        self.tmr =0 
+
+            elif self.idx ==21 :# Blaze gem
+                self.draw_battle (screen ,fontS )
+                img_rz =pygame .transform .rotozoom (self.imgEffect [1 ],30 *self.tmr ,(12 -self.tmr )/8 )
+                X =440 -img_rz .get_width ()/2 
+                Y =360 -img_rz .get_height ()/2 
+                screen .blit (img_rz ,[X ,Y ])
+                if self.tmr ==1 :
+                    self.set_message ("Blaze gem!")
+                    se [1 ].play ()
+                if self.tmr ==6 :
+                    self.blazegem =self.blazegem -1 
+                if self.tmr ==11 :
+                    dmg =1000 +self.pl_sword [2 ][1 ]*16 
+                    if self.emy_typ ==11:
+                        self.set_message ("Eating gem!")
+                        dmg =0 
+                    if self.burn_turns >0 :
+                        dmg = self.pl_sword [2 ][1 ]*16
+                    if self.emy_typ ==13 :
+                        dmg =0 
+                        self.emy_skip_turn = True
+                    if self.boss_mode == "fire":
+                        dmg =0 
+                if self.tmr ==15 :
+                    self.emy_blink =5 
+                    self.set_message (str (dmg )+"pts of damage!")
+                if self.tmr ==21 :
+                    self.emy_life =self.emy_life -dmg 
+                    if self.emy_life <=0 :
+                        self.emy_life =0 
+                        self.idx =16 
+                        self.tmr =0
+                if self.tmr ==23 :
+                    if self.emy_typ ==18 :
+                        self.boss_mode = "fire"
+                    if self.emy_typ ==12:
+                        self.burn_turns =4 
+                        self.set_message ("Boss ignited!")
+                    else:
+                        self.tmr =self.tmr +2
+                if self.tmr ==26 :
+                    if self.emy_typ ==14:
+                        self.idx =25 
+                        self.tmr =0 
+                    elif self.emy_typ ==16 or self.emy_typ ==21 :
+                        self.idx =26 
+                        self.tmr =0 
+                    elif self.emy_typ ==17 :
+                        self.idx =33
+                        self.tmr =0 
+                    else :
+                        self.idx =13 
+                        self.tmr =0 
+
+            elif self.idx ==22 :# 戦闘終了
+                if self.emy_typ ==21 :
+                    time .sleep (1 )
+                    charge =0 
+                    self.idx =40 
+                    self.tmr =0 
+                elif self.boss ==1 :
+                    time .sleep (1 )
+                    self.idx =2 
+                    self.boss =0 
+                    if 90 <self.floor <100 :
+                        pygame .mixer .music .load (self.path +"/sound/bgm_9.wav")
+                        pygame .mixer .music .play (-1 )
+                    self.tmr =0 
+                else :
+                    if self.move_bgm_path :
+                        pygame .mixer .music .load (self.move_bgm_path )
+                        try:
+                            pygame .mixer .music .play (-1 ,self.move_bgm_pos_ms /1000.0 )
+                            self.move_bgm_start_time =time .time ()-self.move_bgm_pos_ms /1000.0 
+                        except pygame.error:
+                            pygame .mixer .music .play (-1 )
+                            self.move_bgm_pos_ms =0 
+                            self.move_bgm_start_time =time .time ()
+                    else :
+                        pygame .mixer .music .load (self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav")
+                        pygame .mixer .music .play (-1 )
+                    self.idx =1 
+
+            elif self.idx ==23 :#情報
+                self.draw_battle (screen ,fontS )
+                pygame .draw .rect (screen ,BLACK ,[80 ,140 ,720 ,420 ])
+                pygame .draw .rect (screen ,WHITE ,[80 ,140 ,720 ,420 ],2 )
+                name = self.emy_name
+                info = ENEMY_INFO.get(self.emy_typ, "info text")
+                self.draw_text (screen ,name ,110 ,180 ,font ,WHITE )
+                parts = info.split("\n")
+                for i, part in enumerate(parts):
+                    self.draw_text (screen ,part ,110 ,250 + i * 28 ,fontS ,WHITE )
+                self.draw_text (screen ,"[I]/[Enter] Back",540 ,520 ,fontS ,WHITE )
+                if self.tmr >5 :
+                    if key [K_i ] or key [K_RETURN ]:
+                        self.idx =11 
+                        self.tmr =1 
+
+            elif self.idx ==24 :#guard
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    self.guard_remain =3 
+                    if random .random ()<0.01 *self.pl_shield [2 ][1 ]:
+                        self.guard_remain =4 
+                    self.set_message ("Guard for {} turn!".format (self.guard_remain ))
+                    se [8 ].play ()
+                if self.tmr ==6 :
+                    self.guard =self.guard -1 
+                if self.tmr ==11 :
+                    if self.emy_typ ==16 or self.emy_typ ==21 :
+                        self.idx =26 
+                        self.tmr =0 
+                    elif self.emy_typ ==20 :
+                        self.idx =29 
+                        self.tmr =0 
+                    else :
+                        self.idx =13 
+                        self.tmr =0 
+
+            elif self.idx ==25 :#destroy
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==5 :
+                    self.set_message (self.emy_name +" destroy!")
+                    se [1 ].play ()
+                    self.emy_step =30 
+                if self.tmr ==9 :
+                    self.set_message (str (self.pl_life -self.pl_life //10 )+"pts of damage!")
+                if self.tmr ==15 :
+                    self.pl_life =self.pl_life //10 
+                    if self.pl_life <=0 :
+                        self.pl_life =0 
+                        self.idx =15 
+                        self.tmr =0 
+                if self.tmr ==19 :
+                    if self.emy_action (screen ):
+                        self.tmr =self.tmr +3 
+                if self.tmr ==23 :
+                    if self.pl_armor [0 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
+                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
+                            self.set_message ("Armor cure +{}".format (cure ))
+                            se [2 ].play ()
+                    if self.pl_armor [1 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
+                            self.pl_mag =self.pl_mag +mgup 
+                            self.set_message ("Armor magic +{}".format (mgup ))
+                            se [9 ].play ()
+                    self.idx =11 
+                    self.tmr =0 
+
+            elif self.idx ==26 :#Magia
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    self.set_message ("Enemy turn.")
+                if self.tmr ==5 :
+                    if self.madoka <1000 :
+                        self.set_message ("Magia charge!")
+                    elif self.madoka >=1000 :
+                        self.set_message ("Magia!")
+                        se [6 ].play ()
+                        self.emy_step =30 
+                if self.tmr ==9 :
+                    if self.madoka <1000 :
+                        dmg =0 
+                        charge_magia = int (self.emy_life *{16:0.02, 21:0.025}[self.emy_typ] +100 )
+                        self.set_message ("Magia +{}".format (charge_magia ))
+                        self.madoka =self.madoka +charge_magia
+                    elif self.madoka >=1000 :
+                        dmg =1000 
+                        self.set_message (str (dmg )+"pts of damage!")
+                        self.madoka =self.madoka -1000 
+                if self.tmr ==15 :
+                    self.pl_life =self.pl_life -dmg 
+                    if self.pl_life <0 :
+                        self.pl_life =0 
+                        self.idx =15 
+                        self.tmr =0 
+                if self.tmr ==20 :
+                    if self.emy_action (screen ):
+                        self.tmr =self.tmr +3 
+                if self.tmr ==24 :
+                    if self.pl_armor [0 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
+                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
+                            self.set_message ("Armor cure +{}".format (cure ))
+                            se [2 ].play ()
+                    if self.pl_armor [1 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
+                            self.pl_mag =self.pl_mag +mgup 
+                            self.set_message ("Armor magic +{}".format (mgup ))
+                            se [9 ].play ()
+                    self.idx =11 
+                    self.tmr =0 
+
+            elif self.idx ==27 :#最終ボスの形態変化
+                self.draw_battle (screen ,fontS )
+                if 1 <=self.tmr <=5 :
+                    pygame .draw .rect (screen ,BLACK ,[0 ,0 ,880 ,320 ])
+                    pygame .draw .rect (screen ,BLACK ,[0 ,720 -320 ,880 ,320 ])
+                if self.tmr ==1 :
+                    self.init_message ()
+                if self.tmr ==5 :
+                    self.change +=1 
+                    self.init_bossbattle ()
+                if 6 <=self.tmr and self.tmr <=9 :
+                    pygame .draw .rect (screen ,BLACK ,[0 ,0 ,880 ,320 ])
+                    pygame .draw .rect (screen ,BLACK ,[0 ,720 -320 ,880 ,320 ])
+                if self.tmr ==10 :
+                    self.idx =11 
+                    self.tmr =0 
+
+            elif self.idx ==28 :#敵のポーション
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    cure =min (cure ,self.emy_lifemax -self.emy_life )
+                    self.set_message ("Enemy Potion +{}".format (cure ))
+                    se [2 ].play ()
+                if self.tmr ==6 :
+                    self.emy_life =min (self.emy_lifemax ,self.emy_life +cure )
+                if self.tmr ==11 :
+                    if self.pl_armor [0 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
+                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
+                            self.set_message ("Armor cure +{}".format (cure ))
+                            se [2 ].play ()
+                    if self.pl_armor [1 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
+                            self.pl_mag =self.pl_mag +mgup 
+                            self.set_message ("Armor magic +{}".format (mgup ))
+                            se [9 ].play ()
+                    self.idx =11 
+                    self.tmr =0 
+
+            elif self.idx ==29 :#敵のガード
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    self.set_message ("Enemy guard for {} turn.".format (self.guard_remain ))
+                    se [8 ].play ()
+                if self.tmr ==6 :
+                    if self.pl_armor [0 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
+                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
+                            self.set_message ("Armor cure +{}".format (cure ))
+                            se [2 ].play ()
+                        else:
+                            self.tmr =self.tmr +1
+                    if self.pl_armor [1 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
+                            self.pl_mag =self.pl_mag +mgup 
+                            self.set_message ("Armor magic +{}".format (mgup ))
+                            se [9 ].play ()
+                        else:
+                            self.tmr =self.tmr +1
+                if self.tmr ==11 :
+                    self.idx =11 
+                    self.tmr =0 
+
+            elif self.idx ==30 :#逃亡？
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    self.set_message ("Enemy watches you.")
+                if self.tmr ==6 :
+                    self.idx =11 
+                    self.tmr =0 
+
+            elif self.idx ==31 :#ドロップ
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    trap_drop =random .randint (2 ,10 )#最大で2~10を用意
+                    wpn_lev_drop =self.lev 
+                if self.tmr ==10 :
+                    if trap_drop %3 ==2 :
+                        self.pl_shield [trap_drop //3 ][0 ]=1 
+                        self.pl_shield [trap_drop //3 ][1 ]=max (wpn_lev_drop ,self.pl_shield [trap_drop //3 ][1 ])
+                    if trap_drop %3 ==0 :
+                        self.pl_armor [trap_drop //3 -1 ][0 ]=1 
+                        self.pl_armor [trap_drop //3 -1 ][1 ]=max (wpn_lev_drop ,self.pl_armor [trap_drop //3 -1 ][1 ])
+                    if trap_drop %3 ==1 :
+                        self.pl_sword [trap_drop //3 -1 ][0 ]=1 
+                        self.pl_sword [trap_drop //3 -1 ][1 ]=max (wpn_lev_drop ,self.pl_sword [trap_drop //3 -1 ][1 ])
+                    self.set_message ("Drop {} lv.{}".format (TRAP_NAME [trap_drop ],wpn_lev_drop ))
+                if self.tmr ==23 :
+                    self.idx =16 
+                    self.tmr =14 
+
+            elif self.idx ==32 :# 火炎攻撃
+                self.draw_battle (screen ,fontS )
+                defence =self.pl_shield [0 ][1 ]+self.pl_shield [1 ][1 ]+self.pl_shield [2 ][1 ]+self.pl_armor [0 ][1 ]+self.pl_armor [1 ][1 ]+self.pl_armor [2 ][1 ]
+                defence =int (defence /2 )
+                if self.tmr ==5 :
+                    self.set_message (self.emy_name +" attack!")
+                    se [0 ].play ()
+                    self.emy_step =30 
+                if self.tmr ==9 :
+                    dmg =max (self.emy_str +random .randint (0 ,9 )-defence ,1 )
+                    dmg =dmg *3 
+                    if self.guard_remain >0 :
+                        dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
+                    self.set_message (str (dmg )+"pts of damage!")
+                    self.dmg_eff =5 
+                    self.emy_step =0 
+                if self.tmr ==12 :
+                    self.pl_life =self.pl_life -dmg 
+                    if self.pl_life <=0 :
+                        self.pl_life =0 
+                        self.idx =15 
+                        self.tmr =0 
+                    recoil =2000 +random .randint (-100 ,100 )
+                    self.emy_life =max (0 ,self.emy_life -recoil )
+                    self.set_message ("Enemy recoil -{}".format (recoil ))
+                    self.burn_turns -=1 
+                    if self.emy_life <=0 :
+                        self.emy_life =0 
+                        self.idx =16 
+                        self.tmr =0
+                if self.tmr ==16 :
+                    if self.pl_armor [0 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
+                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
+                            self.set_message ("Armor cure +{}".format (cure ))
+                            se [2 ].play ()
+                    if self.pl_armor [1 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
+                            self.pl_mag =self.pl_mag +mgup 
+                            self.set_message ("Armor magic +{}".format (mgup ))
+                            se [9 ].play ()
+                    self.idx =11 
+                    self.tmr =0 
+
+            elif self.idx ==33 :# 豪炎
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==5 :
+                    self.set_message (self.emy_name +" 豪炎!")
+                    se [1 ].play ()
+                    self.emy_step =30 
+                if self.tmr ==9 :
+                    dmg =150 + self.inferno +random .randint (-30 ,30 )
+                    self.set_message (str (dmg )+"pts of damage!")
+                    self.dmg_eff =5 
+                    self.emy_step =0
+                    self.inferno = self.inferno + 30 + random.randint(0, 20)
+                if self.tmr ==12 :
+                    self.pl_life =self.pl_life -dmg 
+                    if self.pl_life <=0 :
+                        self.pl_life =0 
+                        self.idx =15 
+                        self.tmr =0 
+                if self.tmr ==16 :
+                    if self.pl_armor [0 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
+                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
+                            self.set_message ("Armor cure +{}".format (cure ))
+                            se [2 ].play ()
+                        else:
+                            self.tmr =self.tmr +1
+                    if self.pl_armor [1 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
+                            self.pl_mag =self.pl_mag +mgup 
+                            self.set_message ("Armor magic +{}".format (mgup ))
+                            se [9 ].play ()
+                        else:
+                            self.tmr =self.tmr +1
+                if self.tmr ==18 :
+                    self.idx =11 
+                    self.tmr =0 
+
+            elif self.idx ==34 :# 毒攻撃
+                self.draw_battle (screen ,fontS )
+                defence =self.pl_shield [0 ][1 ]+self.pl_shield [1 ][1 ]+self.pl_shield [2 ][1 ]+self.pl_armor [0 ][1 ]+self.pl_armor [1 ][1 ]+self.pl_armor [2 ][1 ]
+                defence =int (defence /2 )
+                if self.tmr ==1 :
+                    self.set_message ("Enemy turn.")
+                    pro =0 
+                    cou =0 
+                if self.tmr ==5 :
+                    self.set_message (self.emy_name +" attack!")
+                    se [0 ].play ()
+                    self.emy_step =30 
+                if self.tmr ==9 :
+                    if self.pl_shield [0 ][0 ]==1 :
+                        if random .random ()>0.7 and self.emy_typ !=20 :
+                            pro =0.3 +0.01 *self.pl_shield [0 ][1 ]
+                            self.set_message ("Shield protect!")
+                    if self.pl_shield [1 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            cou =self.pl_shield [1 ][1 ]
+                    if self.emy_typ ==20 :
+                        dmg_tmp =dmg 
+                    dmg =max (self.emy_str +random .randint (0 ,9 )-defence ,1 )
+                    dmg =int (dmg /(1 +pro ))*self.pow_up 
+                    if self.guard_remain >0 :
+                        if self.emy_typ ==14 or self.emy_typ ==17 :
+                            self.set_message ("Guard crush!")
+                            self.guard_remain =0 
+                        else :
+                            dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
+                    self.set_message (str (dmg )+"pts of damage!")
+                    self.dmg_eff =5 
+                    self.emy_step =0 
+                if self.tmr ==12 :
+                    self.pl_life =self.pl_life -dmg 
+                    if self.pl_life <=0 :
+                        self.pl_life =0 
+                        self.idx =15 
+                        self.tmr =0 
+                    if cou >0 :
+                        self.emy_blink =2 
+                        dmg =int (self.pl_str //10 +self.pl_str *self.pl_shield [1 ][1 ]*0.003 +random .randint (0 ,self.pl_shield [1 ][1 ]//5 ))
+                        self.set_message (str (dmg )+"pts of counter!")
+                        self.emy_life =self.emy_life -dmg 
+                        if self.emy_life <=0 :
+                            self.emy_life =0 
+                            self.idx =16 
+                            self.tmr =0 
+                if self.tmr ==14 :
+                    self.poison =max (self.poison -1 ,0 )
+                    self.poison = 4
+                    self.set_message ("Poison!")
+                    self.set_message ("Poison damage -{}".format (self.poison *40 ))
+                    self.pl_life =self.pl_life -self.poison *40 
+                    if self.pl_life <=0 :
+                        self.pl_life =0 
+                        self.idx =15 
+                        self.tmr =0 
+                if self.tmr ==18 :
+                    if self.pl_armor [0 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
+                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
+                            self.set_message ("Armor cure +{}".format (cure ))
+                            se [2 ].play ()
+                        else :
+                            self.tmr =self.tmr +1 
+                    if self.pl_armor [1 ][0 ]==1 :
+                        if random .random ()>0.7 :
+                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
+                            self.pl_mag =self.pl_mag +mgup 
+                            self.set_message ("Armor magic +{}".format (mgup ))
+                            se [9 ].play ()
+                        else :
+                            self.tmr =self.tmr +1 
+                if self.tmr ==21 :
+                    self.idx =11 
+                    self.tmr =0 
+
+            elif self.idx ==40 :#ゲームクリア画面１
+                if self.tmr ==1 :
+                    pygame .mixer .music .load (self.path +"/sound/bgm_last.wav")
+                    pygame .mixer .music .play (-1 )
+                screen .fill (BLACK )
+                if self.tmr >=40 :
+                    self.draw_text (screen ,"Congratulations!",320 ,630 ,font ,WHITE )
+                    self.imgEnemy =pygame .image .load (self.path +"/image/enemy"+str (int (0.1 *(self.tmr -40 )%10 ))+"_0"+".png")
+                    self.emy_x =440 -self.imgEnemy .get_width ()/2 
+                    self.emy_y =560 -self.imgEnemy .get_height ()
+                    screen .blit (self.imgEnemy ,[self.emy_x ,self.emy_y ])
+                if self.tmr >=80 :
+                    self.draw_text (screen ,"Press space key",320 ,580 ,font ,BLINK [self.tmr %6 ])
+                    if key [K_SPACE ]==1 :
+                        self.idx =41 
+                        self.tmr =0 
+                        time .sleep (1 )
+
+            elif self.idx ==41 :#ゲームクリア画面２
+                screen .fill (BLACK )
+                if self.tmr >=10 :
+                    self.draw_text (screen ,"Thank you for playing!",260 ,100 ,font ,WHITE )
+                if self.tmr >=30 :
+                    self.draw_text (screen ,"This is my first game.",260 ,150 ,font ,WHITE )
+                if self.tmr >=50 :
+                    self.draw_text (screen ,"Making game was one of my dream,",260 ,200 ,font ,WHITE )
+                if self.tmr >=70 :
+                    self.draw_text (screen ,"so I'm very happy.",260 ,250 ,font ,WHITE )
+                if self.tmr >=90 :
+                    self.draw_text (screen ,"If I make another game",260 ,300 ,font ,WHITE )
+                if self.tmr >=110 :
+                    self.draw_text (screen ,"in the future,",260 ,350 ,font ,WHITE )
+                if self.tmr >=130 :
+                    self.draw_text (screen ,"please play it.",260 ,400 ,font ,WHITE )
+                if self.tmr >=150 :
+                    self.draw_text (screen ,"See you again.",260 ,450 ,font ,WHITE )
+                if self.tmr >=170 :
+                    self.draw_text (screen ,"Koyo",520 ,500 ,font ,WHITE )
+                if self.tmr >=200 :
+                    self.draw_text (screen ,"Press space key",320 ,560 ,font ,BLINK [self.tmr %6 ])
+                    if key [K_SPACE ]==1 :
+                        self.idx =0 
+                        self.tmr =0 
+                        time .sleep (1 )
+
+            pygame .display .update ()
+            clock .tick (10 )
+            self.prev_return = key [K_RETURN ]
+            self.prev_a = key [K_a ]
+
+
+def main():
+    game = Game()
+    game.run()
+
+
+if __name__ == '__main__':
+    main()
