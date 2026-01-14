@@ -132,6 +132,9 @@ class Game:
         self.item_choice = 0
         self.item_reward = None
         self.item_event_kind = ""
+        self.item_reward_count = 3
+        self.item_wall_claimed = set()
+        self.true_episode_heard = False
         self.item_wall_pos = None
         self.wall_item = None
         self.event_wall_pos = None
@@ -141,6 +144,7 @@ class Game:
         self.event_talk_last_tick = 0
         self.wall_event = None
         self.fixed_floor_data = None
+        self.last_talk_mode = 1
 
     def init_floor_variant_map(self):
         count = max(len(self.floor_variants), 1)
@@ -215,6 +219,12 @@ class Game:
             return self.dungeon[ty][tx] == 3
         return False
 
+    def all_cocoons_cleared(self):
+        return all(2 not in row for row in self.dungeon)
+
+    def all_item_walls_claimed(self):
+        return all(floor in self.item_wall_claimed for floor in range(91, 100))
+
     def place_boss(self):
         self.boss_pos = None
         self.boss_area = set()
@@ -248,27 +258,33 @@ class Game:
         self.boss_talk_char_count = 0
         self.boss_talk_last_tick = pygame.time.get_ticks()
 
-    def init_last_talk(self):
-        self.boss_talk_lines = BOSS_LASTTALK1
+    def init_last_talk(self, mode=1):
+        self.last_talk_mode = mode
+        if mode == 2:
+            self.boss_talk_lines = BOSS_LASTTALK2
+        else:
+            self.boss_talk_lines = BOSS_LASTTALK1
         self.boss_talk_index = 0
         self.boss_talk_char_count = 0
         self.boss_talk_last_tick = pygame.time.get_ticks()
 
-    def init_item_event(self):
+    def init_item_event(self, kind=None, reward_count=3, lines=None):
         self.item_event_phase = 0
         self.item_choice = 0
         self.item_reward = None
         self.item_talk_index = 0
         self.item_talk_char_count = 0
         self.item_talk_last_tick = pygame.time.get_ticks()
-        if (self.floor // 10) % 2 == 0:
-            self.item_event_kind = "item"
-            self.item_talk_lines = [
-                "迷える子羊よ。そなたに恵みをもたらしましょう。",
-                "あなたが必要としているものは何ですか？",
-            ]
+        self.item_reward_count = reward_count
+        if kind is None:
+            if (self.floor // 10) % 2 == 0:
+                kind = "item"
+            else:
+                kind = "weapon"
+        self.item_event_kind = kind
+        if lines is not None:
+            self.item_talk_lines = lines
         else:
-            self.item_event_kind = "weapon"
             self.item_talk_lines = [
                 "迷える子羊よ。そなたに恵みをもたらしましょう。",
                 "あなたが必要としているものは何ですか？",
@@ -296,6 +312,7 @@ class Game:
 
     def make_dungeon (self ):
         self.fixed_floor_data = None
+        self.last_talk_mode = 1
         if self.floor == 100:
             floor_path = os.path.join(self.path, "floor_100.json")
             if os.path.exists(floor_path):
@@ -459,24 +476,35 @@ class Game:
                     break 
         self.pl_d =1 
         self.pl_a =2 
-        if self.floor %10 ==7 and self.wall_item:
-            wall_cells = [
-                (x, y)
-                for y in range(DUNGEON_H - 1)
-                for x in range(DUNGEON_W)
-                if self.dungeon[y][x] == 9 and self.dungeon[y + 1][x] == 0
-            ]
-            if wall_cells:
-                self.item_wall_pos = random.choice(wall_cells)
-        if self.floor %10 ==4 and self.wall_event:
-            wall_cells = [
-                (x, y)
-                for y in range(DUNGEON_H - 1)
-                for x in range(DUNGEON_W)
-                if self.dungeon[y][x] == 9 and self.dungeon[y + 1][x] == 0
-            ]
-            if wall_cells:
-                self.event_wall_pos = random.choice(wall_cells)
+        if self.floor >= 91:
+            if self.wall_item:
+                wall_cells = [
+                    (x, y)
+                    for y in range(DUNGEON_H - 1)
+                    for x in range(DUNGEON_W)
+                    if self.dungeon[y][x] == 9 and self.dungeon[y + 1][x] == 0
+                ]
+                if wall_cells:
+                    self.item_wall_pos = random.choice(wall_cells)
+        else:
+            if self.floor %10 ==7 and self.wall_item:
+                wall_cells = [
+                    (x, y)
+                    for y in range(DUNGEON_H - 1)
+                    for x in range(DUNGEON_W)
+                    if self.dungeon[y][x] == 9 and self.dungeon[y + 1][x] == 0
+                ]
+                if wall_cells:
+                    self.item_wall_pos = random.choice(wall_cells)
+            if self.floor %10 ==4 and self.wall_event:
+                wall_cells = [
+                    (x, y)
+                    for y in range(DUNGEON_H - 1)
+                    for x in range(DUNGEON_W)
+                    if self.dungeon[y][x] == 9 and self.dungeon[y + 1][x] == 0
+                ]
+                if wall_cells:
+                    self.event_wall_pos = random.choice(wall_cells)
 
     def move_player (self ,key ):
 
@@ -609,6 +637,8 @@ class Game:
         self.potion =0 
         self.blazegem =0 
         self.guard =0 
+        self.item_wall_claimed = set()
+        self.true_episode_heard = False
         self.idx =100 
         self.tmr =0 
         self.pl_shield =[[0 ,0 ],[0 ,0 ],[0 ,0 ]]
@@ -675,6 +705,82 @@ class Game:
         if txt :
             y =start_y +(line_index -visible_start )*line_height 
             self.draw_text_alpha (bg ,txt ,60 ,y ,fnt ,WHITE ,alpha )
+
+    def draw_epilogue (self ,bg ,fnt ,key ):
+        lines = EPILOGUE_LINES
+        line_duration =20 
+        fade_in =15 
+        end_hold =30 
+        end_fade =60 
+        max_lines =12 
+        line_height =32 
+        start_y =90 
+        total_duration =len (lines )*line_duration 
+
+        if key [K_s ]:
+            return True
+
+        line_index =self.tmr //line_duration 
+        phase =self.tmr %line_duration 
+        if key [K_RETURN ]or key [K_RIGHT ]:
+            if line_index <len (lines )and phase <fade_in :
+                self.tmr =line_index *line_duration +fade_in 
+                phase =fade_in 
+
+        bg .fill (BLACK )
+        self.draw_text (bg ,"[S]kip",780 ,20 ,fnt ,WHITE )
+
+        if self.tmr >=total_duration :
+            end_phase =self.tmr -total_duration 
+            if end_phase >=end_hold +end_fade :
+                return True
+            if end_phase <end_hold :
+                alpha =255 
+            else :
+                alpha =int (255 *(1 -(end_phase -end_hold )/end_fade ))
+            visible_start =max (0 ,len (lines )-max_lines )
+            for i in range (visible_start ,len (lines )):
+                txt =lines [i ]
+                if txt :
+                    y =start_y +(i -visible_start )*line_height 
+                    self.draw_text_alpha (bg ,txt ,60 ,y ,fnt ,WHITE ,alpha )
+            return False
+
+        visible_start =max (0 ,line_index -(max_lines -1 ))
+        for i in range (visible_start ,line_index ):
+            txt =lines [i ]
+            if txt :
+                y =start_y +(i -visible_start )*line_height 
+                self.draw_text (bg ,txt ,60 ,y ,fnt ,WHITE )
+        if phase <fade_in :
+            alpha =int (255 *phase /fade_in )
+        else :
+            alpha =255 
+        if line_index <len (lines ):
+            txt =lines [line_index ]
+            if txt :
+                y =start_y +(line_index -visible_start )*line_height 
+                self.draw_text_alpha (bg ,txt ,60 ,y ,fnt ,WHITE ,alpha )
+        return False
+
+    def draw_end_roll (self ,bg ,fnt ,key ):
+        lines = END_ROLL
+        line_height =36 
+        speed =1 
+        start_y =720 +line_height 
+        y0 =start_y -self.tmr *speed 
+
+        bg .fill (BLACK )
+        for i, txt in enumerate(lines):
+            y =y0 +i *line_height 
+            if -line_height <= y <= 720 + line_height:
+                self.draw_text (bg ,txt ,240 ,y ,fnt ,WHITE )
+        finished = y0 +len (lines )*line_height < -line_height
+        if finished:
+            self.draw_text (bg ,"Press space key",320 ,640 ,fnt ,BLINK [self.tmr %6 ])
+            if key [K_SPACE ]==1 :
+                return True
+        return False
 
     def get_font (self ,size ):
         font_dir =os .path .join (self.path ,"fonts")
@@ -1054,6 +1160,10 @@ class Game:
                             else:
                                 self.item_wall_pos = None
                             self.item_wall_used = bool(loaddata.get("item_wall_used", False))
+                            self.item_wall_claimed = set(loaddata.get("item_wall_claimed", []))
+                            if 91 <= self.floor <= 99 and self.item_wall_used:
+                                self.item_wall_claimed.add(self.floor)
+                            self.true_episode_heard = bool(loaddata.get("true_episode_heard", False))
                             if "event_wall_pos" in loaddata and loaddata ["event_wall_pos"] is not None:
                                 ex, ey = loaddata ["event_wall_pos"]
                                 self.event_wall_pos = (ex, ey)
@@ -1068,6 +1178,17 @@ class Game:
                             self.item_talk_char_count = 0
                             self.item_talk_last_tick = pygame.time.get_ticks()
                             self.set_floor_assets_for_current_floor ()
+                            if self.floor >= 91:
+                                self.event_wall_pos = None
+                                if self.item_wall_pos is None and self.wall_item:
+                                    wall_cells = [
+                                        (x, y)
+                                        for y in range(DUNGEON_H - 1)
+                                        for x in range(DUNGEON_W)
+                                        if self.dungeon[y][x] == 9 and self.dungeon[y + 1][x] == 0
+                                    ]
+                                    if wall_cells:
+                                        self.item_wall_pos = random.choice(wall_cells)
                             self.init_floor_variant_map ()
                             self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
                             self.move_bgm_pos_ms =0 
@@ -1087,11 +1208,20 @@ class Game:
                         self.tmr =0 
                 if accept and self.item_wall_pos and not self.item_wall_used:
                     if self.pl_d == 0 and (self.pl_x, self.pl_y - 1) == self.item_wall_pos:
-                        print("[DEBUG] itemWall start floor={}, pos={}, used={}".format(self.floor, self.item_wall_pos, self.item_wall_used))
-                        self.init_item_event ()
-                        print("[DEBUG] itemWall init kind={}, lines={}, phase={}".format(self.item_event_kind, len(self.item_talk_lines), self.item_event_phase))
-                        self.idx =131 
-                        self.tmr =0 
+                        if self.floor >= 91 and not self.all_cocoons_cleared():
+                            pass
+                        else:
+                            print("[DEBUG] itemWall start floor={}, pos={}, used={}".format(self.floor, self.item_wall_pos, self.item_wall_used))
+                            if self.floor >= 91:
+                                if self.floor == 100 and self.all_item_walls_claimed() and not self.true_episode_heard:
+                                    self.init_item_event (kind="true_episode", lines=TRUE_EPISODE_TALK)
+                                else:
+                                    self.init_item_event (kind="item", reward_count=5)
+                            else:
+                                self.init_item_event ()
+                            print("[DEBUG] itemWall init kind={}, lines={}, phase={}".format(self.item_event_kind, len(self.item_talk_lines), self.item_event_phase))
+                            self.idx =131 
+                            self.tmr =0 
                 if accept and self.stair_in_front ():
                     self.idx =110 
                     self.tmr =0 
@@ -1160,7 +1290,10 @@ class Game:
                             self.boss_talk_char_count = 0
                             self.boss_talk_last_tick = pygame.time.get_ticks()
                     if self.boss_talk_index >=len (self.boss_talk_lines ):
-                        self.idx =80 
+                        if self.last_talk_mode == 2:
+                            self.idx =82 
+                        else:
+                            self.idx =80 
                         self.tmr =0 
 
             elif self.idx ==131 :# itemWallイベント
@@ -1172,7 +1305,31 @@ class Game:
                 dialog.fill((0, 0, 0, dialog_alpha))
                 screen.blit(dialog, [40, 525])
                 pygame .draw .rect (screen ,WHITE ,[40 ,525 ,800 ,160 ],2 )
-                if self.item_event_kind == "weapon":
+                if self.item_event_kind == "true_episode":
+                    if self.item_talk_index <len (self.item_talk_lines ):
+                        line = self.item_talk_lines [self.item_talk_index ]
+                        now = pygame.time.get_ticks()
+                        if self.item_talk_char_count < len(line) and now - self.item_talk_last_tick >= 100:
+                            self.item_talk_char_count += 1
+                            self.item_talk_last_tick = now
+                        visible = line [:self.item_talk_char_count ]
+                        parts = visible.split("\n")
+                        for i, part in enumerate(parts):
+                            self.draw_text (screen ,part ,60 ,560 + i * 28 ,fontS ,WHITE )
+                    self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
+                    if accept:
+                        if self.item_talk_index <len (self.item_talk_lines ):
+                            line = self.item_talk_lines [self.item_talk_index ]
+                            if self.item_talk_char_count < len(line):
+                                self.item_talk_char_count = len(line)
+                            else:
+                                self.item_talk_index +=1 
+                                self.item_talk_char_count = 0
+                                self.item_talk_last_tick = pygame.time.get_ticks()
+                        if self.item_talk_index >=len (self.item_talk_lines ):
+                            self.true_episode_heard = True
+                            self.init_item_event (kind="item", reward_count=5)
+                elif self.item_event_kind == "weapon":
                     if self.item_event_phase == 0:
                         if self.item_talk_index <len (self.item_talk_lines ):
                             line = self.item_talk_lines [self.item_talk_index ]
@@ -1294,11 +1451,11 @@ class Game:
                             self.item_reward = self.item_choice
                         if self.item_reward is not None:
                             if self.item_reward ==0 :
-                                self.potion =self.potion +3 
+                                self.potion =self.potion +self.item_reward_count
                             if self.item_reward ==1 :
-                                self.blazegem =self.blazegem +3 
+                                self.blazegem =self.blazegem +self.item_reward_count
                             if self.item_reward ==2 :
-                                self.guard =self.guard +3 
+                                self.guard =self.guard +self.item_reward_count
                             self.item_talk_lines = ["よろしい。そなたに差し上げます。\n神のお恵みを"]
                             self.item_talk_index = 0
                             self.item_talk_char_count = 0
@@ -1307,10 +1464,12 @@ class Game:
                     elif self.item_event_phase == 3:
                         reward = self.item_reward if self.item_reward is not None else self.item_choice
                         screen .blit (self.imgItem [reward ],[320 ,220 ])
-                        self.draw_text (screen ,TRE_NAME [reward ]+" x 3",380 ,230 ,font ,WHITE )
+                        self.draw_text (screen ,TRE_NAME [reward ]+" x "+str (self.item_reward_count ),380 ,230 ,font ,WHITE )
                         self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
                         if accept:
                             self.item_wall_used = True
+                            if 91 <= self.floor <= 99:
+                                self.item_wall_claimed.add(self.floor)
                             self.idx =100 
                             self.tmr =0 
 
@@ -1432,6 +1591,8 @@ class Game:
                     "boss_pos":self.boss_pos ,
                     "item_wall_pos":self.item_wall_pos ,
                     "item_wall_used":self.item_wall_used ,
+                    "item_wall_claimed":sorted(self.item_wall_claimed),
+                    "true_episode_heard":self.true_episode_heard,
                     "event_wall_pos":self.event_wall_pos 
                     }
                 if self.floorlist [self.save_cmd ]>0 :
@@ -1945,7 +2106,10 @@ class Game:
                     time .sleep (1 )
                     charge =0 
                     self.boss =0 
-                    self.init_last_talk ()
+                    if self.true_episode_heard:
+                        self.init_last_talk (2)
+                    else:
+                        self.init_last_talk (1)
                     self.idx =133 
                     self.tmr =0 
                 elif self.boss ==1 :
@@ -2390,6 +2554,16 @@ class Game:
                         self.idx =0 
                         self.tmr =0 
                         time .sleep (1 )
+
+            elif self.idx ==82 :# エピローグ
+                if self.draw_epilogue (screen ,fontS ,key ):
+                    self.idx =83 
+                    self.tmr =0 
+
+            elif self.idx ==83 :# エンドロール
+                if self.draw_end_roll (screen ,fontS ,key ):
+                    self.idx =0 
+                    self.tmr =0 
 
             pygame .display .update ()
             clock .tick (10 )
