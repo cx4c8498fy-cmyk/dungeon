@@ -52,6 +52,8 @@ class Game:
         self.floorlist = load_floorlist(self.path)
 
         self.idx = 0
+        self.title_mode = 0
+        self.title_cmd = 0
         self.tmr = 0
         self.floor = 0
         self.welcome = 0
@@ -108,6 +110,7 @@ class Game:
         self.init_floor_variant_map()
         self.init_floor_flip_map()
         self.prologue_lines = PROLOGUE_LINES
+        self.prologue_input_lock = False
         self.boss_pos = None
         self.boss_area = set()
         self.boss_talk_lines = []
@@ -650,6 +653,76 @@ class Game:
         pygame .mixer .music .load (self.move_bgm_path )
         pygame .mixer .music .play (-1 )
 
+    def load_game_data (self ,slot_index ):
+        with open (self.path +"/savedata/data{}.json".format (slot_index +1 ),"r")as f :
+            loaddata =json .load (f )
+            self.floor =loaddata ["floor"]
+            if self.floor >0 :
+                self.dungeon =loaddata ["dungeon"]
+                self.pl_x =loaddata ["pl_x"]
+                self.pl_y =loaddata ["pl_y"]
+                self.welcome =15 
+                self.pl_lifemax =loaddata ["pl_lifemax"]
+                self.pl_life =loaddata ["pl_life"]
+                self.pl_str =loaddata ["pl_str"]
+                self.pl_mag =loaddata ["pl_mag"]
+                self.pl_exp =loaddata ["pl_exp"]
+                self.potion =loaddata ["potion"]
+                self.blazegem =loaddata ["blazegem"]
+                self.guard =loaddata ["guard"]
+                self.idx =100 
+                self.pl_shield =loaddata ["shield"]
+                self.pl_armor =loaddata ["armor"]
+                self.pl_sword =loaddata ["sword"]
+                if "boss_pos" in loaddata and loaddata ["boss_pos"] is not None:
+                    bx, by = loaddata ["boss_pos"]
+                    self.boss_pos = (bx, by)
+                    self.boss_area = {(bx, by), (bx + 1, by), (bx, by + 1), (bx + 1, by + 1)}
+                else:
+                    self.boss_pos = None
+                    self.boss_area = set()
+                if "item_wall_pos" in loaddata and loaddata ["item_wall_pos"] is not None:
+                    ix, iy = loaddata ["item_wall_pos"]
+                    self.item_wall_pos = (ix, iy)
+                else:
+                    self.item_wall_pos = None
+                self.item_wall_used = bool(loaddata.get("item_wall_used", False))
+                self.item_wall_claimed = set(loaddata.get("item_wall_claimed", []))
+                if 91 <= self.floor <= 99 and self.item_wall_used:
+                    self.item_wall_claimed.add(self.floor)
+                self.true_episode_heard = bool(loaddata.get("true_episode_heard", False))
+                if "event_wall_pos" in loaddata and loaddata ["event_wall_pos"] is not None:
+                    ex, ey = loaddata ["event_wall_pos"]
+                    self.event_wall_pos = (ex, ey)
+                else:
+                    self.event_wall_pos = None
+                self.item_event_phase = 0
+                self.item_choice = 0
+                self.item_reward = None
+                self.item_event_kind = ""
+                self.item_talk_lines = []
+                self.item_talk_index = 0
+                self.item_talk_char_count = 0
+                self.item_talk_last_tick = pygame.time.get_ticks()
+                self.set_floor_assets_for_current_floor ()
+                if self.floor >= 91:
+                    self.event_wall_pos = None
+                    if self.item_wall_pos is None and self.wall_item:
+                        wall_cells = [
+                            (x, y)
+                            for y in range(DUNGEON_H - 1)
+                            for x in range(DUNGEON_W)
+                            if self.dungeon[y][x] == 9 and self.dungeon[y + 1][x] == 0
+                        ]
+                        if wall_cells:
+                            self.item_wall_pos = random.choice(wall_cells)
+                self.init_floor_variant_map ()
+                self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
+                self.move_bgm_pos_ms =0 
+                self.move_bgm_start_time =time .time ()
+                pygame .mixer .music .load (self.move_bgm_path )
+                pygame .mixer .music .play (-1 )
+
     def draw_prologue (self ,bg ,fnt ,key ):
         line_duration =20 
         fade_in =15 
@@ -666,10 +739,14 @@ class Game:
 
         line_index =self.tmr //line_duration 
         phase =self.tmr %line_duration 
-        if key [K_RETURN ]or key [K_RIGHT ]:
-            if line_index <len (self.prologue_lines )and phase <fade_in :
-                self.tmr =line_index *line_duration +fade_in 
-                phase =fade_in 
+        if self.prologue_input_lock:
+            if not (key [K_RETURN ]or key [K_RIGHT ]or key [K_a ]):
+                self.prologue_input_lock = False
+        else:
+            if key [K_RETURN ]or key [K_RIGHT ]or key [K_a ]:
+                if line_index <len (self.prologue_lines )and phase <fade_in :
+                    self.tmr =line_index *line_duration +fade_in 
+                    phase =fade_in 
 
         bg .fill (BLACK )
         self.draw_text (bg ,"[S]kip",780 ,20 ,fnt ,WHITE )
@@ -722,7 +799,7 @@ class Game:
 
         line_index =self.tmr //line_duration 
         phase =self.tmr %line_duration 
-        if key [K_RETURN ]or key [K_RIGHT ]:
+        if key [K_RETURN ]or key [K_RIGHT ]or key [K_a ]:
             if line_index <len (lines )and phase <fade_in :
                 self.tmr =line_index *line_duration +fade_in 
                 phase =fade_in 
@@ -848,21 +925,21 @@ class Game:
 
         col =WHITE 
         if self.pl_life <int (self.pl_lifemax /5 )and self.tmr %2 ==0 :col =RED 
-        self.draw_text (bg ,"LIFE",X +10 ,Y +44 ,fnt ,WHITE )
+        self.draw_text (bg ,"生命",X +10 ,Y +44 ,fnt ,WHITE )
         self.draw_text (bg ,"{}/{}".format (self.pl_life ,self.pl_lifemax ),X +73 ,Y +44 ,fnt ,col )
-        self.draw_text (bg ,"MP",X +10 ,Y +69 ,fnt ,WHITE )
-        self.draw_text (bg ,str (self.pl_mag ),X +73 ,Y +69 ,fnt ,WHITE )
-        self.draw_text (bg ,"STR",X +10 ,Y +95 ,fnt ,WHITE )
-        self.draw_text (bg ,str (self.pl_str ),X +73 ,Y +95 ,fnt ,WHITE )
-        self.draw_text (bg ,"EXP",X +10 ,Y +120 ,fnt ,WHITE )
+        self.draw_text (bg ,"攻撃",X +10 ,Y +69 ,fnt ,WHITE )
+        self.draw_text (bg ,str (self.pl_str ),X +73 ,Y +69 ,fnt ,WHITE )
+        self.draw_text (bg ,"魔力",X +10 ,Y +95 ,fnt ,WHITE )
+        self.draw_text (bg ,str (self.pl_mag ),X +73 ,Y +95 ,fnt ,WHITE )
+        self.draw_text (bg ,"経験",X +10 ,Y +120 ,fnt ,WHITE )
         self.draw_text (bg ,str (self.pl_exp )+"/"+str ((self.pl_lifemax -250 )*20 ),X +73 ,Y +120 ,fnt ,WHITE )
 
         self.draw_text (bg ,"盾",X +180 ,Y +46 ,fnt ,WHITE )
-        self.draw_text (bg ,"{}-{}-{}".format (self.pl_shield [0 ][1 ],self.pl_shield [1 ][1 ],self.pl_shield [2 ][1 ]),X +240 ,Y +46 ,fnt ,WHITE )
+        self.draw_text (bg ,"{}-{}-{}".format (self.pl_shield [0 ][1 ],self.pl_shield [1 ][1 ],self.pl_shield [2 ][1 ]),X +225 ,Y +46 ,fnt ,WHITE )
         self.draw_text (bg ,"鎧",X +180 ,Y +71 ,fnt ,WHITE )
-        self.draw_text (bg ,"{}-{}-{}".format (self.pl_armor [0 ][1 ],self.pl_armor [1 ][1 ],self.pl_armor [2 ][1 ]),X +240 ,Y +71 ,fnt ,WHITE )
+        self.draw_text (bg ,"{}-{}-{}".format (self.pl_armor [0 ][1 ],self.pl_armor [1 ][1 ],self.pl_armor [2 ][1 ]),X +225 ,Y +71 ,fnt ,WHITE )
         self.draw_text (bg ,"剣",X +180 ,Y +97 ,fnt ,WHITE )
-        self.draw_text (bg ,"{}-{}-{}".format (self.pl_sword [0 ][1 ],self.pl_sword [1 ][1 ],self.pl_sword [2 ][1 ]),X +240 ,Y +97 ,fnt ,WHITE )
+        self.draw_text (bg ,"{}-{}-{}".format (self.pl_sword [0 ][1 ],self.pl_sword [1 ][1 ],self.pl_sword [2 ][1 ]),X +225 ,Y +97 ,fnt ,WHITE )
 
     def init_battle (self ):
         self.emy_skip_turn = False
@@ -1103,17 +1180,58 @@ class Game:
                 if self.tmr ==1 :
                     pygame .mixer .music .load (self.path +"/sound/ohd_bgm_title.wav")
                     pygame .mixer .music .play (-1 )
+                    self.title_mode = 0
+                    self.title_cmd = 0
                 screen .fill (BLACK )
                 screen .blit (self.imgTitle ,[40 ,60 ])
-                self.draw_text (screen ,"[N]ew game",320 ,520 ,font ,WHITE )
-                self.draw_text (screen ,"[L]oad game",320 ,600 ,font ,WHITE )
-                if self.tmr >=10 :
-                    if key [K_n ]==1 :
-                        self.idx =10 
-                        self.tmr =0 
-                    if key [K_l ]==1 :
-                        self.idx =20 
-            
+                if self.title_mode == 0:
+                    options = ["はじめから", "つづきから"]
+                    selected = self.title_cmd
+                    if key [K_UP ]and self.title_cmd >0 :
+                        self.title_cmd -=1 
+                    if key [K_DOWN ]and self.title_cmd <len (options )-1 :
+                        self.title_cmd +=1 
+                    if accept:
+                        if self.title_cmd ==0 :
+                            self.prologue_input_lock = True
+                            self.idx =10 
+                            self.tmr =0 
+                        else:
+                            self.title_mode = 1
+                else:
+                    if key [K_b ]or key [K_LEFT ]:
+                        self.title_mode = 0
+                        options = ["はじめから", "つづきから"]
+                        selected = self.title_cmd
+                    else:
+                        options = [
+                            "data[1] : 地下 {}階".format (self.floorlist [0 ]),
+                            "data[2] : 地下 {}階".format (self.floorlist [1 ]),
+                            "data[3] : 地下 {}階".format (self.floorlist [2 ])
+                        ]
+                        selected = self.save_cmd
+                        if key [K_UP ]and self.save_cmd >0 :
+                            self.save_cmd -=1 
+                        if key [K_DOWN ]and self.save_cmd <2 :
+                            self.save_cmd +=1 
+                        if accept:
+                            self.load_game_data (self.save_cmd )
+                rows = len (options )
+                line_h =32 
+                win_w =360 
+                win_h =3 *line_h +20 
+                win_x =(880 -win_w )//2 
+                win_y =720 -win_h -200 
+                title_win = pygame.Surface((win_w, win_h), pygame.SRCALPHA)
+                title_win.fill((0, 0, 0, 200))
+                screen.blit(title_win, [win_x, win_y])
+                for i, label in enumerate (options ):
+                    y = int(win_y + win_h//2 - ((rows-1) *0.5)* line_h + i * line_h) - 10
+                    x = win_x + win_w//2 - len(options[0])*0.5*6 - 30
+                    if i == selected :
+                        self.draw_text (screen ,"▶",x - 30 ,y ,fontS ,WHITE )
+                    self.draw_text (screen ,label ,x ,y ,fontS ,WHITE )
+
             elif self.idx ==10 :# プロローグ
                 self.draw_prologue (screen ,fontS ,key )
 
