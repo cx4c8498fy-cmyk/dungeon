@@ -589,7 +589,7 @@ class Game:
         if key [K_m ]==1 :# メニュー
             self.idx =30 
 
-            # 方向キーで上下左右に移動
+        # 方向キーで上下左右に移動
         x =self.pl_x 
         y =self.pl_y 
         if key [K_UP ]==1 :
@@ -843,7 +843,7 @@ class Game:
     def draw_end_roll (self ,bg ,fnt ,key ):
         lines = END_ROLL
         line_height =36 
-        speed =1 
+        speed =2
         start_y =720 +line_height 
         y0 =start_y -self.tmr *speed 
 
@@ -916,12 +916,12 @@ class Game:
         # pygame .draw .rect (win ,WHITE ,[0 ,0 ,W ,H ],2 )
         bg .blit (win ,[X ,Y ])
 
-        self.draw_text (bg ,"POT",X +10 ,Y +8 ,fnt ,WHITE )
-        self.draw_text (bg ,str (self.potion ),X +50 ,Y +8 ,fnt ,WHITE )
-        self.draw_text (bg ,"GEM",X +110 ,Y +8 ,fnt ,WHITE )
-        self.draw_text (bg ,str (self.blazegem ),X +150 ,Y +8 ,fnt ,WHITE )
-        self.draw_text (bg ,"GRD",X +210 ,Y +8 ,fnt ,WHITE )
-        self.draw_text (bg ,str (self.guard ),X +250 ,Y +8 ,fnt ,WHITE )
+        self.draw_text (bg ,"傷薬",X +10 ,Y +8 ,fnt ,WHITE )
+        self.draw_text (bg ,str (self.potion ),X +55 ,Y +8 ,fnt ,WHITE )
+        self.draw_text (bg ,"爆弾",X +110 ,Y +8 ,fnt ,WHITE )
+        self.draw_text (bg ,str (self.blazegem ),X +155 ,Y +8 ,fnt ,WHITE )
+        self.draw_text (bg ,"守護",X +210 ,Y +8 ,fnt ,WHITE )
+        self.draw_text (bg ,str (self.guard ),X +255 ,Y +8 ,fnt ,WHITE )
 
         col =WHITE 
         if self.pl_life <int (self.pl_lifemax /5 )and self.tmr %2 ==0 :col =RED 
@@ -950,7 +950,7 @@ class Game:
             geta =0 
         self.lev =random .randint (1 ,self.floor )
         self.imgEnemy =pygame .image .load (self.path +"/image/enemy"+str (self.emy_typ )+"_"+str ((self.floor -1 )//30 )+".png")
-        self.emy_name =EMY_NAME [self.emy_typ ]+" LV"+str (self.lev )
+        self.emy_name =EMY_NAME [self.emy_typ ]
         self.emy_lifemax =int ((73 *(self.emy_typ +1 )+EMY_LIFE [self.emy_typ ])*(1.2 *((self.floor -1 )//30 )+1 ))+(self.lev -1 )*8 +geta *3 
         self.emy_life =self.emy_lifemax 
         self.emy_str =int (self.emy_lifemax /7 +EMY_STR [self.emy_typ ]*(0.5 *((self.floor -1 )//30 )+1 ))+geta 
@@ -978,7 +978,7 @@ class Game:
         pygame .draw .rect (bg ,WHITE ,[x -2 ,y -2 ,w +4 ,h +4 ])
         pygame .draw .rect (bg ,BLACK ,[x ,y ,w ,h ])
         if val >0 :
-            pygame .draw .rect (bg ,(0 ,128 ,255 ),[x ,y ,w *val /ma ,h ])
+            pygame .draw .rect (bg , SILVER,[x ,y ,w *val /ma ,h ])
 
     def draw_battle (self ,bg ,fnt ):
         bx =0 
@@ -994,19 +994,25 @@ class Game:
             fx = self.emy_x + self.imgEnemy.get_width() - self.imgFire.get_width()
             fy = self.emy_y + self.emy_step - self.imgFire.get_height() // 2
             bg .blit (self.imgFire ,[fx ,fy ])
-        self.draw_bar (bg ,340 ,580 ,200 ,10 ,self.emy_life ,self.emy_lifemax )
+        self.draw_bar (bg ,360 ,580 ,200 ,10 ,self.emy_life ,self.emy_lifemax )
         if self.emy_blink >0 :
             self.emy_blink =self.emy_blink -1 
         if self.guard_remain >0 :
             bg .blit (self.imgItem [2 ],[380 ,645 ])
         if self.poison >0 :
             bg .blit (self.imgPoison,[460 ,645 ])
+        X =570; Y =50; W =300; H =600 
+        win =pygame .Surface ((W ,H ),pygame .SRCALPHA )
+        win .fill ((0 ,0 ,0 ,100 ))
+        bg .blit (win ,[X ,Y ])
         for i in range (10 ):# 戦闘メッセージの表示
             self.draw_text (bg ,self.message [i ],600 ,100 +i *50 ,fnt ,WHITE )
         if self.boss ==0 :
-            self.draw_text (bg ,"Lv."+str (self.lev ),490 ,592 ,fnt ,WHITE )# レベルの表示
+            self.draw_text (bg ,f"{self.emy_name}  Lv.{self.lev}",370 ,596 ,fnt ,WHITE )
+        else :
+            self.draw_text (bg ,f"{self.emy_name}",370 ,596 ,fnt ,WHITE )
         if self.emy_typ ==16 or self.emy_typ ==21 :
-            self.draw_text (bg ,"Magia : "+str (self.madoka )+"/1000",420 ,592 ,fnt ,WHITE )
+            self.draw_text (bg ,"Magia : "+str (self.madoka )+"/1000",370 ,618 ,fnt ,WHITE )
         self.draw_para (bg ,fnt )# 主人公の能力を表示
 
     def menu_command (self ,bg ,fnt ,key ):
@@ -1062,38 +1068,75 @@ class Game:
 
     def battle_command (self ,bg ,fnt ,key ):
         ent =False 
-        if key [K_a ]:# Aキー
-            self.btl_cmd =0 
-            ent =True 
-        if key [K_m ]:# Mキー 
+        labels = ["攻撃", "魔法", "傷薬", "爆弾", "守護", "逃走", "情報"]
+        grid = [
+            (0, 2),
+            (1, 3),
+            (5, 4),
+            (6, None),
+        ]
+        if key [K_m ]:
             self.btl_cmd =1 
-            ent =True 
-        if key [K_p ]:# Pキー
+        if key [K_p ]:
             self.btl_cmd =2 
-            ent =True 
-        if key [K_b ]:# Bキー
+        if key [K_b ]:
             self.btl_cmd =3 
-            ent =True 
-        if key [K_g ]:# Gキー
+        if key [K_g ]:
             self.btl_cmd =4 
-            ent =True 
-        if key [K_r ]:# Rキー
+        if key [K_r ]:
             self.btl_cmd =5 
-            ent =True 
-        if key [K_i ]:# Iキー
+        if key [K_i ]:
             self.btl_cmd =6 
+        row =0 
+        col =0 
+        for r, (left, right) in enumerate (grid ):
+            if self.btl_cmd == left:
+                row =r 
+                col =0 
+                break
+            if right is not None and self.btl_cmd == right:
+                row =r 
+                col =1 
+                break
+        if key [K_UP ]:
+            if row >0 :
+                target = grid [row -1 ][col ]
+                if target is not None:
+                    self.btl_cmd =target 
+        if key [K_DOWN ]:
+            if row <len (grid )-1 :
+                target = grid [row +1 ][col ]
+                if target is not None:
+                    self.btl_cmd =target 
+        if key [K_LEFT ]:
+            if col ==1 and grid [row ][0 ]is not None:
+                self.btl_cmd =grid [row ][0 ]
+        if key [K_RIGHT ]:
+            if col ==0 and grid [row ][1 ]is not None:
+                self.btl_cmd =grid [row ][1 ]
+        if key [K_RETURN ]or key [K_a ]:
             ent =True 
-        if key [K_UP ]and self.btl_cmd >0 :#↑キー
-            self.btl_cmd -=1 
-        if key [K_DOWN ]and self.btl_cmd <6 :#↓キー
-            self.btl_cmd +=1 
-        if key [K_SPACE ]or key [K_RETURN ]:
-            ent =True 
-        for i in range (7 ):
-            c =WHITE 
-            if self.btl_cmd ==i :
-                c =BLINK [self.tmr %6 ]
-            self.draw_text (bg ,COMMAND [i ],20 ,140 +i *60 ,fnt ,c )
+        win_w =180
+        line_h =32 
+        win_h =line_h *len (grid )+20 
+        win_x =880 -200
+        win_y =720 -win_h -20 
+        pygame .draw .rect (bg ,BLACK ,[win_x ,win_y ,win_w ,win_h ])
+        col_w =80
+        left_arrow_x =win_x +10 
+        left_text_x =left_arrow_x +20
+        right_arrow_x =win_x +10 +col_w 
+        right_text_x =right_arrow_x +20 
+        for r, (left, right) in enumerate (grid ):
+            y =win_y +12 +r *line_h 
+            if left is not None:
+                if self.btl_cmd == left:
+                    self.draw_text (bg ,"▶",left_arrow_x ,y ,fnt ,WHITE )
+                self.draw_text (bg ,labels [left ],left_text_x ,y ,fnt ,WHITE )
+            if right is not None:
+                if self.btl_cmd == right:
+                    self.draw_text (bg ,"▶",right_arrow_x ,y ,fnt ,WHITE )
+                self.draw_text (bg ,labels [right ],right_text_x ,y ,fnt ,WHITE )
         return ent 
 
     def init_message (self ):
@@ -1109,18 +1152,38 @@ class Game:
             self.message [i ]=self.message [i +1 ]
         self.message [9 ]=msg 
 
+    def apply_armor_effects (self ,life_msg ,magic_msg ,advance_on_fail ):
+        if self.pl_armor [0 ][0 ]==1 :
+            if random .random ()>0.7 :
+                cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
+                self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
+                self.set_message (life_msg .format (cure ))
+                self.se [2 ].play ()
+            else :
+                if advance_on_fail :
+                    self.tmr =self.tmr +1 
+        if self.pl_armor [1 ][0 ]==1 :
+            if random .random ()>0.7 :
+                mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
+                self.pl_mag =self.pl_mag +mgup 
+                self.set_message (magic_msg .format (mgup ))
+                self.se [9 ].play ()
+            else :
+                if advance_on_fail :
+                    self.tmr =self.tmr +1 
+
     def emy_action (self ,bg ):
         action =True 
         if self.emy_typ ==4 or self.emy_typ ==8 or self.emy_typ ==15 :
             self.pow_up =1 
             if random .random ()>0.7 :
                 self.pow_up ={4:2 ,8:2 ,15:3 }[self.emy_typ ]
-                self.set_message ("Enemy power up!")
+                self.set_message ("　敵は　力をためた!")
             action =False 
         if self.emy_typ ==5 or self.emy_typ ==12:
             suck = {5:5+self.lev, 12:104}[self.emy_typ] + random .randint (1 ,self.emy_typ )
             suck = min(suck, self.pl_mag)
-            self.set_message ("MP down! -{}".format (suck ))
+            self.set_message (f"　MPを　{suck}　吸収された!")
             self.pl_mag =self.pl_mag -suck 
             action =False 
         if self.emy_typ ==6 :
@@ -1132,7 +1195,7 @@ class Game:
         if self.emy_typ ==7 or self.boss_mode == "ice":
             cure = self.emy_lifemax //10 + random.randint (-self.emy_lifemax//100, self.emy_lifemax//100)
             cure += {7:0, 18:-3100}[self.emy_typ]
-            self.set_message ("Enemy recover. +{}".format (int (min (cure ,self.emy_lifemax -self.emy_life ))))
+            self.set_message ("　敵の回復 +{}".format (int (min (cure ,self.emy_lifemax -self.emy_life ))))
             pygame .mixer .Sound (self.path +"/sound/ohd_se_potion.wav").play ()
             self.emy_life =min (self.emy_life +cure ,self.emy_lifemax )
             action =False 
@@ -1140,10 +1203,10 @@ class Game:
         if self.emy_typ ==11:
             if random .random ()>0.84:
                 self.poison =2
-                self.set_message ("Poison!")
+                self.set_message ("　毒を喰らった!")
                 action =False 
         if self.poison >0 :
-            self.set_message ("Poison damage -{}".format (self.poison *40 ))
+            self.set_message (f"　毒 {self.poison *40}ダメージ！")
             self.pl_life =self.pl_life -self.poison *40 
             if self.pl_life <=0 :
                 self.pl_life =0 
@@ -1165,6 +1228,7 @@ class Game:
         fontS =self.get_font (18 )
 
         se =load_sounds (self.path )# 効果音とジングル
+        self.se = se
 
         while True :
             for event in pygame .event .get ():
@@ -1329,7 +1393,6 @@ class Game:
                         if self.floor >= 91 and not self.all_cocoons_cleared():
                             pass
                         else:
-                            print("[DEBUG] itemWall start floor={}, pos={}, used={}".format(self.floor, self.item_wall_pos, self.item_wall_used))
                             if self.floor >= 91:
                                 if self.floor == 100 and self.all_item_walls_claimed() and not self.true_episode_heard:
                                     self.init_item_event (kind="true_episode", lines=TRUE_EPISODE_TALK)
@@ -1337,7 +1400,6 @@ class Game:
                                     self.init_item_event (kind="item", reward_count=5)
                             else:
                                 self.init_item_event ()
-                            print("[DEBUG] itemWall init kind={}, lines={}, phase={}".format(self.item_event_kind, len(self.item_talk_lines), self.item_event_phase))
                             self.idx =131 
                             self.tmr =0 
                 if accept and self.stair_in_front ():
@@ -1543,7 +1605,7 @@ class Game:
                                 elif self.item_event_phase == 2:
                                     self.item_event_phase = 3
                     elif self.item_event_phase == 1:
-                        options = ["[P]otion", "[B]laze gem", "[G]uard"]
+                        options = ["傷薬", "爆弾", "守護"]
                         line_h = 25
                         box_h = 15 + line_h * len(options)
                         pygame .draw .rect (screen ,BLACK ,[520 ,420 ,280 ,box_h ])
@@ -1556,15 +1618,6 @@ class Game:
                             self.item_choice -=1 
                         if key [K_DOWN ]and self.item_choice <2 :
                             self.item_choice +=1 
-                        if key [K_p ]:
-                            self.item_choice =0 
-                            self.item_reward =0 
-                        if key [K_b ]:
-                            self.item_choice =1 
-                            self.item_reward =1 
-                        if key [K_g ]:
-                            self.item_choice =2 
-                            self.item_reward =2 
                         if accept and self.item_reward is None:
                             self.item_reward = self.item_choice
                         if self.item_reward is not None:
@@ -1752,8 +1805,7 @@ class Game:
                     self.draw_dungeon (screen ,fontS )
                 elif self.tmr ==31 :
                     se [3 ].play ()
-                    self.draw_text (screen ,"You died.",340 ,240 ,font ,RED )
-                    self.draw_text (screen ,"Game over.",340 ,380 ,font ,RED )
+                    self.draw_text (screen ,"君は　死んでしまった。",340 ,240 ,font ,RED )
                 elif self.tmr ==100 :
                     self.idx =0 
                     self.tmr =0 
@@ -1763,7 +1815,8 @@ class Game:
                     if self.move_bgm_path :
                         now =time .time ()
                         self.move_bgm_pos_ms =int ((now -self.move_bgm_start_time )*1000 )
-                    self.imgBtlBG =pygame .image .load (self.path +"/image/btlbg{}.png".format (self.boss ))
+                    bg_idx = (self.floor - 1) // 10
+                    self.imgBtlBG =pygame .image .load (self.path +"/image/btlbg{}.png".format (bg_idx ))
                     if self.boss ==1 :
                         self.init_bossbattle ()
                         pygame .mixer .music .load (self.path +"/sound/bgm_battle_1.wav")
@@ -1776,6 +1829,7 @@ class Game:
                         pygame .mixer .music .load (self.path +"/sound/bgm_battle_0.wav")
                         pygame .mixer .music .play (-1 )
                         self.init_message ()
+                    self.set_message (f"{self.emy_name}　が　あらわれた！")
                 elif self.tmr <=4 :
                     bx =(4 -self.tmr )*220 
                     by =0 
@@ -1783,17 +1837,18 @@ class Game:
                     self.draw_para (screen ,fontS )
                 elif self.tmr <=16 :
                     self.draw_battle (screen ,fontS )
-                    self.draw_text (screen ,self.emy_name +" appear!",300 ,200 ,font ,WHITE )
+                    # self.draw_text (screen ,self.emy_name +" appear!",300 ,200 ,font ,WHITE )
                 else :
                     self.idx =210 
                     self.tmr =0 
+                    
 
             elif self.idx ==210 :# プレイヤーのターン（入力待ち）
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    self.set_message ("Your turn.")
+                    self.set_message ("プレイヤーのターン")
                     self.guard_remain =max (self.guard_remain -1 ,0 )
-                if self.battle_command (screen ,font ,key )==True :
+                if self.battle_command (screen ,fontS ,key )==True :
                     if self.btl_cmd ==0 :#Attack
                         self.idx =220 
                         self.tmr =0 
@@ -1820,18 +1875,18 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 cri =0 
                 if self.tmr ==1 :
-                    self.set_message ("You attack!")
+                    self.set_message (f"　{self.emy_name}　に　攻撃！")
                     se [0 ].play ()
                     if self.pl_sword [0 ][0 ]==1 :
                         if random .random ()>0.7 :
                             cri =1 
-                            self.set_message ("クリティカルヒット！")
+                            self.set_message ("　クリティカルヒット！")
                     dmg =self.pl_str +random .randint (0 ,9 )-EMY_APRO [self.emy_typ ]
                     dmg =int (dmg *(1 +0.01 *cri *self.pl_sword [0 ][1 ]))+2 *self.pl_sword [0 ][1 ]+self.pl_sword [2 ][1 ]
                     dmg =max (1 +cri ,int (dmg /(2 *self.poison +1 )))
                     if self.emy_typ ==8 or self.emy_typ ==10 :
                         if random .random ()>0.7 :
-                            self.set_message ("Protected! Damege down!")
+                            self.set_message ("　攻撃は　防御された！")
                             dmg =int (dmg /2 )
                     if self.guard_remain >0 and self.emy_typ ==20 :
                         dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
@@ -1839,7 +1894,7 @@ class Game:
                     screen .blit (self.imgEffect [0 ],[700 -self.tmr *120 ,-100 +self.tmr *120 ])
                 if self.tmr ==5 :
                     self.emy_blink =5 
-                    self.set_message (str (dmg )+"pts of damage!")
+                    self.set_message (f"　{dmg}　ダメージ！")
                 if self.tmr ==11 :
                     self.emy_life =self.emy_life -dmg 
                     if self.emy_life <=0 :
@@ -1852,7 +1907,7 @@ class Game:
                     if self.burn_turns >0 :
                         se [0 ].play ()
                         burn_dmg = 400 +random .randint (-50 ,50 )
-                        self.set_message ("Burn counter -{}".format (burn_dmg ))
+                        self.set_message ("　火傷 -{}".format (burn_dmg ))
                         self.pl_life =self.pl_life -burn_dmg 
                         if self.pl_life <=0 :
                             self.pl_life =0 
@@ -1869,26 +1924,27 @@ class Game:
                 defence =self.pl_shield [0 ][1 ]+self.pl_shield [1 ][1 ]+self.pl_shield [2 ][1 ]+self.pl_armor [0 ][1 ]+self.pl_armor [1 ][1 ]+self.pl_armor [2 ][1 ]
                 defence =int (defence /2 )
                 if self.tmr ==1 :
-                    self.set_message ("Enemy turn.")
+                    self.set_message (f"{self.emy_name}のターン")
                     pro =0 
                     cou =0 
-                    if self.emy_skip_turn :
-                        self.emy_skip_turn = False
-                        self.set_message ("Enemy is recovering.")
-                        self.tmr =self.tmr+10
                     if self.emy_typ ==12 and self.burn_turns >0 :
                         self.idx =237 
                         self.tmr =0 
                         continue
                 if self.tmr ==5 :
-                    self.set_message (self.emy_name +" attack!")
-                    se [0 ].play ()
-                    self.emy_step =30 
+                    if self.emy_skip_turn :
+                        self.emy_skip_turn = False
+                        self.set_message ("　敵は　よろけている！")
+                        self.tmr =self.tmr+6
+                    else:
+                        self.set_message (f"　{self.emy_name}　の　攻撃！")
+                        se [0 ].play ()
+                        self.emy_step =30 
                 if self.tmr ==9 :
                     if self.pl_shield [0 ][0 ]==1 :
                         if random .random ()>0.7 and self.emy_typ !=20 :
                             pro =0.3 +0.01 *self.pl_shield [0 ][1 ]
-                            self.set_message ("Shield protect!")
+                            self.set_message ("　盾で　防御した！")
                     if self.pl_shield [1 ][0 ]==1 :
                         if random .random ()>0.7 :
                             cou =self.pl_shield [1 ][1 ]
@@ -1900,13 +1956,13 @@ class Game:
                         dmg =int (dmg *1.3 )
                     if self.guard_remain >0 :
                         if self.emy_typ ==14 or self.emy_typ ==17 :
-                            self.set_message ("Guard crush!")
+                            self.set_message ("　守護が破壊された！")
                             self.guard_remain =0 
                         else :
                             dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
                     if self.emy_typ ==2 or self.emy_typ ==10 or (self.emy_typ ==18 and self.boss_mode == "normal"):
                         if random .random ()>0.7 :
-                            self.set_message ("Crirical!")
+                            self.set_message ("　クリティカルヒット！")
                             dmg =int (dmg *{2:1.5, 10:2, 18:2.5}[self.emy_typ] )
                     if self.emy_typ ==17 :
                         self.inferno -= 15 + random .randint (0 ,10 )
@@ -1914,7 +1970,7 @@ class Game:
                         dmg =dmg_tmp 
                     if self.emy_typ ==21 :
                         dmg = int(dmg * self.emy_lifemax/self.emy_life)
-                    self.set_message (str (dmg )+"pts of damage!")
+                    self.set_message (f"　{dmg}　ダメージ！")
                     self.dmg_eff =5 
                     self.emy_step =0 
                 if self.tmr ==12 :
@@ -1926,7 +1982,7 @@ class Game:
                     if cou >0 :
                         self.emy_blink =2 
                         dmg =int (self.pl_str //10 +self.pl_str *self.pl_shield [1 ][1 ]*0.003 +random .randint (0 ,self.pl_shield [1 ][1 ]//5 ))
-                        self.set_message (str (dmg )+"pts of counter!")
+                        self.set_message (f"　{dmg}　カウンター！")
                         self.emy_life =self.emy_life -dmg 
                         if self.emy_life <=0 :
                             self.emy_life =0 
@@ -1936,22 +1992,7 @@ class Game:
                     if self.emy_action (screen ):
                         self.tmr =self.tmr +3 
                 if self.tmr ==18 :
-                    if self.pl_armor [0 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
-                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
-                            self.set_message ("Armor cure +{}".format (cure ))
-                            se [2 ].play ()
-                        else :
-                            self.tmr =self.tmr +1 
-                    if self.pl_armor [1 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
-                            self.pl_mag =self.pl_mag +mgup 
-                            self.set_message ("Armor magic +{}".format (mgup ))
-                            se [9 ].play ()
-                        else :
-                            self.tmr =self.tmr +1 
+                    self.apply_armor_effects ("　生命 +{}", "　魔力 +{}", True )
                     if self.emy_typ ==6 and self.idx ==236 :
                         self.tmr =0 
                 if self.tmr ==21 :
@@ -1966,11 +2007,20 @@ class Game:
                 if self.tmr ==4 :self.set_message ("............")
                 if self.tmr ==5 :
                     if self.boss ==1 :
-                        self.set_message ("You failed to flee.")
+                        self.set_message ("逃走に失敗した")
                     elif random .randint (0 ,99 )<60 -60 *self.boss +40 *(self.emy_typ //22 ):
+                        self.btl_cmd =0
+                        self.guard_remain =0 
+                        self.poison =0 
+                        self.madoka =0 
+                        self.pow_up =1 
+                        self.burn_turns =0 
+                        self.inferno =0
+                        self.boss_mode = "normal"
+                        self.change = 0
                         self.idx =244 
                     else :
-                        self.set_message ("You failed to flee.")
+                        self.set_message ("逃走に失敗した")
                 if self.tmr ==10 :
                     if self.emy_typ ==16 or self.emy_typ ==21 :
                         self.idx =232 
@@ -1986,6 +2036,7 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
                     pygame .mixer .music .stop ()
+                    self.btl_cmd =0
                     self.guard_remain =0 
                     self.poison =0 
                     self.madoka =0 
@@ -1994,7 +2045,7 @@ class Game:
                     self.inferno =0
                     self.boss_mode = "normal"
                     self.change = 0
-                    self.set_message ("You lose.")
+                    self.set_message ("負けてしまった")
                 if self.tmr ==11 :
                     self.idx =70 
                     self.tmr =29 
@@ -2002,6 +2053,7 @@ class Game:
             elif self.idx ==241 :# 勝利
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
+                    self.btl_cmd =0
                     self.guard_remain =0 
                     self.poison =0 
                     self.madoka =0 
@@ -2014,7 +2066,7 @@ class Game:
                         self.tmr =0
                 if self.tmr ==2 :
                     self.change = 0
-                    self.set_message ("You win!")
+                    self.set_message ("{}　を　倒した！".format (self.emy_name ))
                     pygame .mixer .music .stop ()
                     if self.boss ==1 :
                         se [7 ].play ()
@@ -2036,21 +2088,16 @@ class Game:
             elif self.idx ==243 :# レベルアップ
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    self.set_message ("Level up!")
+                    self.set_message ("レベルアップ！")
                     se [4 ].play ()
                     lif_p =random .randint (10 ,20 )
                     str_p =random .randint (7 ,9 )
                     mag_p =random .randint (15 ,30 )
                     self.pl_exp =self.pl_exp -(self.pl_lifemax -250 )*20 
                 if self.tmr ==13 :
-                    self.set_message ("Max life + "+str (lif_p ))
                     self.pl_lifemax =self.pl_lifemax +lif_p 
                     self.pl_life =self.pl_life +lif_p 
-                if self.tmr ==15 :
-                    self.set_message ("MP + "+str (mag_p ))
                     self.pl_mag =self.pl_mag +mag_p 
-                if self.tmr ==17 :
-                    self.set_message ("Str + "+str (str_p ))
                     self.pl_str =self.pl_str +str_p 
                 if self.tmr ==23 :
                     if self.pl_exp >(self.pl_lifemax -250 )*20 :
@@ -2071,7 +2118,7 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
                     ice =0 
-                    self.set_message ("You magic!")
+                    self.set_message ("　魔法による攻撃！")
                     se [6 ].play ()
                     if self.pl_sword [1 ][0 ]==1 :
                         if random .random ()>0.95 -0.003 *self.pl_sword [1 ][1 ]:
@@ -2086,7 +2133,7 @@ class Game:
                     screen .blit (self.imgEffect [2 ],[250 -self.tmr *12 ,-150 +self.tmr *50 ])
                 if self.tmr ==5 :
                     self.emy_blink =5 
-                    self.set_message (str (dmg )+"pts of damage!")
+                    self.set_message (f"　{dmg}　ダメージ！")
                 if self.tmr ==11 :
                     self.emy_life =self.emy_life -dmg 
                     self.pl_mag =max (0 ,self.pl_mag -100 )
@@ -2098,14 +2145,13 @@ class Game:
                     if self.emy_typ ==18 :
                         self.boss_mode = "ice"
                     if ice ==1 :
-                        self.set_message ("Stick ice!")
-                        self.set_message ("Enemy frozon!")
+                        self.set_message ("　敵は　凍りついた！")
                     else :
                         self.tmr =self.tmr +3
                 if self.tmr ==18 :
                     self.poison =max (self.poison -1 ,0 )
                     if ice*self.poison >0 :
-                        self.set_message ("Poison damage -{}".format (self.poison *40 ))
+                        self.set_message ("　毒 -{}".format (self.poison *40 ))
                         self.pl_life =self.pl_life -self.poison *40 
                         if self.pl_life <=0 :
                             self.pl_life =0 
@@ -2115,22 +2161,7 @@ class Game:
                         self.tmr =self.tmr +4
                 if self.tmr ==24 :
                     if ice ==1 :
-                        if self.pl_armor [0 ][0 ]==1 :
-                            if random .random ()>0.7 :
-                                cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
-                                self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
-                                self.set_message ("Armor cure +{}".format (cure ))
-                                se [2 ].play ()
-                            else :
-                                self.tmr =self.tmr +1 
-                        if self.pl_armor [1 ][0 ]==1 :
-                            if random .random ()>0.7 :
-                                mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
-                                self.pl_mag =self.pl_mag +mgup 
-                                self.set_message ("Armor magic +{}".format (mgup ))
-                                se [9 ].play ()
-                            else :
-                                self.tmr =self.tmr +1 
+                        self.apply_armor_effects ("　生命 +{}", "　魔力 +{}", True )
                     elif self.emy_typ ==21 :
                         self.idx =239
                         self.tmr =0
@@ -2146,10 +2177,10 @@ class Game:
                 if self.tmr ==1 :
                     cure =min (500 +3 *self.pl_armor [2 ][1 ],self.pl_lifemax -self.pl_life )
                     if self.emy_typ ==13 :
-                        self.set_message ("ポーションを無効化されている！")
+                        self.set_message ("　傷薬を無効化されている！")
                         cure =0 
                     else:
-                        self.set_message ("Potion +{}".format (cure ))
+                        self.set_message ("　傷薬 +{}".format (cure ))
                         se [2 ].play ()
                 if self.tmr ==6 :
                     self.pl_life =min (self.pl_lifemax ,self.pl_life +cure )
@@ -2172,14 +2203,14 @@ class Game:
                 Y =360 -img_rz .get_height ()/2 
                 screen .blit (img_rz ,[X ,Y ])
                 if self.tmr ==1 :
-                    self.set_message ("Blaze gem!")
+                    self.set_message ("　爆弾による攻撃！")
                     se [1 ].play ()
                 if self.tmr ==6 :
                     self.blazegem =self.blazegem -1 
                 if self.tmr ==11 :
                     dmg =1000 +self.pl_sword [2 ][1 ]*16 
                     if self.emy_typ ==11:
-                        self.set_message ("Eating gem!")
+                        self.set_message ("　敵は　爆弾を捕食した！")
                         dmg =0 
                     if self.burn_turns >0 :
                         dmg = self.pl_sword [2 ][1 ]*16
@@ -2190,7 +2221,7 @@ class Game:
                         dmg =0 
                 if self.tmr ==15 :
                     self.emy_blink =5 
-                    self.set_message (str (dmg )+"pts of damage!")
+                    self.set_message (f"　{dmg}　ダメージ！")
                 if self.tmr ==21 :
                     self.emy_life =self.emy_life -dmg 
                     if self.emy_life <=0 :
@@ -2202,7 +2233,7 @@ class Game:
                         self.boss_mode = "fire"
                     if self.emy_typ ==12:
                         self.burn_turns =4 
-                        self.set_message ("Boss ignited!")
+                        self.set_message ("　敵は　火傷した！")
                     else:
                         self.tmr =self.tmr +2
                 if self.tmr ==26 :
@@ -2257,15 +2288,15 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 pygame .draw .rect (screen ,BLACK ,[80 ,140 ,720 ,420 ])
                 pygame .draw .rect (screen ,WHITE ,[80 ,140 ,720 ,420 ],2 )
-                name = self.emy_name
+                name = f"{self.emy_name}  Lv.{self.lev}"
                 info = ENEMY_INFO.get(self.emy_typ, "info text")
                 self.draw_text (screen ,name ,110 ,180 ,font ,WHITE )
                 parts = info.split("\n")
                 for i, part in enumerate(parts):
                     self.draw_text (screen ,part ,110 ,250 + i * 28 ,fontS ,WHITE )
-                self.draw_text (screen ,"[I]/[Enter] Back",540 ,520 ,fontS ,WHITE )
+                self.draw_text (screen ,"[B]/[←] Back",540 ,520 ,fontS ,WHITE )
                 if self.tmr >5 :
-                    if key [K_i ] or key [K_RETURN ]:
+                    if key [K_b ] or key [K_LEFT ]:
                         self.idx =210 
                         self.tmr =1 
 
@@ -2275,7 +2306,7 @@ class Game:
                     self.guard_remain =3 
                     if random .random ()<0.01 *self.pl_shield [2 ][1 ]:
                         self.guard_remain =4 
-                    self.set_message ("Guard for {} turn!".format (self.guard_remain ))
+                    self.set_message ("　{}ターンの　守護を得た".format (self.guard_remain ))
                     se [8 ].play ()
                 if self.tmr ==6 :
                     self.guard =self.guard -1 
@@ -2297,7 +2328,8 @@ class Game:
                     se [1 ].play ()
                     self.emy_step =30 
                 if self.tmr ==9 :
-                    self.set_message (str (self.pl_life -self.pl_life //10 )+"pts of damage!")
+                    dmg =self.pl_life -self.pl_life //10
+                    self.set_message (f"　{dmg}　ダメージ！")
                 if self.tmr ==15 :
                     self.pl_life =self.pl_life //10 
                     if self.pl_life <=0 :
@@ -2308,41 +2340,30 @@ class Game:
                     if self.emy_action (screen ):
                         self.tmr =self.tmr +3 
                 if self.tmr ==23 :
-                    if self.pl_armor [0 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
-                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
-                            self.set_message ("Armor cure +{}".format (cure ))
-                            se [2 ].play ()
-                    if self.pl_armor [1 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
-                            self.pl_mag =self.pl_mag +mgup 
-                            self.set_message ("Armor magic +{}".format (mgup ))
-                            se [9 ].play ()
+                    self.apply_armor_effects ("　生命 +{}", "　魔法 +{}", False )
                     self.idx =210 
                     self.tmr =0 
 
             elif self.idx ==232 :#Magia
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    self.set_message ("Enemy turn.")
+                    self.set_message (f"{self.emy_name}　のターン")
                 if self.tmr ==5 :
                     if self.madoka <1000 :
-                        self.set_message ("Magia charge!")
+                        self.set_message ("　Magiaのチャージ！")
                     elif self.madoka >=1000 :
-                        self.set_message ("Magia!")
+                        self.set_message ("　Magiaを発動")
                         se [6 ].play ()
                         self.emy_step =30 
                 if self.tmr ==9 :
                     if self.madoka <1000 :
                         dmg =0 
                         charge_magia = int (self.emy_life *{16:0.02, 21:0.025}[self.emy_typ] +100 )
-                        self.set_message ("Magia +{}".format (charge_magia ))
+                        self.set_message ("　Magia +{}".format (charge_magia ))
                         self.madoka =self.madoka +charge_magia
                     elif self.madoka >=1000 :
                         dmg =1000 
-                        self.set_message (str (dmg )+"pts of damage!")
+                        self.set_message (f"　{dmg}　ダメージ！")
                         self.madoka =self.madoka -1000 
                 if self.tmr ==15 :
                     self.pl_life =self.pl_life -dmg 
@@ -2354,18 +2375,7 @@ class Game:
                     if self.emy_action (screen ):
                         self.tmr =self.tmr +3 
                 if self.tmr ==24 :
-                    if self.pl_armor [0 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
-                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
-                            self.set_message ("Armor cure +{}".format (cure ))
-                            se [2 ].play ()
-                    if self.pl_armor [1 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
-                            self.pl_mag =self.pl_mag +mgup 
-                            self.set_message ("Armor magic +{}".format (mgup ))
-                            se [9 ].play ()
+                    self.apply_armor_effects ("　生命 +{}", "　魔力 +{}", False )
                     self.idx =210 
                     self.tmr =0 
 
@@ -2390,48 +2400,22 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
                     cure =min (cure ,self.emy_lifemax -self.emy_life )
-                    self.set_message ("Enemy Potion +{}".format (cure ))
+                    self.set_message ("　敵の生命 +{}".format (cure ))
                     se [2 ].play ()
                 if self.tmr ==6 :
                     self.emy_life =min (self.emy_lifemax ,self.emy_life +cure )
                 if self.tmr ==11 :
-                    if self.pl_armor [0 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
-                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
-                            self.set_message ("Armor cure +{}".format (cure ))
-                            se [2 ].play ()
-                    if self.pl_armor [1 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
-                            self.pl_mag =self.pl_mag +mgup 
-                            self.set_message ("Armor magic +{}".format (mgup ))
-                            se [9 ].play ()
+                    self.apply_armor_effects ("　生命 +{}", "　魔力 +{}", False )
                     self.idx =210 
                     self.tmr =0 
 
             elif self.idx ==234 :#敵のガード
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    self.set_message ("Enemy guard for {} turn.".format (self.guard_remain ))
+                    self.set_message ("　敵は　{}ターンの守護を得た".format (self.guard_remain ))
                     se [8 ].play ()
                 if self.tmr ==6 :
-                    if self.pl_armor [0 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
-                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
-                            self.set_message ("Armor cure +{}".format (cure ))
-                            se [2 ].play ()
-                        else:
-                            self.tmr =self.tmr +1
-                    if self.pl_armor [1 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
-                            self.pl_mag =self.pl_mag +mgup 
-                            self.set_message ("Armor magic +{}".format (mgup ))
-                            se [9 ].play ()
-                        else:
-                            self.tmr =self.tmr +1
+                    self.apply_armor_effects ("　生命 +{}", "　魔力 +{}", True )
                 if self.tmr ==11 :
                     self.idx =210 
                     self.tmr =0 
@@ -2439,7 +2423,7 @@ class Game:
             elif self.idx ==235 :#逃亡？
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    self.set_message ("Enemy watches you.")
+                    self.set_message ("　敵は　こちらを見つめている")
                 if self.tmr ==6 :
                     self.idx =210 
                     self.tmr =0 
@@ -2469,7 +2453,7 @@ class Game:
                 defence =self.pl_shield [0 ][1 ]+self.pl_shield [1 ][1 ]+self.pl_shield [2 ][1 ]+self.pl_armor [0 ][1 ]+self.pl_armor [1 ][1 ]+self.pl_armor [2 ][1 ]
                 defence =int (defence /2 )
                 if self.tmr ==5 :
-                    self.set_message (self.emy_name +" attack!")
+                    self.set_message (f"　{self.emy_name}　の　攻撃！")
                     se [0 ].play ()
                     self.emy_step =30 
                 if self.tmr ==9 :
@@ -2477,7 +2461,7 @@ class Game:
                     dmg =dmg *3 
                     if self.guard_remain >0 :
                         dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
-                    self.set_message (str (dmg )+"pts of damage!")
+                    self.set_message (f"　{dmg}　ダメージ！")
                     self.dmg_eff =5 
                     self.emy_step =0 
                 if self.tmr ==12 :
@@ -2488,37 +2472,26 @@ class Game:
                         self.tmr =0 
                     recoil =2000 +random .randint (-100 ,100 )
                     self.emy_life =max (0 ,self.emy_life -recoil )
-                    self.set_message ("Enemy recoil -{}".format (recoil ))
+                    self.set_message ("　反動 -{}".format (recoil ))
                     self.burn_turns -=1 
                     if self.emy_life <=0 :
                         self.emy_life =0 
                         self.idx =241 
                         self.tmr =0
                 if self.tmr ==16 :
-                    if self.pl_armor [0 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
-                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
-                            self.set_message ("Armor cure +{}".format (cure ))
-                            se [2 ].play ()
-                    if self.pl_armor [1 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
-                            self.pl_mag =self.pl_mag +mgup 
-                            self.set_message ("Armor magic +{}".format (mgup ))
-                            se [9 ].play ()
+                    self.apply_armor_effects ("　生命 +{}", "　魔力 +{}", False )
                     self.idx =210 
                     self.tmr =0 
 
             elif self.idx ==238 :# 豪炎
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==5 :
-                    self.set_message (self.emy_name +" 豪炎!")
+                    self.set_message (f"　{self.emy_name}　の　豪炎！")
                     se [1 ].play ()
                     self.emy_step =30 
                 if self.tmr ==9 :
                     dmg =150 + self.inferno +random .randint (-30 ,30 )
-                    self.set_message (str (dmg )+"pts of damage!")
+                    self.set_message (f"　{dmg}　ダメージ！")
                     self.dmg_eff =5 
                     self.emy_step =0
                     self.inferno = self.inferno + 30 + random.randint(0, 20)
@@ -2529,22 +2502,7 @@ class Game:
                         self.idx =242 
                         self.tmr =0 
                 if self.tmr ==16 :
-                    if self.pl_armor [0 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
-                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
-                            self.set_message ("Armor cure +{}".format (cure ))
-                            se [2 ].play ()
-                        else:
-                            self.tmr =self.tmr +1
-                    if self.pl_armor [1 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
-                            self.pl_mag =self.pl_mag +mgup 
-                            self.set_message ("Armor magic +{}".format (mgup ))
-                            se [9 ].play ()
-                        else:
-                            self.tmr =self.tmr +1
+                    self.apply_armor_effects ("　生命 +{}", "　魔力 +{}", True )
                 if self.tmr ==18 :
                     self.idx =210 
                     self.tmr =0 
@@ -2554,18 +2512,18 @@ class Game:
                 defence =self.pl_shield [0 ][1 ]+self.pl_shield [1 ][1 ]+self.pl_shield [2 ][1 ]+self.pl_armor [0 ][1 ]+self.pl_armor [1 ][1 ]+self.pl_armor [2 ][1 ]
                 defence =int (defence /2 )
                 if self.tmr ==1 :
-                    self.set_message ("Enemy turn.")
+                    self.set_message (self.emy_name +"のターン")
                     pro =0 
                     cou =0 
                 if self.tmr ==5 :
-                    self.set_message (self.emy_name +" attack!")
+                    self.set_message (f"　{self.emy_name}　の　攻撃！")
                     se [0 ].play ()
                     self.emy_step =30 
                 if self.tmr ==9 :
                     if self.pl_shield [0 ][0 ]==1 :
                         if random .random ()>0.7 and self.emy_typ !=20 :
                             pro =0.3 +0.01 *self.pl_shield [0 ][1 ]
-                            self.set_message ("Shield protect!")
+                            self.set_message ("　盾で　防御した！")
                     if self.pl_shield [1 ][0 ]==1 :
                         if random .random ()>0.7 :
                             cou =self.pl_shield [1 ][1 ]
@@ -2575,11 +2533,11 @@ class Game:
                     dmg =int (dmg /(1 +pro ))*self.pow_up 
                     if self.guard_remain >0 :
                         if self.emy_typ ==14 or self.emy_typ ==17 :
-                            self.set_message ("Guard crush!")
+                            self.set_message ("　守護が　破壊された")
                             self.guard_remain =0 
                         else :
                             dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
-                    self.set_message (str (dmg )+"pts of damage!")
+                    self.set_message (f"　{dmg}　ダメージ！")
                     self.dmg_eff =5 
                     self.emy_step =0 
                 if self.tmr ==12 :
@@ -2591,7 +2549,7 @@ class Game:
                     if cou >0 :
                         self.emy_blink =2 
                         dmg =int (self.pl_str //10 +self.pl_str *self.pl_shield [1 ][1 ]*0.003 +random .randint (0 ,self.pl_shield [1 ][1 ]//5 ))
-                        self.set_message (str (dmg )+"pts of counter!")
+                        self.set_message (f"　{dmg}　のカウンター！")
                         self.emy_life =self.emy_life -dmg 
                         if self.emy_life <=0 :
                             self.emy_life =0 
@@ -2600,30 +2558,15 @@ class Game:
                 if self.tmr ==14 :
                     self.poison =max (self.poison -1 ,0 )
                     self.poison = 4
-                    self.set_message ("Poison!")
-                    self.set_message ("Poison damage -{}".format (self.poison *40 ))
+                    self.set_message ("　毒を喰らった！")
+                    self.set_message ("　毒 -{}".format (self.poison *40 ))
                     self.pl_life =self.pl_life -self.poison *40 
                     if self.pl_life <=0 :
                         self.pl_life =0 
                         self.idx =242 
                         self.tmr =0 
                 if self.tmr ==18 :
-                    if self.pl_armor [0 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
-                            self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
-                            self.set_message ("Armor cure +{}".format (cure ))
-                            se [2 ].play ()
-                        else :
-                            self.tmr =self.tmr +1 
-                    if self.pl_armor [1 ][0 ]==1 :
-                        if random .random ()>0.7 :
-                            mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
-                            self.pl_mag =self.pl_mag +mgup 
-                            self.set_message ("Armor magic +{}".format (mgup ))
-                            se [9 ].play ()
-                        else :
-                            self.tmr =self.tmr +1 
+                    self.apply_armor_effects ("　生命 +{}", "　魔力 +{}", True )
                 if self.tmr ==21 :
                     self.idx =210 
                     self.tmr =0 

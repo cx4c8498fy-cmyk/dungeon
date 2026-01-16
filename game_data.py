@@ -184,7 +184,7 @@ EVENT_TALK = [
 ]
 MENU = ["[S]ave data", "Back to the [T]itle", "[C]lose menu"]
 COMMAND = ["[A]ttack", "[M]agic", "[P]otion", "[B]laze gem", "[G]uard", "[R]un", "[I]nfo"]
-TRE_NAME = ["Potion", "Blaze gem", "  Guard", "Food +40", "Food +20 +40", "Mag pot +120"]
+TRE_NAME = ["傷薬", "爆弾", "守護", "Food +40", "Food +20 +40", "Mag pot +120"]
 TRAP_NAME = [
     "Damege Floor!",
     "Cure Floor",
