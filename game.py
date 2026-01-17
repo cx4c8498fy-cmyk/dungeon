@@ -91,6 +91,12 @@ class Game:
 
         self.dmg_eff = 0
         self.menu_cmd = 0
+        self.confirm_cmd = 0
+        self.load_accept_lock = False
+        self.title_confirm_lock = False
+        self.save_confirm_lock = False
+        self.menu_back_lock = False
+        self.menu_accept_lock = False
         self.save_cmd = 0
         self.btl_cmd = 0
         self.pow_up = 1
@@ -1017,53 +1023,61 @@ class Game:
 
     def menu_command (self ,bg ,fnt ,key ):
         ent =False 
-        if key [K_s ]:# Sキー 
-            self.menu_cmd =0 
-            ent =True 
-        if key [K_t ]:# Tキー
-            self.menu_cmd =1 
-            ent =True 
-        if key [K_c ]:# Cキー
-            self.menu_cmd =2 
-            ent =True 
-        if key [K_UP ]and self.menu_cmd >0 :#↑キー
+        options = ["Save data", "Back to title", "Close menu"]
+        if key [K_UP ]and self.menu_cmd >0 :
             self.menu_cmd -=1 
-        if key [K_DOWN ]and self.menu_cmd <2 :#↓キー
+        if key [K_DOWN ]and self.menu_cmd <len (options )-1 :
             self.menu_cmd +=1 
-        if key [K_SPACE ]or key [K_RETURN ]:
+        if key [K_RETURN ]or key [K_a ]:
             ent =True 
-        for i in range (3 ):
-            c =WHITE 
+        win_w =360 
+        line_h =32 
+        win_h =line_h *len (options )+20 
+        win_x =(880 -win_w )//2 
+        win_y =(720 -win_h )//2 
+        pygame .draw .rect (bg ,BLACK ,[win_x ,win_y ,win_w ,win_h ])
+        for i, label in enumerate (options ):
+            y =win_y +10 +i *line_h 
             if self.menu_cmd ==i :
-                c =BLINK [self.tmr %6 ]
-            self.draw_text (bg ,MENU [i ],300 ,220 +i *80 ,fnt ,c )
+                self.draw_text (bg ,"▶",win_x +20 ,y ,fnt ,WHITE )
+            self.draw_text (bg ,label ,win_x +50 ,y ,fnt ,WHITE )
         return ent 
 
     def save_command (self ,bg ,fnt ,key ):
         ent =False 
+        if self.load_accept_lock:
+            if not (key [K_RETURN ]or key [K_a ]):
+                self.load_accept_lock = False
         SAVE =["data[1] : 地下 {}階".format (self.floorlist [0 ]),
         "data[2] : 地下 {}階".format (self.floorlist [1 ]),
         "data[3] : 地下 {}階".format (self.floorlist [2 ])]
-        if key [K_1 ]:# 1キー 
+        if key [K_1 ]:
             self.save_cmd =0 
             ent =True 
-        if key [K_2 ]:# 2キー
+        if key [K_2 ]:
             self.save_cmd =1 
             ent =True 
-        if key [K_3 ]:# 3キー
+        if key [K_3 ]:
             self.save_cmd =2 
             ent =True 
-        if key [K_UP ]and self.save_cmd >0 :#↑キー
+        if key [K_UP ]and self.save_cmd >0 :
             self.save_cmd -=1 
-        if key [K_DOWN ]and self.save_cmd <2 :#↓キー
+        if key [K_DOWN ]and self.save_cmd <2 :
             self.save_cmd +=1 
-        if key [K_SPACE ]or key [K_RETURN ]:
-            ent =True 
-        for i in range (3 ):
-            c =WHITE 
+        if key [K_RETURN ]or key [K_a ]:
+            if not self.load_accept_lock:
+                ent =True
+        win_w =360 
+        line_h =32 
+        win_h =line_h *len (SAVE )+20 
+        win_x =(880 -win_w )//2 
+        win_y =(720 -win_h )//2 
+        pygame .draw .rect (bg ,BLACK ,[win_x ,win_y ,win_w ,win_h ])
+        for i, label in enumerate (SAVE ):
+            y =win_y +10 +i *line_h 
             if self.save_cmd ==i :
-                c =BLINK [self.tmr %6 ]
-            self.draw_text (bg ,SAVE [i ],340 ,270 +i *40 ,fnt ,c )
+                self.draw_text (bg ,"▶",win_x +20 ,y ,fnt ,WHITE )
+            self.draw_text (bg ,label ,win_x +50 ,y ,fnt ,WHITE )
         return ent 
 
     def battle_command (self ,bg ,fnt ,key ):
@@ -1309,13 +1323,12 @@ class Game:
             elif self.idx ==20 :#データのロード
                 screen .fill (BLACK )
                 screen .blit (self.imgTitle ,[40 ,60 ])
-                pygame .draw .rect (screen ,BLACK ,[280 ,180 ,320 ,300 ])
                 self.draw_text (screen ,"Choose load data.",320 ,200 ,font ,WHITE )
                 self.draw_text (screen ,"[B]ack to title.",320 ,420 ,font ,WHITE )
                 if key [K_b ]==1 :
                     self.idx =0 
                     self.tmr =2 
-                if self.save_command (screen ,font ,key )==True :
+                if self.save_command (screen ,fontS ,key )==True :
                     with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"r")as f :
                         loaddata =json .load (f )
                         self.floor =loaddata ["floor"]
@@ -1724,85 +1737,161 @@ class Game:
 
             elif self.idx ==30 :#メニュー
                 self.draw_dungeon (screen ,fontS )
-                pygame .draw .rect (screen ,BLACK ,[280 ,180 ,320 ,300 ])
-                if self.menu_command (screen ,font ,key )==True :
-                    if self.menu_cmd ==0 :#savedata
-                        self.idx =40 
-                    if self.menu_cmd ==1 :#go_title
-                        self.idx =60 
-                        self.tmr =0 
-                    if self.menu_cmd ==2 :#close
-                        self.idx =100 
-                        self.tmr =0 
+                if self.menu_back_lock:
+                    if not (key [K_b ]or key [K_LEFT ]):
+                        self.menu_back_lock = False
+                if self.menu_accept_lock:
+                    if not (key [K_RETURN ]or key [K_a ]):
+                        self.menu_accept_lock = False
+                if (key [K_b ]or key [K_LEFT ]) and not self.menu_back_lock:
+                    self.idx =100 
+                    self.tmr =0 
+                else:
+                    ent = self.menu_command (screen ,fontS ,key )
+                    if self.menu_accept_lock:
+                        ent = False
+                    if ent == True :
+                        if self.menu_cmd ==0 :#savedata
+                            self.load_accept_lock = True
+                            self.idx =40 
+                        if self.menu_cmd ==1 :#go_title
+                            self.confirm_cmd =0 
+                            self.title_confirm_lock = True
+                            self.idx =60 
+                            self.tmr =0 
+                        if self.menu_cmd ==2 :#close
+                            self.idx =100 
+                            self.tmr =0 
 
             elif self.idx ==40 :#セーブデータ選択
                 self.draw_dungeon (screen ,fontS )
-                pygame .draw .rect (screen ,BLACK ,[280 ,180 ,320 ,300 ])
-                self.draw_text (screen ,"Choose save data.",300 ,200 ,font ,WHITE )
-                self.draw_text (screen ,"[B]ack to menu.",300 ,420 ,font ,WHITE )
-                if self.save_command (screen ,font ,key )==True :
+                if self.save_command (screen ,fontS ,key )==True :
+                    self.confirm_cmd =0 
+                    self.save_confirm_lock = True
                     self.idx =50 
                     self.tmr =0 
-                if key [K_b ]==1 :
+                if key [K_b ]==1 or key [K_LEFT ]==1 :
+                    self.menu_back_lock = True
                     self.idx =30 
 
             elif self.idx ==50 :#確認とセーブ
                 self.draw_dungeon (screen ,fontS )
-                pygame .draw .rect (screen ,BLACK ,[280 ,180 ,320 ,300 ])
-                if self.tmr ==1 :
-                    d ={
-                    "floor":self.floor ,
-                    "pl_lifemax":self.pl_lifemax ,
-                    "pl_life":self.pl_life ,
-                    "pl_mag":self.pl_mag ,
-                    "pl_str":self.pl_str ,
-                    "pl_exp":self.pl_exp ,
-                    "potion":self.potion ,
-                    "blazegem":self.blazegem ,
-                    "guard":self.guard ,
-                    "shield":self.pl_shield ,
-                    "armor":self.pl_armor ,
-                    "sword":self.pl_sword ,
-                    "dungeon":self.dungeon ,
-                    "pl_x":self.pl_x ,
-                    "pl_y":self.pl_y ,
-                    "boss_pos":self.boss_pos ,
-                    "item_wall_pos":self.item_wall_pos ,
-                    "item_wall_used":self.item_wall_used ,
-                    "item_wall_claimed":sorted(self.item_wall_claimed),
-                    "true_episode_heard":self.true_episode_heard,
-                    "event_wall_pos":self.event_wall_pos 
-                    }
+                d ={
+                "floor":self.floor ,
+                "pl_lifemax":self.pl_lifemax ,
+                "pl_life":self.pl_life ,
+                "pl_mag":self.pl_mag ,
+                "pl_str":self.pl_str ,
+                "pl_exp":self.pl_exp ,
+                "potion":self.potion ,
+                "blazegem":self.blazegem ,
+                "guard":self.guard ,
+                "shield":self.pl_shield ,
+                "armor":self.pl_armor ,
+                "sword":self.pl_sword ,
+                "dungeon":self.dungeon ,
+                "pl_x":self.pl_x ,
+                "pl_y":self.pl_y ,
+                "boss_pos":self.boss_pos ,
+                "item_wall_pos":self.item_wall_pos ,
+                "item_wall_used":self.item_wall_used ,
+                "item_wall_claimed":sorted(self.item_wall_claimed),
+                "true_episode_heard":self.true_episode_heard,
+                "event_wall_pos":self.event_wall_pos 
+                }
                 if self.floorlist [self.save_cmd ]>0 :
-                    self.draw_text (screen ,"上書きしますか？",340 ,240 ,font ,WHITE )
-                    self.draw_text (screen ,"[Y]es / [N]o",340 ,380 ,font ,WHITE )
+                    if self.save_confirm_lock:
+                        if not (key [K_RETURN ]or key [K_a ]):
+                            self.save_confirm_lock = False
+                    options = ["Yes", "No"]
+                    if key [K_UP ]and self.confirm_cmd >0 :
+                        self.confirm_cmd -=1 
+                    if key [K_DOWN ]and self.confirm_cmd <len (options )-1 :
+                        self.confirm_cmd +=1 
+                    confirm_yes = False
+                    confirm_no = False
                     if key [K_y ]==1 :
+                        confirm_yes = True
+                    if key [K_n ]==1 :
+                        confirm_no = True
+                    if (key [K_RETURN ]or key [K_a ]) and not self.save_confirm_lock:
+                        if self.confirm_cmd ==0 :
+                            confirm_yes = True
+                        else :
+                            confirm_no = True
+                    win_w =360 
+                    line_h =32 
+                    win_h =line_h *(len (options )+1 )+20 
+                    win_x =(880 -win_w )//2 
+                    win_y =(720 -win_h )//2 
+                    pygame .draw .rect (screen ,BLACK ,[win_x ,win_y ,win_w ,win_h ])
+                    self.draw_text (screen ,"上書きしますか？",win_x +30 ,win_y +10 ,fontS ,WHITE )
+                    for i, label in enumerate (options ):
+                        y =win_y +10 +line_h *(i +1 )
+                        if self.confirm_cmd ==i :
+                            self.draw_text (screen ,"▶",win_x +20 ,y ,fontS ,WHITE )
+                        self.draw_text (screen ,label ,win_x +50 ,y ,fontS ,WHITE )
+                    if confirm_yes :
                         with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
                             json .dump (d ,f )
                         se [9 ].play ()
                         self.floorlist [self.save_cmd ]=self.floor 
+                        self.load_accept_lock = True
+                        self.idx =40 
+                    if confirm_no :
+                        self.load_accept_lock = True
                         self.idx =40 
                 else :
                     with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
                         json .dump (d ,f )
                     se [9 ].play ()
                     self.floorlist [self.save_cmd ]=self.floor 
-                    self.idx =40 
-                if key [K_n ]==1 :
+                    self.load_accept_lock = True
                     self.idx =40 
 
             elif self.idx ==60 :#タイトルへ
                 self.draw_dungeon (screen ,fontS )
-                pygame .draw .rect (screen ,BLACK ,[280 ,180 ,320 ,300 ])
-                self.draw_text (screen ,"Back to the title.",300 ,240 ,font ,WHITE )
-                self.draw_text (screen ,"Check data saving.",300 ,320 ,font ,WHITE )
-                self.draw_text (screen ,"[Y]es / [N]o",300 ,400 ,font ,WHITE )
-                if key [K_y ]==1 :
-                    pygame .mixer .music .stop ()
-                    self.idx =0 
-                    self.tmr =0 
-                if key [K_n ]==1 :
+                options = ["Yes", "No"]
+                msg_lines = [
+                    "セーブしていないデータは",
+                    "消えてしまいますが、",
+                    "タイトル画面に戻りますか？",
+                ]
+                if self.title_confirm_lock:
+                    if not (key [K_RETURN ]or key [K_a ]):
+                        self.title_confirm_lock = False
+                if key [K_UP ]and self.confirm_cmd >0 :
+                    self.confirm_cmd -=1 
+                if key [K_DOWN ]and self.confirm_cmd <len (options )-1 :
+                    self.confirm_cmd +=1 
+                if key [K_LEFT ]or key [K_b ]:
+                    self.menu_back_lock = True
                     self.idx =30 
+                    self.tmr =0 
+                if (key [K_RETURN ]or key [K_a ]) and not self.title_confirm_lock:
+                    if self.confirm_cmd ==0 :
+                        pygame .mixer .music .stop ()
+                        self.idx =0 
+                        self.tmr =0 
+                    else :
+                        self.menu_accept_lock = True
+                        self.idx =30 
+                        self.tmr =0 
+                win_w =360 
+                line_h =32 
+                win_h =line_h *(len (options )+len (msg_lines ))+20 
+                win_x =(880 -win_w )//2 
+                win_y =(720 -win_h )//2 
+                pygame .draw .rect (screen ,BLACK ,[win_x ,win_y ,win_w ,win_h ])
+                for i, line in enumerate (msg_lines ):
+                    y =win_y +10 +i *line_h 
+                    self.draw_text (screen ,line ,win_x +20 ,y ,fontS ,WHITE )
+                base_y =win_y +10 +line_h *len (msg_lines )
+                for i, label in enumerate (options ):
+                    y =base_y +i *line_h 
+                    if self.confirm_cmd ==i :
+                        self.draw_text (screen ,"▶",win_x +20 ,y ,fontS ,WHITE )
+                    self.draw_text (screen ,label ,win_x +50 ,y ,fontS ,WHITE )
 
             elif self.idx ==70 :# ゲームオーバー
                 if self.tmr <=30 :
@@ -2009,7 +2098,7 @@ class Game:
             elif self.idx ==240 :# 逃げられる？
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :self.set_message ("　逃走を試みた")
-                if self.tmr ==5 :
+                if self.tmr ==10 :
                     if self.boss ==1 :
                         self.set_message ("　逃走に失敗した！")
                     elif random .randint (0 ,99 )<60 or self.emy_typ == 22:
@@ -2025,7 +2114,7 @@ class Game:
                         self.idx =244 
                     else :
                         self.set_message ("　逃走に失敗した！")
-                if self.tmr ==10 :
+                if self.tmr ==15 :
                     if self.emy_typ ==16 or self.emy_typ ==21 :
                         self.idx =232 
                         self.tmr =0 
