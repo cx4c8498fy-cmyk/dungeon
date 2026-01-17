@@ -994,25 +994,25 @@ class Game:
             fx = self.emy_x + self.imgEnemy.get_width() - self.imgFire.get_width()
             fy = self.emy_y + self.emy_step - self.imgFire.get_height() // 2
             bg .blit (self.imgFire ,[fx ,fy ])
-        self.draw_bar (bg ,360 ,580 ,200 ,10 ,self.emy_life ,self.emy_lifemax )
+        self.draw_bar (bg ,30 ,60 ,200 ,10 ,self.emy_life ,self.emy_lifemax )
         if self.emy_blink >0 :
             self.emy_blink =self.emy_blink -1 
         if self.guard_remain >0 :
-            bg .blit (self.imgItem [2 ],[380 ,645 ])
+            self.draw_text (bg ,f"守護 {self.guard_remain}",40 ,530 ,fnt ,WHITE )
         if self.poison >0 :
-            bg .blit (self.imgPoison,[460 ,645 ])
-        X =570; Y =50; W =300; H =600 
+            self.draw_text (bg ,f"毒 {self.poison}",90 ,530 ,fnt ,WHITE )
+        X =570; Y =50; W =300; H =530
         win =pygame .Surface ((W ,H ),pygame .SRCALPHA )
         win .fill ((0 ,0 ,0 ,100 ))
         bg .blit (win ,[X ,Y ])
         for i in range (10 ):# 戦闘メッセージの表示
-            self.draw_text (bg ,self.message [i ],600 ,100 +i *50 ,fnt ,WHITE )
+            self.draw_text (bg ,self.message [i ],600 ,90 +i *48 ,fnt ,WHITE )
         if self.boss ==0 :
-            self.draw_text (bg ,f"{self.emy_name}  Lv.{self.lev}",370 ,596 ,fnt ,WHITE )
+            self.draw_text (bg ,f"{self.emy_name}  Lv.{self.lev}",40 ,30 ,fnt ,WHITE )
         else :
-            self.draw_text (bg ,f"{self.emy_name}",370 ,596 ,fnt ,WHITE )
+            self.draw_text (bg ,f"{self.emy_name}",40 ,30 ,fnt ,WHITE )
         if self.emy_typ ==16 or self.emy_typ ==21 :
-            self.draw_text (bg ,"Magia : "+str (self.madoka )+"/1000",370 ,618 ,fnt ,WHITE )
+            self.draw_text (bg ,"Magia : "+str (self.madoka )+"/1000",40 ,82 ,fnt ,WHITE )
         self.draw_para (bg ,fnt )# 主人公の能力を表示
 
     def menu_command (self ,bg ,fnt ,key ):
@@ -1070,10 +1070,8 @@ class Game:
         ent =False 
         labels = ["攻撃", "魔法", "傷薬", "爆弾", "守護", "逃走", "情報"]
         grid = [
-            (0, 2),
-            (1, 3),
-            (5, 4),
-            (6, None),
+            [0, 1, 5, 6],
+            [2, 3, 4, None],
         ]
         if key [K_m ]:
             self.btl_cmd =1 
@@ -1089,54 +1087,63 @@ class Game:
             self.btl_cmd =6 
         row =0 
         col =0 
-        for r, (left, right) in enumerate (grid ):
-            if self.btl_cmd == left:
-                row =r 
-                col =0 
-                break
-            if right is not None and self.btl_cmd == right:
-                row =r 
-                col =1 
-                break
+        for r, row_items in enumerate (grid ):
+            for c, idx in enumerate (row_items ):
+                if idx is not None and self.btl_cmd == idx:
+                    row =r 
+                    col =c 
+                    break
         if key [K_UP ]:
             if row >0 :
-                target = grid [row -1 ][col ]
-                if target is not None:
-                    self.btl_cmd =target 
+                new_row =row -1 
+                max_col =max (i for i, v in enumerate (grid [new_row ]) if v is not None )
+                new_col =min (col ,max_col )
+                while new_col >=0 and grid [new_row ][new_col ]is None:
+                    new_col -=1 
+                if new_col >=0 :
+                    self.btl_cmd =grid [new_row ][new_col ]
         if key [K_DOWN ]:
             if row <len (grid )-1 :
-                target = grid [row +1 ][col ]
-                if target is not None:
-                    self.btl_cmd =target 
+                new_row =row +1 
+                max_col =max (i for i, v in enumerate (grid [new_row ]) if v is not None )
+                new_col =min (col ,max_col )
+                while new_col >=0 and grid [new_row ][new_col ]is None:
+                    new_col -=1 
+                if new_col >=0 :
+                    self.btl_cmd =grid [new_row ][new_col ]
         if key [K_LEFT ]:
-            if col ==1 and grid [row ][0 ]is not None:
-                self.btl_cmd =grid [row ][0 ]
+            if col >0 :
+                new_col =col -1 
+                while new_col >=0 and grid [row ][new_col ]is None:
+                    new_col -=1 
+                if new_col >=0 :
+                    self.btl_cmd =grid [row ][new_col ]
         if key [K_RIGHT ]:
-            if col ==0 and grid [row ][1 ]is not None:
-                self.btl_cmd =grid [row ][1 ]
+            if col <len (grid [row ])-1 :
+                new_col =col +1 
+                while new_col <len (grid [row ]) and grid [row ][new_col ]is None:
+                    new_col +=1 
+                if new_col <len (grid [row ]):
+                    self.btl_cmd =grid [row ][new_col ]
         if key [K_RETURN ]or key [K_a ]:
             ent =True 
-        win_w =180
+        win_w =380
         line_h =32 
         win_h =line_h *len (grid )+20 
-        win_x =880 -200
+        win_x =420
         win_y =720 -win_h -20 
         pygame .draw .rect (bg ,BLACK ,[win_x ,win_y ,win_w ,win_h ])
-        col_w =80
-        left_arrow_x =win_x +10 
-        left_text_x =left_arrow_x +20
-        right_arrow_x =win_x +10 +col_w 
-        right_text_x =right_arrow_x +20 
-        for r, (left, right) in enumerate (grid ):
+        col_w =85
+        for r, row_items in enumerate (grid ):
             y =win_y +12 +r *line_h 
-            if left is not None:
-                if self.btl_cmd == left:
-                    self.draw_text (bg ,"▶",left_arrow_x ,y ,fnt ,WHITE )
-                self.draw_text (bg ,labels [left ],left_text_x ,y ,fnt ,WHITE )
-            if right is not None:
-                if self.btl_cmd == right:
-                    self.draw_text (bg ,"▶",right_arrow_x ,y ,fnt ,WHITE )
-                self.draw_text (bg ,labels [right ],right_text_x ,y ,fnt ,WHITE )
+            for c, idx in enumerate (row_items ):
+                if idx is None:
+                    continue
+                arrow_x = 440 +c *col_w 
+                text_x =arrow_x +20 
+                if self.btl_cmd == idx:
+                    self.draw_text (bg ,"▶",arrow_x ,y ,fnt ,WHITE )
+                self.draw_text (bg ,labels [idx ],text_x ,y ,fnt ,WHITE )
         return ent 
 
     def init_message (self ):
@@ -1875,7 +1882,7 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 cri =0 
                 if self.tmr ==1 :
-                    self.set_message (f"　{self.emy_name}　に　攻撃！")
+                    self.set_message (f"　{self.emy_name}に　攻撃！")
                     se [0 ].play ()
                     if self.pl_sword [0 ][0 ]==1 :
                         if random .random ()>0.7 :
@@ -1937,7 +1944,7 @@ class Game:
                         self.set_message ("　敵は　よろけている！")
                         self.tmr =self.tmr+6
                     else:
-                        self.set_message (f"　{self.emy_name}　の　攻撃！")
+                        self.set_message (f"　{self.emy_name}の　攻撃！")
                         se [0 ].play ()
                         self.emy_step =30 
                 if self.tmr ==9 :
@@ -2001,14 +2008,11 @@ class Game:
 
             elif self.idx ==240 :# 逃げられる？
                 self.draw_battle (screen ,fontS )
-                if self.tmr ==1 :self.set_message ("...")
-                if self.tmr ==2 :self.set_message ("......")
-                if self.tmr ==3 :self.set_message (".........")
-                if self.tmr ==4 :self.set_message ("............")
+                if self.tmr ==1 :self.set_message ("　逃走を試みた")
                 if self.tmr ==5 :
                     if self.boss ==1 :
-                        self.set_message ("逃走に失敗した")
-                    elif random .randint (0 ,99 )<60 -60 *self.boss +40 *(self.emy_typ //22 ):
+                        self.set_message ("　逃走に失敗した！")
+                    elif random .randint (0 ,99 )<60 or self.emy_typ == 22:
                         self.btl_cmd =0
                         self.guard_remain =0 
                         self.poison =0 
@@ -2020,7 +2024,7 @@ class Game:
                         self.change = 0
                         self.idx =244 
                     else :
-                        self.set_message ("逃走に失敗した")
+                        self.set_message ("　逃走に失敗した！")
                 if self.tmr ==10 :
                     if self.emy_typ ==16 or self.emy_typ ==21 :
                         self.idx =232 
