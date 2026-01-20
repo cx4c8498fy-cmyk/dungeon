@@ -284,7 +284,7 @@ ENEMY_INFO = {
     21: "正義のゆうしゃのすがた。\n体力が減るほど攻撃力が上がる。\n魔法に対しては毒攻撃を返す",
     22: "info text for enemy 22",
 }
-MAZE_W = 11
-MAZE_H = 9
-DUNGEON_W = MAZE_W * 3
-DUNGEON_H = MAZE_H * 3
+MAZE_W = 50
+MAZE_H = 38
+DUNGEON_W = MAZE_W * 9
+DUNGEON_H = MAZE_H * 9
