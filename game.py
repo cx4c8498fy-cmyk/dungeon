@@ -1181,7 +1181,7 @@ class Game:
             if random .random ()>0.7 :
                 cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
                 self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
-                self.set_message ("鎧の癒し +{}" .format (cure ))
+                self.set_message ("　鎧の癒し +{}" .format (cure ))
                 self.se [2 ].play ()
             else :
                 self.tmr =self.tmr +1 
@@ -1590,14 +1590,9 @@ class Game:
                                     self.trap =4 +3 *((w_a )//3 )
                                 self.pl_sword [self.trap //3 -1 ][0 ]=1 
                                 self.pl_sword [self.trap //3 -1 ][1 ]=max (self.wpn_lev ,self.pl_sword [self.trap //3 -1 ][1 ])
-                            self.item_event_phase = 2
-                    elif self.item_event_phase == 2:
-                        self.draw_text (screen ,TRAP_NAME [self.trap ]+" Lv. "+str (self.wpn_lev ),320 ,230 ,font ,WHITE )
-                        self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
-                        if accept:
                             self.item_wall_used = True
-                            self.idx =100 
-                            self.tmr =0 
+                            self.idx =121
+                            self.tmr =0
                 else:
                     if self.item_event_phase in (0, 2):
                         if self.item_talk_index <len (self.item_talk_lines ):
@@ -1624,7 +1619,12 @@ class Game:
                                 if self.item_event_phase == 0:
                                     self.item_event_phase = 1
                                 elif self.item_event_phase == 2:
-                                    self.item_event_phase = 3
+                                    self.item_wall_used = True
+                                    self.treasure = self.item_reward if self.item_reward is not None else self.item_choice                            
+                                    if 91 <= self.floor <= 99:
+                                        self.item_wall_claimed.add(self.floor)
+                                    self.idx =120
+                        self.tmr =0 
                     elif self.item_event_phase == 1:
                         options = ["傷薬", "爆弾", "守護"]
                         line_h = 25
@@ -1653,17 +1653,7 @@ class Game:
                             self.item_talk_char_count = 0
                             self.item_talk_last_tick = pygame.time.get_ticks()
                             self.item_event_phase = 2
-                    elif self.item_event_phase == 3:
-                        reward = self.item_reward if self.item_reward is not None else self.item_choice
-                        screen .blit (self.imgItem [reward ],[320 ,220 ])
-                        self.draw_text (screen ,TRE_NAME [reward ]+" x "+str (self.item_reward_count ),380 ,230 ,font ,WHITE )
-                        self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
-                        if accept:
-                            self.item_wall_used = True
-                            if 91 <= self.floor <= 99:
-                                self.item_wall_claimed.add(self.floor)
-                            self.idx =100 
-                            self.tmr =0 
+
 
             elif self.idx ==132 :# eventWall会話
                 self.draw_dungeon (screen ,fontS )
