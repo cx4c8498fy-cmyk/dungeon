@@ -199,15 +199,15 @@ TRAP_NAME = [
     "Gem bazooka",
 ]
 EMY_NAME = [
-    "Green slime",
+    "ドウブ",
     "Red slime",
-    "Axe beast",
-    "Ogre",
+    "Goblin",
+    "ロンサムガメ",
     "Sword man",
     "Death hornet",
     "Signal slime",
     "Devil plant",
-    "Twin killer",
+    "ジスティン",
     "Hell",
     "Giant soldier",
     "Blood zombie",
@@ -284,7 +284,7 @@ ENEMY_INFO = {
     21: "正義のゆうしゃのすがた。\n体力が減るほど攻撃力が上がる。\n魔法に対しては毒攻撃を返す",
     22: "info text for enemy 22",
 }
-MAZE_W = 50
-MAZE_H = 38
+MAZE_W = 15
+MAZE_H = 13
 DUNGEON_W = MAZE_W * 9
 DUNGEON_H = MAZE_H * 9

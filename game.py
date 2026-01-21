@@ -121,6 +121,7 @@ class Game:
         self.boss_talk_lines = []
         self.boss_talk_index = 0
         self.boss_map_cache = {}
+        self.bg_cache = {}
         self.prev_return = False
         self.prev_a = False
         self.boss_talk_char_count = 0
@@ -406,25 +407,40 @@ class Game:
 
     def draw_dungeon (self ,bg ,fnt ):
         bg .fill (BLACK )
-        for y in range (-4 ,6 ):
-            for x in range (-5 ,6 ):
-                X =(x +5 )*80 
-                Y =(y +4 )*80 
+        bg_rect =self.blit_scaled_bg (bg ,self.imgBtlBG ,0 ,0 ,False )
+        self.dungeon_view_rect =bg_rect
+        view_left =bg_rect [0 ]
+        view_top =bg_rect [1 ]
+        view_w =bg_rect [2 ]
+        view_h =bg_rect [3 ]
+        prev_clip =bg .get_clip ()
+        bg .set_clip (pygame .Rect (view_left ,view_top ,view_w ,view_h ))
+        tile =80 
+        cols =view_w //tile +2 
+        rows =view_h //tile +2 
+        start_x =-cols //2 
+        start_y =-rows //2 
+        offset_x =view_left +view_w //2 -tile //2 -(cols //2 )*tile 
+        offset_y =view_top +view_h //2 -tile //2 -(rows //2 )*tile 
+        for y in range (start_y ,start_y +rows ):
+            for x in range (start_x ,start_x +cols ):
+                X =offset_x +(x -start_x )*tile 
+                Y =offset_y +(y -start_y )*tile 
                 dx =self.pl_x +x 
                 dy =self.pl_y +y 
                 if 0 <=dx <DUNGEON_W and 0 <=dy <DUNGEON_H :
                     if self.dungeon [dy ][dx ]<=7 :
-                        tile = self.dungeon [dy ][dx ]
-                        if tile in (0 ,1 ,2 ,4 ):
-                            variant = self.floor_var_map [dy ][dx ]
+                        tile_id =self.dungeon [dy ][dx ]
+                        if tile_id in (0 ,1 ,2 ,4 ):
+                            variant =self.floor_var_map [dy ][dx ]
                             if self.floor_flip_map [dy ][dx ]:
                                 bg .blit (self.floor_variants_flipped [variant ],[X ,Y ])
                             else :
                                 bg .blit (self.floor_variants [variant ],[X ,Y ])
-                            if tile !=0 :
-                                bg .blit (self.imgFloor [tile ],[X ,Y ])
+                            if tile_id !=0 :
+                                bg .blit (self.imgFloor [tile_id ],[X ,Y ])
                         else :
-                            bg .blit (self.imgFloor [tile ],[X ,Y ])
+                            bg .blit (self.imgFloor [tile_id ],[X ,Y ])
                     if self.dungeon [dy ][dx ]==9 :
                         if self.event_wall_pos and (dx, dy) == self.event_wall_pos and self.wall_event:
                             bg .blit (self.wall_event ,[X ,Y -40 ])
@@ -441,7 +457,8 @@ class Game:
                         bg .blit (boss_map ,[bx ,by ])
                 if x ==0 and y ==0 :# 主人公キャラの表示
                     bg .blit (self.imgPlayer [self.pl_a ],[X ,Y -40 ])
-        self.draw_para (bg ,fnt )# 主人公の能力を表示
+        bg .set_clip (prev_clip )
+        self.draw_para (bg ,fnt ,bg_rect )# 主人公の能力を表示
 
     def put_event (self ):
     # 階段かボスの配置
@@ -470,14 +487,14 @@ class Game:
                     self.dungeon [y ][x ]=3 
                     break 
                 # 宝箱と繭と武器の配置
-        for i in range (60 *40 ):
+        for i in range (60 *15 ):
             x =random .randint (3 ,DUNGEON_W -4 )
             y =random .randint (3 ,DUNGEON_H -4 )
             if (self.dungeon [y ][x ]==0 )and not self.is_boss_tile (x ,y ):
                 self.dungeon [y ][x ]=random .choice ([1 ,1 ,1 ,1 ,1 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,4 ,4 ])
                 # ダメージ、回復床の配置
         if self.floor >50 :
-            for i in range ((7 +int (self.floor //90 )*(self.floor -83 ))*40 ):
+            for i in range ((7 +int (self.floor //90 )*(self.floor -83 ))*15 ):
                 x =random .randint (3 ,DUNGEON_W -4 )
                 y =random .randint (3 ,DUNGEON_H -4 )
                 if (self.dungeon [y ][x ]==0 )and not self.is_boss_tile (x ,y ):
@@ -643,6 +660,30 @@ class Game:
         text .set_alpha (alpha )
         bg .blit (text ,[x ,y ])
 
+    def blit_scaled_bg (self ,bg ,img ,off_x =0 ,off_y =0 ,draw =True ,alpha =None ):
+        screen_w ,screen_h =bg .get_size ()
+        key =(id (img ),screen_w ,screen_h )
+        cached =self.bg_cache .get (key )
+        if cached :
+            scaled ,base_x ,base_y ,new_w ,new_h =cached
+        else :
+            img_w ,img_h =img .get_size ()
+            scale =min (screen_w /img_w ,screen_h /img_h )
+            new_w =max (1 ,int (img_w *scale ))
+            new_h =max (1 ,int (img_h *scale ))
+            scaled =pygame .transform .scale (img ,(new_w ,new_h ))
+            base_x =(screen_w -new_w )//2 
+            base_y =(screen_h -new_h )//2 
+            self.bg_cache [key ]=(scaled ,base_x ,base_y ,new_w ,new_h )
+        if draw :
+            if alpha is None :
+                bg .blit (scaled ,[base_x +off_x ,base_y +off_y ])
+            else :
+                temp =scaled .copy ()
+                temp .set_alpha (alpha )
+                bg .blit (temp ,[base_x +off_x ,base_y +off_y ])
+        return (base_x +off_x ,base_y +off_y ,new_w ,new_h )
+
     def start_new_game (self ):
         self.floor =1 
         self.set_floor_assets_for_current_floor ()
@@ -766,7 +807,11 @@ class Game:
                     phase =fade_in 
 
         bg .fill (BLACK )
-        self.draw_text (bg ,"[S]kip",780 ,20 ,fnt ,WHITE )
+        screen_w =bg .get_size ()[0 ]
+        text_x =int (screen_w *0.1 )
+        skip_label ="[S]kip"
+        skip_x =screen_w -int (screen_w *0.1 )-fnt .size (skip_label )[0 ]
+        self.draw_text (bg ,skip_label ,skip_x ,20 ,fnt ,WHITE )
 
         if self.tmr >=total_duration :
             end_phase =self.tmr -total_duration 
@@ -782,7 +827,7 @@ class Game:
                 txt =self.prologue_lines [i ]
                 if txt :
                     y =start_y +(i -visible_start )*line_height 
-                    self.draw_text_alpha (bg ,txt ,60 ,y ,fnt ,WHITE ,alpha )
+                    self.draw_text_alpha (bg ,txt ,text_x ,y ,fnt ,WHITE ,alpha )
             return 
 
         visible_start =max (0 ,line_index -(max_lines -1 ))
@@ -790,7 +835,7 @@ class Game:
             txt =self.prologue_lines [i ]
             if txt :
                 y =start_y +(i -visible_start )*line_height 
-                self.draw_text (bg ,txt ,60 ,y ,fnt ,WHITE )
+                self.draw_text (bg ,txt ,text_x ,y ,fnt ,WHITE )
         if phase <fade_in :
             alpha =int (255 *phase /fade_in )
         else :
@@ -798,7 +843,7 @@ class Game:
         txt =self.prologue_lines [line_index ]
         if txt :
             y =start_y +(line_index -visible_start )*line_height 
-            self.draw_text_alpha (bg ,txt ,60 ,y ,fnt ,WHITE ,alpha )
+            self.draw_text_alpha (bg ,txt ,text_x ,y ,fnt ,WHITE ,alpha )
 
     def draw_epilogue (self ,bg ,fnt ,key ):
         lines = EPILOGUE_LINES
@@ -822,7 +867,11 @@ class Game:
                 phase =fade_in 
 
         bg .fill (BLACK )
-        self.draw_text (bg ,"[S]kip",780 ,20 ,fnt ,WHITE )
+        screen_w =bg .get_size ()[0 ]
+        text_x =int (screen_w *0.1 )
+        skip_label ="[S]kip"
+        skip_x =screen_w -int (screen_w *0.1 )-fnt .size (skip_label )[0 ]
+        self.draw_text (bg ,skip_label ,skip_x ,20 ,fnt ,WHITE )
 
         if self.tmr >=total_duration :
             end_phase =self.tmr -total_duration 
@@ -837,7 +886,7 @@ class Game:
                 txt =lines [i ]
                 if txt :
                     y =start_y +(i -visible_start )*line_height 
-                    self.draw_text_alpha (bg ,txt ,60 ,y ,fnt ,WHITE ,alpha )
+                    self.draw_text_alpha (bg ,txt ,text_x ,y ,fnt ,WHITE ,alpha )
             return False
 
         visible_start =max (0 ,line_index -(max_lines -1 ))
@@ -845,7 +894,7 @@ class Game:
             txt =lines [i ]
             if txt :
                 y =start_y +(i -visible_start )*line_height 
-                self.draw_text (bg ,txt ,60 ,y ,fnt ,WHITE )
+                self.draw_text (bg ,txt ,text_x ,y ,fnt ,WHITE )
         if phase <fade_in :
             alpha =int (255 *phase /fade_in )
         else :
@@ -854,7 +903,7 @@ class Game:
             txt =lines [line_index ]
             if txt :
                 y =start_y +(line_index -visible_start )*line_height 
-                self.draw_text_alpha (bg ,txt ,60 ,y ,fnt ,WHITE ,alpha )
+                self.draw_text_alpha (bg ,txt ,text_x ,y ,fnt ,WHITE ,alpha )
         return False
 
     def draw_end_roll (self ,bg ,fnt ,key ):
@@ -923,11 +972,18 @@ class Game:
                 return pygame .font .Font (path ,size )
         return pygame .font .Font (None ,size )
 
-    def draw_para (self ,bg ,fnt ):
-        X =10
-        Y =565 
+    def draw_para (self ,bg ,fnt ,view_rect =None ):
+        if view_rect :
+            view_left ,view_top ,view_w ,view_h =view_rect
+        else :
+            view_left =0 
+            view_top =0 
+            view_w ,view_h =bg .get_size ()
+        X =view_left +10
         W =325 
         H =140 
+        margin_bottom =15 
+        Y =view_top +view_h -H -margin_bottom 
         win =pygame .Surface ((W ,H ),pygame .SRCALPHA )
         win .fill ((0 ,0 ,0 ,100 ))
         # pygame .draw .rect (win ,WHITE ,[0 ,0 ,W ,H ],2 )
@@ -1004,21 +1060,30 @@ class Game:
             self.dmg_eff =self.dmg_eff -1 
             bx =random .randint (-20 ,20 )
             by =random .randint (-10 ,10 )
-        bg .blit (self.imgBtlBG ,[bx ,by ])
-        X =570; Y =50; W =300; H =530
+        bg_rect =self.blit_scaled_bg (bg ,self.imgBtlBG ,bx ,by )
+        self.btl_bg_rect =bg_rect
+        bg_left =bg_rect [0 ]
+        bg_top =bg_rect [1 ]
+        bg_w =bg_rect [2 ]
+        bg_h =bg_rect [3 ]
+        screen_w =bg .get_size ()[0 ]
+        self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
+        W =300; H =530
+        msg_x =bg_left +bg_w -10 -W
+        msg_y =bg_top +50
         win =pygame .Surface ((W ,H ),pygame .SRCALPHA )
         win .fill ((0 ,0 ,0 ,100 ))
-        bg .blit (win ,[X ,Y ])
+        bg .blit (win ,[msg_x ,msg_y ])
         if self.emy_life >0 and self.emy_blink %2 ==0 :
             bg .blit (self.imgEnemy ,[self.emy_x ,self.emy_y +self.emy_step ])
         if self.burn_turns >0 :
             fx = self.emy_x + self.imgEnemy.get_width() - self.imgFire.get_width()
             fy = self.emy_y + self.emy_step - self.imgFire.get_height() // 2
             bg .blit (self.imgFire ,[fx ,fy ])
-            self.draw_text (bg ,f"火傷",40 ,104 ,fnt ,WHITE )
+            self.draw_text (bg ,f"火傷",bg_left +40 ,bg_top +104 ,fnt ,WHITE )
         if self.pow_up >1 :
-            self.draw_text (bg ,f"力上昇",40 ,104 ,fnt ,WHITE )
-        self.draw_bar (bg ,30 ,60 ,200 ,10 ,self.emy_life ,self.emy_lifemax )
+            self.draw_text (bg ,f"力上昇",bg_left +40 ,bg_top +104 ,fnt ,WHITE )
+        self.draw_bar (bg ,bg_left +30 ,bg_top +60 ,200 ,10 ,self.emy_life ,self.emy_lifemax )
         if self.emy_blink >0 :
             self.emy_blink =self.emy_blink -1 
         if self.guard_remain >0 :
@@ -1026,14 +1091,14 @@ class Game:
         if self.poison >0 :
             self.draw_text (bg ,f"毒 {self.poison}",90 ,530 ,fnt ,WHITE )
         for i in range (10 ):# 戦闘メッセージの表示
-            self.draw_text (bg ,self.message [i ],600 ,90 +i *48 ,fnt ,WHITE )
+            self.draw_text (bg ,self.message [i ],msg_x +30 ,msg_y +40 +i *48 ,fnt ,WHITE )
         if self.boss ==0 :
-            self.draw_text (bg ,f"{self.emy_name}  Lv.{self.lev}",40 ,30 ,fnt ,WHITE )
+            self.draw_text (bg ,f"{self.emy_name}  Lv.{self.lev}",bg_left +40 ,bg_top +30 ,fnt ,WHITE )
         else :
-            self.draw_text (bg ,f"{self.emy_name}",40 ,30 ,fnt ,WHITE )
+            self.draw_text (bg ,f"{self.emy_name}",bg_left +40 ,bg_top +30 ,fnt ,WHITE )
         if self.emy_typ ==16 or self.emy_typ ==21 :
-            self.draw_text (bg ,"Magia : "+str (self.madoka )+"/1000",40 ,82 ,fnt ,WHITE )
-        self.draw_para (bg ,fnt )# 主人公の能力を表示
+            self.draw_text (bg ,"Magia : "+str (self.madoka )+"/1000",bg_left +40 ,bg_top +82 ,fnt ,WHITE )
+        self.draw_para (bg ,fnt ,bg_rect )# 主人公の能力を表示
 
     def menu_command (self ,bg ,fnt ,key ):
         ent =False 
@@ -1158,8 +1223,13 @@ class Game:
         win_w =380
         line_h =32 
         win_h =line_h *len (grid )+20 
-        win_x =420
-        win_y =720 -win_h -20 
+        if getattr (self ,"btl_bg_rect",None ):
+            bg_left ,bg_top ,bg_w ,bg_h =self.btl_bg_rect
+            win_x =bg_left +bg_w -80 -win_w 
+            win_y =bg_top +bg_h -20 -win_h 
+        else :
+            win_x =420
+            win_y =720 -win_h -20 
         pygame .draw .rect (bg ,BLACK ,[win_x ,win_y ,win_w ,win_h ])
         col_w =85
         for r, row_items in enumerate (grid ):
@@ -1167,7 +1237,7 @@ class Game:
             for c, idx in enumerate (row_items ):
                 if idx is None:
                     continue
-                arrow_x = 440 +c *col_w 
+                arrow_x = win_x +20 +c *col_w 
                 text_x =arrow_x +20 
                 if self.btl_cmd == idx:
                     self.draw_text (bg ,"▶",arrow_x ,y ,fnt ,WHITE )
@@ -1255,7 +1325,7 @@ class Game:
 
         pygame .init ()
         pygame .display .set_caption ("One hour Dungeon")
-        screen =pygame .display .set_mode ((880 ,720 ))
+        screen =pygame .display .set_mode ((0 ,0 ),FULLSCREEN )
         clock =pygame .time .Clock ()
         font =self.get_font (25 )
         fontS =self.get_font (18 )
@@ -1280,7 +1350,7 @@ class Game:
                     self.title_mode = 0
                     self.title_cmd = 0
                 screen .fill (BLACK )
-                screen .blit (self.imgTitle ,[40 ,60 ])
+                title_rect =self.blit_scaled_bg (screen ,self.imgTitle )
                 if self.title_mode == 0:
                     options = ["はじめから", "つづきから"]
                     selected = self.title_cmd
@@ -1317,8 +1387,12 @@ class Game:
                 line_h =32 
                 win_w =360 
                 win_h =3 *line_h +20 
-                win_x =(880 -win_w )//2 
-                win_y =720 -win_h -200 
+                screen_w =screen .get_size ()[0 ]
+                win_x =(screen_w -win_w )//2 
+                title_top =title_rect [1 ]
+                title_h =title_rect [3 ]
+                anchor_y =title_top +int (title_h *0.7 )
+                win_y =anchor_y -win_h //2 
                 title_win = pygame.Surface((win_w, win_h), pygame.SRCALPHA)
                 title_win.fill((0, 0, 0, 200))
                 screen.blit(title_win, [win_x, win_y])
@@ -1334,7 +1408,7 @@ class Game:
 
             elif self.idx ==20 :#データのロード
                 screen .fill (BLACK )
-                screen .blit (self.imgTitle ,[40 ,60 ])
+                self.blit_scaled_bg (screen ,self.imgTitle )
                 self.draw_text (screen ,"Choose load data.",320 ,200 ,font ,WHITE )
                 self.draw_text (screen ,"[B]ack to title.",320 ,420 ,font ,WHITE )
                 if key [K_b ]==1 :
@@ -1640,8 +1714,17 @@ class Game:
             elif self.idx ==100 :# プレイヤーの移動
                 self.move_player (key )
                 self.draw_dungeon (screen ,fontS )
-                self.draw_text (screen ,"地下 {}階".format (self.floor),60 ,40 ,fontS ,WHITE )
-                self.draw_text (screen ,"[M]enu ",740 ,40 ,fontS ,WHITE )
+                view_rect =getattr (self ,"dungeon_view_rect",None )
+                if view_rect :
+                    view_left ,view_top ,view_w ,view_h =view_rect
+                else :
+                    view_left =0 
+                    view_top =0 
+                    view_w ,view_h =screen .get_size ()
+                self.draw_text (screen ,"地下 {}階".format (self.floor),view_left +60 ,view_top +40 ,fontS ,WHITE )
+                menu_label ="[M]enu "
+                menu_x =view_left +view_w -int (view_w *0.1 )-fontS .size (menu_label )[0 ]
+                self.draw_text (screen ,menu_label ,menu_x ,view_top +40 ,fontS ,WHITE )
                 if accept and self.event_wall_pos:
                     if self.pl_d == 0 and (self.pl_x, self.pl_y - 1) == self.event_wall_pos:
                         self.init_event_talk ()
@@ -1671,15 +1754,16 @@ class Game:
                     self.boss =1 
                 if self.welcome >0 :
                     self.welcome =self.welcome -1 
-                    self.draw_text (screen ,"地下 {}階".format (self.floor ),300 ,180 ,font ,CYAN )
+                    self.draw_text (screen ,"地下 {}階".format (self.floor ),view_left +300 ,view_top +180 ,font ,CYAN )
 
 
             elif self.idx ==110 :# 画面切り替え
                 self.draw_dungeon (screen ,fontS )
                 if 1 <=self.tmr and self.tmr <=5 :
-                    h =80 *self.tmr 
-                    pygame .draw .rect (screen ,BLACK ,[0 ,0 ,880 ,h ])
-                    pygame .draw .rect (screen ,BLACK ,[0 ,720 -h ,880 ,h ])
+                    alpha =int (255 *self.tmr /5 )
+                    fade =pygame .Surface (screen .get_size (),pygame .SRCALPHA )
+                    fade .fill ((0 ,0 ,0 ,alpha ))
+                    screen .blit (fade ,[0 ,0 ])
                 if self.tmr ==5 :
                     self.floor =self.floor +1 
                     if self.floor %10 ==1 :
@@ -1693,9 +1777,10 @@ class Game:
                     self.make_dungeon ()
                     self.put_event ()
                 if 6 <=self.tmr and self.tmr <=9 :
-                    h =80 *(10 -self.tmr )
-                    pygame .draw .rect (screen ,BLACK ,[0 ,0 ,880 ,h ])
-                    pygame .draw .rect (screen ,BLACK ,[0 ,720 -h ,880 ,h ])
+                    alpha =int (255 *(10 -self.tmr )/4 )
+                    fade =pygame .Surface (screen .get_size (),pygame .SRCALPHA )
+                    fade .fill ((0 ,0 ,0 ,alpha ))
+                    screen .blit (fade ,[0 ,0 ])
                 if self.tmr ==10 :
                     self.idx =100 
 
@@ -1986,10 +2071,10 @@ class Game:
                         self.init_message ()
                     self.set_message (f"{self.emy_name}が　あらわれた！")
                 elif self.tmr <=4 :
-                    bx =(4 -self.tmr )*220 
-                    by =0 
-                    screen .blit (self.imgBtlBG ,[bx ,by ])
-                    self.draw_para (screen ,fontS )
+                    alpha =int (255 *self.tmr /4 )
+                    bg_rect =self.blit_scaled_bg (screen ,self.imgBtlBG ,0 ,0 ,True ,alpha )
+                    self.btl_bg_rect =bg_rect
+                    self.draw_para (screen ,fontS ,bg_rect )
                 elif self.tmr <=16 :
                     self.draw_battle (screen ,fontS )
                 else :
@@ -2045,7 +2130,10 @@ class Game:
                     if self.guard_remain >0 and self.emy_typ ==20 :
                         dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
                 if 2 <=self.tmr <=4 :
-                    screen .blit (self.imgEffect [0 ],[700 -self.tmr *120 ,-100 +self.tmr *120 ])
+                    screen_w =screen .get_size ()[0 ]
+                    eff_x =screen_w //2 +260 -self.tmr *120 
+                    eff_y =-100 +self.tmr *120 
+                    screen .blit (self.imgEffect [0 ],[eff_x ,eff_y ])
                 if self.tmr ==5 :
                     self.emy_blink =5 
                     self.set_message (f"　{dmg}　ダメージ！")
@@ -2090,7 +2178,10 @@ class Game:
                     if self.boss_mode == "ice":
                         dmg =0 
                 if 2 <=self.tmr <=4 :
-                    screen .blit (self.imgEffect [2 ],[250 -self.tmr *12 ,-150 +self.tmr *50 ])
+                    screen_w =screen .get_size ()[0 ]
+                    eff_x =screen_w //2 -190 -self.tmr *12 
+                    eff_y =-150 +self.tmr *50 
+                    screen .blit (self.imgEffect [2 ],[eff_x ,eff_y ])
                 if self.tmr ==5 :
                     self.emy_blink =5 
                     self.set_message (f"　{dmg}　ダメージ！")
@@ -2159,7 +2250,8 @@ class Game:
             elif self.idx ==223 :# Blaze gem
                 self.draw_battle (screen ,fontS )
                 img_rz =pygame .transform .rotozoom (self.imgEffect [1 ],30 *self.tmr ,(12 -self.tmr )/8 )
-                X =440 -img_rz .get_width ()/2 
+                screen_w =screen .get_size ()[0 ]
+                X =screen_w //2 -img_rz .get_width ()/2 
                 Y =360 -img_rz .get_height ()/2 
                 screen .blit (img_rz ,[X ,Y ])
                 if self.tmr ==1 :
