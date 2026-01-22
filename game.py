@@ -55,7 +55,6 @@ class Game:
         self.title_cmd = 0
         self.tmr = 0
         self.floor = 0
-        self.welcome = 0
         self.boss = 0
 
         self.pl_x = 0
@@ -487,14 +486,41 @@ class Game:
                     self.dungeon [y ][x ]=3 
                     break 
                 # 宝箱と繭と武器の配置
-        for i in range (60 *15 ):
+        for i in range (60 *10 ):
             x =random .randint (3 ,DUNGEON_W -4 )
             y =random .randint (3 ,DUNGEON_H -4 )
             if (self.dungeon [y ][x ]==0 )and not self.is_boss_tile (x ,y ):
                 self.dungeon [y ][x ]=random .choice ([1 ,1 ,1 ,1 ,1 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,4 ,4 ])
-                # ダメージ、回復床の配置
+        is_boss_floor =self.floor %10 ==0 or self.floor >90
+        if not is_boss_floor :
+            def adjust_box_count (tile_id ,target ):
+                positions =[ (x ,y ) for y in range (DUNGEON_H ) for x in range (DUNGEON_W ) if self.dungeon [y ][x ]==tile_id ]
+                if len (positions )>target :
+                    random .shuffle (positions )
+                    for x ,y in positions [target :]:
+                        self.dungeon [y ][x ]=2
+                elif len (positions )<target :
+                    needed =target -len (positions )
+                    candidates =[ (x ,y ) for y in range (DUNGEON_H ) for x in range (DUNGEON_W ) if self.dungeon [y ][x ]==2 and not self.is_boss_tile (x ,y )]
+                    random .shuffle (candidates )
+                    for x ,y in candidates :
+                        if needed <=0 :
+                            break
+                        self.dungeon [y ][x ]=tile_id
+                        needed -=1
+                    if needed >0 :
+                        candidates =[ (x ,y ) for y in range (DUNGEON_H ) for x in range (DUNGEON_W ) if self.dungeon [y ][x ]==0 and not self.is_boss_tile (x ,y )]
+                        random .shuffle (candidates )
+                        for x ,y in candidates :
+                            if needed <=0 :
+                                break
+                            self.dungeon [y ][x ]=tile_id
+                            needed -=1
+            adjust_box_count (1 ,5 )
+            adjust_box_count (4 ,3 )
+        # ダメージ、回復床の配置
         if self.floor >50 :
-            for i in range ((7 +int (self.floor //90 )*(self.floor -83 ))*15 ):
+            for i in range ((7 +int (self.floor //90 )*(self.floor -83 ))*10 ):
                 x =random .randint (3 ,DUNGEON_W -4 )
                 y =random .randint (3 ,DUNGEON_H -4 )
                 if (self.dungeon [y ][x ]==0 )and not self.is_boss_tile (x ,y ):
@@ -502,7 +528,7 @@ class Game:
                         self.dungeon [y ][x ]=5 
                     else :
                         self.dungeon [y ][x ]=6 
-                        # プレイヤーの初期位置
+        # プレイヤーの初期位置
         if self.fixed_floor_data and self.floor == 100 and self.fixed_floor_data.get("pl_start"):
             self.pl_x, self.pl_y = self.fixed_floor_data["pl_start"]
         else:
@@ -689,7 +715,6 @@ class Game:
         self.set_floor_assets_for_current_floor ()
         self.make_dungeon ()
         self.put_event ()
-        self.welcome =15 
         self.pl_lifemax =300 
         self.pl_life =self.pl_lifemax 
         self.pl_str =100 
@@ -719,7 +744,6 @@ class Game:
                 self.dungeon =loaddata ["dungeon"]
                 self.pl_x =loaddata ["pl_x"]
                 self.pl_y =loaddata ["pl_y"]
-                self.welcome =15 
                 self.pl_lifemax =loaddata ["pl_lifemax"]
                 self.pl_life =loaddata ["pl_life"]
                 self.pl_str =loaddata ["pl_str"]
@@ -807,11 +831,13 @@ class Game:
                     phase =fade_in 
 
         bg .fill (BLACK )
-        screen_w =bg .get_size ()[0 ]
-        text_x =int (screen_w *0.1 )
+        bg_rect =self.blit_scaled_bg (bg ,self.imgBtlBG ,0 ,0 ,False )
+        bg_left ,bg_top ,bg_w ,bg_h =bg_rect
+        text_x =bg_left +int (bg_w *0.1 )
+        start_y =bg_top +90
         skip_label ="[S]kip"
-        skip_x =screen_w -int (screen_w *0.1 )-fnt .size (skip_label )[0 ]
-        self.draw_text (bg ,skip_label ,skip_x ,20 ,fnt ,WHITE )
+        skip_x =bg_left +bg_w -int (bg_w *0.1 )-fnt .size (skip_label )[0 ]
+        self.draw_text (bg ,skip_label ,skip_x ,bg_top +40 ,fnt ,WHITE )
 
         if self.tmr >=total_duration :
             end_phase =self.tmr -total_duration 
@@ -867,11 +893,13 @@ class Game:
                 phase =fade_in 
 
         bg .fill (BLACK )
-        screen_w =bg .get_size ()[0 ]
-        text_x =int (screen_w *0.1 )
+        bg_rect =self.blit_scaled_bg (bg ,self.imgBtlBG ,0 ,0 ,False )
+        bg_left ,bg_top ,bg_w ,bg_h =bg_rect
+        text_x =bg_left +int (bg_w *0.1 )
+        start_y =bg_top +90
         skip_label ="[S]kip"
-        skip_x =screen_w -int (screen_w *0.1 )-fnt .size (skip_label )[0 ]
-        self.draw_text (bg ,skip_label ,skip_x ,20 ,fnt ,WHITE )
+        skip_x =bg_left +bg_w -int (bg_w *0.1 )-fnt .size (skip_label )[0 ]
+        self.draw_text (bg ,skip_label ,skip_x ,bg_top +40 ,fnt ,WHITE )
 
         if self.tmr >=total_duration :
             end_phase =self.tmr -total_duration 
@@ -1422,7 +1450,6 @@ class Game:
                             self.dungeon =loaddata ["dungeon"]
                             self.pl_x =loaddata ["pl_x"]
                             self.pl_y =loaddata ["pl_y"]
-                            self.welcome =15 
                             self.pl_lifemax =loaddata ["pl_lifemax"]
                             self.pl_life =loaddata ["pl_life"]
                             self.pl_str =loaddata ["pl_str"]
@@ -1752,13 +1779,13 @@ class Game:
                     self.idx =130 
                     self.tmr =0 
                     self.boss =1 
-                if self.welcome >0 :
-                    self.welcome =self.welcome -1 
-                    self.draw_text (screen ,"地下 {}階".format (self.floor ),view_left +300 ,view_top +180 ,font ,CYAN )
-
 
             elif self.idx ==110 :# 画面切り替え
                 self.draw_dungeon (screen ,fontS )
+                if self.tmr == 1:
+                    disp_floor =self.floor +1 
+                    x = win_x + win_w//2 - 42
+                    y = title_top +int (title_h *0.4 )
                 if 1 <=self.tmr and self.tmr <=5 :
                     alpha =int (255 *self.tmr /5 )
                     fade =pygame .Surface (screen .get_size (),pygame .SRCALPHA )
@@ -1773,15 +1800,19 @@ class Game:
                         self.move_bgm_start_time =time .time ()
                         pygame .mixer .music .load (self.move_bgm_path )
                         pygame .mixer .music .play (-1 )
-                    self.welcome =15 
                     self.make_dungeon ()
                     self.put_event ()
                 if 6 <=self.tmr and self.tmr <=9 :
-                    alpha =int (255 *(10 -self.tmr )/4 )
+                    fade =pygame .Surface (screen .get_size (),pygame .SRCALPHA )
+                    fade .fill ((0 ,0 ,0 ,255 ))
+                    screen .blit (fade ,[0 ,0 ])
+                if 10 <=self.tmr and self.tmr <=13 :
+                    alpha =int (255 *(14 -self.tmr )/4 )
                     fade =pygame .Surface (screen .get_size (),pygame .SRCALPHA )
                     fade .fill ((0 ,0 ,0 ,alpha ))
                     screen .blit (fade ,[0 ,0 ])
-                if self.tmr ==10 :
+                self.draw_text (screen ,f"地下 {disp_floor}階" ,x ,y ,font ,WHITE )
+                if self.tmr ==14 :
                     self.idx =100 
 
             elif self.idx ==120 :# アイテム入手もしくはトラップ
@@ -2695,7 +2726,7 @@ class Game:
                         self.tmr =0
                 if self.tmr ==2 :
                     self.change = 0
-                    self.set_message ("{}　を　倒した！".format (self.emy_name ))
+                    self.set_message ("{}を　たおした！".format (self.emy_name ))
                     pygame .mixer .music .stop ()
                     if self.boss ==1 :
                         se [7 ].play ()
