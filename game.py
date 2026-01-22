@@ -151,6 +151,12 @@ class Game:
         self.event_talk_char_count = 0
         self.event_talk_last_tick = 0
         self.wall_event = None
+        self.map_seen = None
+        self.map_stairs = None
+        self.map_grid_surface = None
+        self.map_surface = None
+        self.map_surface_scale = None
+        self.map_surface_size = None
         self.fixed_floor_data = None
         self.last_talk_mode = 1
 
@@ -160,6 +166,15 @@ class Game:
 
     def init_floor_flip_map(self):
         self.floor_flip_map = [[random.randint(0, 1) for j in range(DUNGEON_W)] for i in range(DUNGEON_H)]
+
+    def init_map_state(self):
+        self.map_seen = [[False for j in range(DUNGEON_W)] for i in range(DUNGEON_H)]
+        self.map_stairs = set()
+        self.map_grid_surface = pygame.Surface((DUNGEON_W, DUNGEON_H), pygame.SRCALPHA)
+        self.map_grid_surface.fill((0, 0, 0, 120))
+        self.map_surface = None
+        self.map_surface_scale = None
+        self.map_surface_size = None
 
     def set_floor_assets(self, floor_index, floor_value):
         self.floor_variants = load_floor_variants(self.path, floor_index)
@@ -333,6 +348,7 @@ class Game:
                     self.fixed_floor_data = data
                     self.init_floor_variant_map()
                     self.init_floor_flip_map()
+                    self.init_map_state()
                     return
         XP =[0 ,1 ,0 ,-1 ]
         YP =[-1 ,0 ,1 ,0 ]
@@ -403,6 +419,7 @@ class Game:
                                 self.dungeon [dy +ry ][dx +step ]=0 
         self.init_floor_variant_map()
         self.init_floor_flip_map()
+        self.init_map_state()
 
     def draw_dungeon (self ,bg ,fnt ):
         bg .fill (BLACK )
@@ -412,13 +429,16 @@ class Game:
         view_top =bg_rect [1 ]
         view_w =bg_rect [2 ]
         view_h =bg_rect [3 ]
+        if self.map_seen is None :
+            self.init_map_state ()
+        new_seen =[]
         prev_clip =bg .get_clip ()
         bg .set_clip (pygame .Rect (view_left ,view_top ,view_w ,view_h ))
         tile =80 
         cols =view_w //tile +2 
         rows =view_h //tile +2 
-        start_x =-cols //2 
-        start_y =-rows //2 
+        start_x =-(cols //2 )
+        start_y =-(rows //2 )
         offset_x =view_left +view_w //2 -tile //2 -(cols //2 )*tile 
         offset_y =view_top +view_h //2 -tile //2 -(rows //2 )*tile 
         for y in range (start_y ,start_y +rows ):
@@ -428,8 +448,14 @@ class Game:
                 dx =self.pl_x +x 
                 dy =self.pl_y +y 
                 if 0 <=dx <DUNGEON_W and 0 <=dy <DUNGEON_H :
-                    if self.dungeon [dy ][dx ]<=7 :
-                        tile_id =self.dungeon [dy ][dx ]
+                    tile_id =self.dungeon [dy ][dx ]
+                    if tile_id !=9 :
+                        if not self.map_seen [dy ][dx ]:
+                            self.map_seen [dy ][dx ]=True
+                            new_seen .append ((dx ,dy ))
+                        if tile_id ==3 :
+                            self.map_stairs .add ((dx ,dy ))
+                    if tile_id <=7 :
                         if tile_id in (0 ,1 ,2 ,4 ):
                             variant =self.floor_var_map [dy ][dx ]
                             if self.floor_flip_map [dy ][dx ]:
@@ -440,7 +466,7 @@ class Game:
                                 bg .blit (self.imgFloor [tile_id ],[X ,Y ])
                         else :
                             bg .blit (self.imgFloor [tile_id ],[X ,Y ])
-                    if self.dungeon [dy ][dx ]==9 :
+                    if tile_id ==9 :
                         if self.event_wall_pos and (dx, dy) == self.event_wall_pos and self.wall_event:
                             bg .blit (self.wall_event ,[X ,Y -40 ])
                         elif self.item_wall_pos and (dx, dy) == self.item_wall_pos and self.wall_item:
@@ -457,6 +483,9 @@ class Game:
                 if x ==0 and y ==0 :# 主人公キャラの表示
                     bg .blit (self.imgPlayer [self.pl_a ],[X ,Y -40 ])
         bg .set_clip (prev_clip )
+        self.update_minimap_grid (new_seen )
+        if self.idx ==100 :
+            self.draw_minimap (bg ,bg_rect ,new_seen )
         self.draw_para (bg ,fnt ,bg_rect )# 主人公の能力を表示
 
     def put_event (self ):
@@ -799,6 +828,7 @@ class Game:
                         if wall_cells:
                             self.item_wall_pos = random.choice(wall_cells)
                 self.init_floor_variant_map ()
+                self.init_map_state ()
                 self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
                 self.move_bgm_pos_ms =0 
                 self.move_bgm_start_time =time .time ()
@@ -1042,6 +1072,50 @@ class Game:
         self.draw_text (bg ,"剣",X +180 ,Y +97 ,fnt ,WHITE )
         self.draw_text (bg ,"{}-{}-{}".format (self.pl_sword [0 ][1 ],self.pl_sword [1 ][1 ],self.pl_sword [2 ][1 ]),X +225 ,Y +97 ,fnt ,WHITE )
 
+    def update_minimap_grid (self ,new_seen ):
+        if self.map_grid_surface is None or self.map_grid_surface.get_size ()!=(DUNGEON_W ,DUNGEON_H ):
+            self.map_grid_surface = pygame.Surface((DUNGEON_W, DUNGEON_H), pygame.SRCALPHA)
+            self.map_grid_surface.fill((0, 0, 0, 120))
+            for y in range (DUNGEON_H ):
+                row =self.map_seen [y ]
+                for x in range (DUNGEON_W ):
+                    if row [x ]and self.dungeon [y ][x ]!=9 :
+                        self.map_grid_surface.set_at((x, y), (140, 140, 140, 160))
+        if new_seen :
+            for x ,y in new_seen :
+                self.map_grid_surface.set_at((x, y), (140, 140, 140, 160))
+
+    def draw_minimap (self ,bg ,view_rect ,new_seen ):
+
+        view_left ,view_top ,view_w ,view_h =view_rect
+        margin =20
+        max_w =int (view_w *0.3 )
+        max_h =int (view_h *0.3 )
+        if max_w <=0 or max_h <=0 :
+            return
+        scale =min (max_w /DUNGEON_W ,max_h /DUNGEON_H )
+        if scale <=0 :
+            return
+        map_w =max (1 ,int (DUNGEON_W *scale ))
+        map_h =max (1 ,int (DUNGEON_H *scale ))
+        self.update_minimap_grid (new_seen )
+        if self.map_surface is None or self.map_surface_size !=(map_w ,map_h )or self.map_surface_scale !=scale :
+            self.map_surface =pygame .Surface ((map_w ,map_h ),pygame .SRCALPHA )
+            self.map_surface_scale =scale
+            self.map_surface_size =(map_w ,map_h )
+        self.map_surface =pygame .transform .scale (self.map_grid_surface ,(map_w ,map_h ))
+        map_x =view_left +view_w -margin -map_w
+        map_y =view_top +view_h -margin -map_h
+        bg .blit (self.map_surface ,[map_x ,map_y ])
+        marker =max (3 ,int (scale )+1 )
+        for sx ,sy in self.map_stairs :
+            mx =int (sx *scale )
+            my =int (sy *scale )
+            bg .fill ((255 ,255 ,255 ,200 ),[map_x +mx ,map_y +my ,marker ,marker ])
+        px =int (self.pl_x *scale )
+        py =int (self.pl_y *scale )
+        bg .fill ((255 ,0 ,0 ,200 ),[map_x +px ,map_y +py ,marker ,marker ])
+
     def init_battle (self ):
         self.emy_skip_turn = False
         self.emy_typ =random .randint (0 ,EMY_APPEAR [self.floor -1 ])
@@ -1140,8 +1214,9 @@ class Game:
         win_w =360 
         line_h =32 
         win_h =line_h *len (options )+20 
-        win_x =(880 -win_w )//2 
-        win_y =(720 -win_h )//2 
+        screen_w ,screen_h =bg .get_size ()
+        win_x =(screen_w -win_w )//2 
+        win_y =(screen_h -win_h )//2 
         pygame .draw .rect (bg ,BLACK ,[win_x ,win_y ,win_w ,win_h ])
         for i, label in enumerate (options ):
             y =win_y +10 +i *line_h 
@@ -1177,8 +1252,9 @@ class Game:
         win_w =360 
         line_h =32 
         win_h =line_h *len (SAVE )+20 
-        win_x =(880 -win_w )//2 
-        win_y =(720 -win_h )//2 
+        screen_w ,screen_h =bg .get_size ()
+        win_x =(screen_w -win_w )//2 
+        win_y =(screen_h -win_h )//2 
         pygame .draw .rect (bg ,BLACK ,[win_x ,win_y ,win_w ,win_h ])
         for i, label in enumerate (SAVE ):
             y =win_y +10 +i *line_h 
@@ -1598,8 +1674,9 @@ class Game:
                     win_w =360 
                     line_h =32 
                     win_h =line_h *(len (options )+1 )+20 
-                    win_x =(880 -win_w )//2 
-                    win_y =(720 -win_h )//2 
+                    screen_w ,screen_h =screen .get_size ()
+                    win_x =(screen_w -win_w )//2 
+                    win_y =(screen_h -win_h )//2 
                     pygame .draw .rect (screen ,BLACK ,[win_x ,win_y ,win_w ,win_h ])
                     self.draw_text (screen ,"上書きしますか？",win_x +30 ,win_y +10 ,fontS ,WHITE )
                     for i, label in enumerate (options ):
@@ -1656,8 +1733,9 @@ class Game:
                 win_w =360 
                 line_h =32 
                 win_h =line_h *(len (options )+len (msg_lines ))+20 
-                win_x =(880 -win_w )//2 
-                win_y =(720 -win_h )//2 
+                screen_w ,screen_h =screen .get_size ()
+                win_x =(screen_w -win_w )//2 
+                win_y =(screen_h -win_h )//2 
                 pygame .draw .rect (screen ,BLACK ,[win_x ,win_y ,win_w ,win_h ])
                 for i, line in enumerate (msg_lines ):
                     y =win_y +10 +i *line_h 
@@ -1836,8 +1914,26 @@ class Game:
 
             elif self.idx ==130 :# ボス会話
                 self.draw_dungeon (screen ,fontS )
-                pygame .draw .rect (screen ,BLACK ,[40 ,520 ,800 ,160 ])
-                pygame .draw .rect (screen ,WHITE ,[40 ,520 ,800 ,160 ],2 )
+                view_rect =getattr (self ,"dungeon_view_rect",None )
+                if view_rect :
+                    view_left ,view_top ,view_w ,view_h =view_rect
+                else :
+                    view_left =0 
+                    view_top =0 
+                    view_w ,view_h =screen .get_size ()
+                scale_x =view_w /880 
+                scale_y =view_h /720 
+                dlg_x =view_left +int (40 *scale_x )
+                dlg_y =view_top +int (520 *scale_y )
+                dlg_w =max (1 ,int (800 *scale_x ))
+                dlg_h =max (1 ,int (160 *scale_y ))
+                text_x =view_left +int (60 *scale_x )
+                text_y =view_top +int (560 *scale_y )
+                line_h =max (1 ,int (28 *scale_y ))
+                prompt_x =view_left +int (700 *scale_x )
+                prompt_y =view_top +int (640 *scale_y )
+                pygame .draw .rect (screen ,BLACK ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ])
+                pygame .draw .rect (screen ,WHITE ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ],2 )
                 if self.boss_talk_index <len (self.boss_talk_lines ):
                     line = self.boss_talk_lines [self.boss_talk_index ]
                     now = pygame.time.get_ticks()
@@ -1847,8 +1943,8 @@ class Game:
                     visible = line [:self.boss_talk_char_count ]
                     parts = visible.split("\n")
                     for i, part in enumerate(parts):
-                        self.draw_text (screen ,part ,60 ,560 + i * 28 ,fontS ,WHITE )
-                self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
+                        self.draw_text (screen ,part ,text_x ,text_y + i *line_h ,fontS ,WHITE )
+                self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
                 if accept:
                     if self.boss_talk_index <len (self.boss_talk_lines ):
                         line = self.boss_talk_lines [self.boss_talk_index ]
@@ -1867,8 +1963,26 @@ class Game:
 
             elif self.idx ==133 :# ラスボス会話
                 self.draw_dungeon (screen ,fontS )
-                pygame .draw .rect (screen ,BLACK ,[40 ,520 ,800 ,160 ])
-                pygame .draw .rect (screen ,WHITE ,[40 ,520 ,800 ,160 ],2 )
+                view_rect =getattr (self ,"dungeon_view_rect",None )
+                if view_rect :
+                    view_left ,view_top ,view_w ,view_h =view_rect
+                else :
+                    view_left =0 
+                    view_top =0 
+                    view_w ,view_h =screen .get_size ()
+                scale_x =view_w /880 
+                scale_y =view_h /720 
+                dlg_x =view_left +int (40 *scale_x )
+                dlg_y =view_top +int (520 *scale_y )
+                dlg_w =max (1 ,int (800 *scale_x ))
+                dlg_h =max (1 ,int (160 *scale_y ))
+                text_x =view_left +int (60 *scale_x )
+                text_y =view_top +int (560 *scale_y )
+                line_h =max (1 ,int (28 *scale_y ))
+                prompt_x =view_left +int (700 *scale_x )
+                prompt_y =view_top +int (640 *scale_y )
+                pygame .draw .rect (screen ,BLACK ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ])
+                pygame .draw .rect (screen ,WHITE ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ],2 )
                 if self.boss_talk_index <len (self.boss_talk_lines ):
                     line = self.boss_talk_lines [self.boss_talk_index ]
                     now = pygame.time.get_ticks()
@@ -1878,8 +1992,8 @@ class Game:
                     visible = line [:self.boss_talk_char_count ]
                     parts = visible.split("\n")
                     for i, part in enumerate(parts):
-                        self.draw_text (screen ,part ,60 ,560 + i * 28 ,fontS ,WHITE )
-                self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
+                        self.draw_text (screen ,part ,text_x ,text_y + i *line_h ,fontS ,WHITE )
+                self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
                 if accept:
                     if self.boss_talk_index <len (self.boss_talk_lines ):
                         line = self.boss_talk_lines [self.boss_talk_index ]
@@ -1898,13 +2012,31 @@ class Game:
 
             elif self.idx ==131 :# itemWallイベント
                 self.draw_dungeon (screen ,fontS )
+                view_rect =getattr (self ,"dungeon_view_rect",None )
+                if view_rect :
+                    view_left ,view_top ,view_w ,view_h =view_rect
+                else :
+                    view_left =0 
+                    view_top =0 
+                    view_w ,view_h =screen .get_size ()
+                scale_x =view_w /880 
+                scale_y =view_h /720 
+                dlg_x =view_left +int (40 *scale_x )
+                dlg_y =view_top +int (525 *scale_y )
+                dlg_w =max (1 ,int (800 *scale_x ))
+                dlg_h =max (1 ,int (160 *scale_y ))
+                text_x =view_left +int (60 *scale_x )
+                text_y =view_top +int (560 *scale_y )
+                line_h =max (1 ,int (28 *scale_y ))
+                prompt_x =view_left +int (700 *scale_x )
+                prompt_y =view_top +int (640 *scale_y )
                 dialog_alpha = 255
                 if self.item_event_phase == 1:
                     dialog_alpha = 100
-                dialog = pygame.Surface((800, 160), pygame.SRCALPHA)
+                dialog = pygame.Surface((dlg_w, dlg_h), pygame.SRCALPHA)
                 dialog.fill((0, 0, 0, dialog_alpha))
-                screen.blit(dialog, [40, 525])
-                pygame .draw .rect (screen ,WHITE ,[40 ,525 ,800 ,160 ],2 )
+                screen.blit(dialog, [dlg_x, dlg_y])
+                pygame .draw .rect (screen ,WHITE ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ],2 )
                 if self.item_event_kind == "true_episode":
                     if self.item_talk_index <len (self.item_talk_lines ):
                         line = self.item_talk_lines [self.item_talk_index ]
@@ -1915,8 +2047,8 @@ class Game:
                         visible = line [:self.item_talk_char_count ]
                         parts = visible.split("\n")
                         for i, part in enumerate(parts):
-                            self.draw_text (screen ,part ,60 ,560 + i * 28 ,fontS ,WHITE )
-                    self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
+                            self.draw_text (screen ,part ,text_x ,text_y + i *line_h ,fontS ,WHITE )
+                    self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
                     if accept:
                         if self.item_talk_index <len (self.item_talk_lines ):
                             line = self.item_talk_lines [self.item_talk_index ]
@@ -1940,8 +2072,8 @@ class Game:
                             visible = line [:self.item_talk_char_count ]
                             parts = visible.split("\n")
                             for i, part in enumerate(parts):
-                                self.draw_text (screen ,part ,60 ,560 + i * 28 ,fontS ,WHITE )
-                        self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
+                                self.draw_text (screen ,part ,text_x ,text_y + i *line_h ,fontS ,WHITE )
+                        self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
                         if accept:
                             if self.item_talk_index <len (self.item_talk_lines ):
                                 line = self.item_talk_lines [self.item_talk_index ]
@@ -1958,14 +2090,20 @@ class Game:
                         options = list(range(2, 4 + w_a + 1))
                         if self.item_choice >= len(options):
                             self.item_choice = max(0, len(options) - 1)
-                        line_h = 22
-                        box_h = 15 + line_h * len(options)
-                        pygame .draw .rect (screen ,BLACK ,[520 ,505-box_h ,280 ,box_h ])
-                        pygame .draw .rect (screen ,WHITE ,[520 ,505-box_h ,280 ,box_h ],2 )
+                        sel_line_h =max (1 ,int (22 *scale_y ))
+                        box_h =max (1 ,int (15 *scale_y ))+sel_line_h *len (options )
+                        box_w =max (1 ,int (280 *scale_x ))
+                        box_x =view_left +int (520 *scale_x )
+                        box_y =view_top +int (505 *scale_y )-box_h
+                        arrow_x =view_left +int (540 *scale_x )
+                        text_sel_x =view_left +int (560 *scale_x )
+                        arrow_y =view_top +int (513 *scale_y )
+                        pygame .draw .rect (screen ,BLACK ,[box_x ,box_y ,box_w ,box_h ])
+                        pygame .draw .rect (screen ,WHITE ,[box_x ,box_y ,box_w ,box_h ],2 )
                         for i, trap_id in enumerate(options):
                             if i == self.item_choice:
-                                self.draw_text (screen ,"▶",540 ,513 + i * 22 -box_h ,fontS ,WHITE )
-                            self.draw_text (screen ,TRAP_NAME [trap_id ],560 ,513 + i * 22 -box_h,fontS ,WHITE )
+                                self.draw_text (screen ,"▶",arrow_x ,arrow_y + i *sel_line_h -box_h ,fontS ,WHITE )
+                            self.draw_text (screen ,TRAP_NAME [trap_id ],text_sel_x ,arrow_y + i *sel_line_h -box_h,fontS ,WHITE )
                         if key [K_UP ]and self.item_choice >0 :
                             self.item_choice -=1 
                         if key [K_DOWN ]and self.item_choice <len (options )-1 :
@@ -2003,8 +2141,8 @@ class Game:
                             visible = line [:self.item_talk_char_count ]
                             parts = visible.split("\n")
                             for i, part in enumerate(parts):
-                                self.draw_text (screen ,part ,60 ,560 + i * 28 ,fontS ,WHITE )
-                        self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
+                                self.draw_text (screen ,part ,text_x ,text_y + i *line_h ,fontS ,WHITE )
+                        self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
                         if accept:
                             if self.item_talk_index <len (self.item_talk_lines ):
                                 line = self.item_talk_lines [self.item_talk_index ]
@@ -2026,14 +2164,20 @@ class Game:
                         self.tmr =0 
                     elif self.item_event_phase == 1:
                         options = ["傷薬", "爆弾", "守護"]
-                        line_h = 25
-                        box_h = 15 + line_h * len(options)
-                        pygame .draw .rect (screen ,BLACK ,[520 ,420 ,280 ,box_h ])
-                        pygame .draw .rect (screen ,WHITE ,[520 ,420 ,280 ,box_h ],2 )
+                        sel_line_h =max (1 ,int (25 *scale_y ))
+                        box_h =max (1 ,int (15 *scale_y ))+sel_line_h *len (options )
+                        box_w =max (1 ,int (280 *scale_x ))
+                        box_x =view_left +int (520 *scale_x )
+                        box_y =view_top +int (420 *scale_y )
+                        arrow_x =view_left +int (540 *scale_x )
+                        text_sel_x =view_left +int (560 *scale_x )
+                        arrow_y =view_top +int (435 *scale_y )
+                        pygame .draw .rect (screen ,BLACK ,[box_x ,box_y ,box_w ,box_h ])
+                        pygame .draw .rect (screen ,WHITE ,[box_x ,box_y ,box_w ,box_h ],2 )
                         for i, option in enumerate(options):
                             if i == self.item_choice:
-                                self.draw_text (screen ,"▶",540 ,435 + i * 25 ,fontS ,WHITE )
-                            self.draw_text (screen ,option ,560 ,435 + i * 25 ,fontS ,WHITE )
+                                self.draw_text (screen ,"▶",arrow_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
+                            self.draw_text (screen ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
                         if key [K_UP ]and self.item_choice >0 :
                             self.item_choice -=1 
                         if key [K_DOWN ]and self.item_choice <2 :
@@ -2055,8 +2199,26 @@ class Game:
 
             elif self.idx ==132 :# eventWall会話
                 self.draw_dungeon (screen ,fontS )
-                pygame .draw .rect (screen ,BLACK ,[40 ,520 ,800 ,160 ])
-                pygame .draw .rect (screen ,WHITE ,[40 ,520 ,800 ,160 ],2 )
+                view_rect =getattr (self ,"dungeon_view_rect",None )
+                if view_rect :
+                    view_left ,view_top ,view_w ,view_h =view_rect
+                else :
+                    view_left =0 
+                    view_top =0 
+                    view_w ,view_h =screen .get_size ()
+                scale_x =view_w /880 
+                scale_y =view_h /720 
+                dlg_x =view_left +int (40 *scale_x )
+                dlg_y =view_top +int (520 *scale_y )
+                dlg_w =max (1 ,int (800 *scale_x ))
+                dlg_h =max (1 ,int (160 *scale_y ))
+                text_x =view_left +int (60 *scale_x )
+                text_y =view_top +int (560 *scale_y )
+                line_h =max (1 ,int (28 *scale_y ))
+                prompt_x =view_left +int (700 *scale_x )
+                prompt_y =view_top +int (640 *scale_y )
+                pygame .draw .rect (screen ,BLACK ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ])
+                pygame .draw .rect (screen ,WHITE ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ],2 )
                 if self.event_talk_index <len (self.event_talk_lines ):
                     line = self.event_talk_lines [self.event_talk_index ]
                     now = pygame.time.get_ticks()
@@ -2066,8 +2228,8 @@ class Game:
                     visible = line [:self.event_talk_char_count ]
                     parts = visible.split("\n")
                     for i, part in enumerate(parts):
-                        self.draw_text (screen ,part ,60 ,560 + i * 28 ,fontS ,WHITE )
-                self.draw_text (screen ,"[A]/[Enter]",700 ,640 ,fontS ,WHITE )
+                        self.draw_text (screen ,part ,text_x ,text_y + i *line_h ,fontS ,WHITE )
+                self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
                 if accept:
                     if self.event_talk_index <len (self.event_talk_lines ):
                         line = self.event_talk_lines [self.event_talk_index ]
@@ -2080,6 +2242,7 @@ class Game:
                     if self.event_talk_index >=len (self.event_talk_lines ):
                         self.idx =100 
                         self.tmr =0 
+
 
             elif self.idx ==200 :# 戦闘開始
                 if self.tmr ==1 :
@@ -2479,7 +2642,7 @@ class Game:
             elif self.idx ==232 :#Magia
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    self.set_message (f"{self.emy_name}　のターン")
+                    self.set_message (f"{self.emy_name}のターン")
                 if self.tmr ==5 :
                     if self.madoka <1000 :
                         self.set_message ("　Magiaのチャージ！")
@@ -2549,7 +2712,7 @@ class Game:
             elif self.idx ==236 :#敵の逃亡
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    self.set_message ("敵は逃げていった")
+                    self.set_message ("　敵は逃げていった")
                 if self.tmr ==10 :
                     self.guard_remain =0 
                     self.idx =244 
