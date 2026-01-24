@@ -200,8 +200,8 @@ TRAP_NAME = [
 ]
 EMY_NAME = [
     "ドウブ",
-    "Red slime",
-    "Goblin",
+    "ベニドウ",
+    "アラジョー",
     "ロンサムガメ",
     "Sword man",
     "Death hornet",
@@ -285,6 +285,6 @@ ENEMY_INFO = {
     22: "info text for enemy 22",
 }
 MAZE_W = 15
-MAZE_H = 13
+MAZE_H = 12
 DUNGEON_W = MAZE_W * 9
 DUNGEON_H = MAZE_H * 9

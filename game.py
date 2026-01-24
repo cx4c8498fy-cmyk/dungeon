@@ -495,13 +495,14 @@ class Game:
         self.item_wall_pos = None
         self.item_wall_used = False
         self.event_wall_pos = None
+        is_boss_floor =self.floor %10 ==0 or self.floor >90
         if self.fixed_floor_data and self.floor == 100:
             boss_pos = self.fixed_floor_data.get("boss_pos")
             if boss_pos:
                 bx, by = boss_pos
                 self.boss_pos = (bx, by)
                 self.boss_area = {(bx, by), (bx + 1, by), (bx, by + 1), (bx + 1, by + 1)}
-        if self.floor %10 ==0 or self.floor >90 :
+        if is_boss_floor :
             if not self.boss_pos:
                 self.place_boss()
         if not self.boss_pos:
@@ -509,44 +510,28 @@ class Game:
                 x =random .randint (3 ,DUNGEON_W -4 )
                 y =random .randint (3 ,DUNGEON_H -4 )
                 if (self.dungeon [y ][x ]==0 ):
-                    for ry in range (-1 ,2 ):# 階段の周囲を床にする
-                        for rx in range (-1 ,2 ):
-                            self.dungeon [y +ry ][x +rx ]=0 
                     self.dungeon [y ][x ]=3 
                     break 
-                # 宝箱と繭と武器の配置
-        for i in range (60 *10 ):
-            x =random .randint (3 ,DUNGEON_W -4 )
-            y =random .randint (3 ,DUNGEON_H -4 )
-            if (self.dungeon [y ][x ]==0 )and not self.is_boss_tile (x ,y ):
-                self.dungeon [y ][x ]=random .choice ([1 ,1 ,1 ,1 ,1 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,2 ,4 ,4 ])
-        is_boss_floor =self.floor %10 ==0 or self.floor >90
+        # 宝箱と繭と武器の配置
+        floor_cells =[
+            (x ,y )
+            for y in range (3 ,DUNGEON_H -3 )
+            for x in range (3 ,DUNGEON_W -3 )
+            if self.dungeon [y ][x ]==0 and not self.is_boss_tile (x ,y )
+        ]
+        random .shuffle (floor_cells )
+        def take_cells (count ):
+            taken =floor_cells [:count ]
+            del floor_cells [:count ]
+            return taken
         if not is_boss_floor :
-            def adjust_box_count (tile_id ,target ):
-                positions =[ (x ,y ) for y in range (DUNGEON_H ) for x in range (DUNGEON_W ) if self.dungeon [y ][x ]==tile_id ]
-                if len (positions )>target :
-                    random .shuffle (positions )
-                    for x ,y in positions [target :]:
-                        self.dungeon [y ][x ]=2
-                elif len (positions )<target :
-                    needed =target -len (positions )
-                    candidates =[ (x ,y ) for y in range (DUNGEON_H ) for x in range (DUNGEON_W ) if self.dungeon [y ][x ]==2 and not self.is_boss_tile (x ,y )]
-                    random .shuffle (candidates )
-                    for x ,y in candidates :
-                        if needed <=0 :
-                            break
-                        self.dungeon [y ][x ]=tile_id
-                        needed -=1
-                    if needed >0 :
-                        candidates =[ (x ,y ) for y in range (DUNGEON_H ) for x in range (DUNGEON_W ) if self.dungeon [y ][x ]==0 and not self.is_boss_tile (x ,y )]
-                        random .shuffle (candidates )
-                        for x ,y in candidates :
-                            if needed <=0 :
-                                break
-                            self.dungeon [y ][x ]=tile_id
-                            needed -=1
-            adjust_box_count (1 ,5 )
-            adjust_box_count (4 ,3 )
+            for x ,y in take_cells (5 ):
+                self.dungeon [y ][x ]=1
+            for x ,y in take_cells (3 ):
+                self.dungeon [y ][x ]=4
+        cocoon_target =40 if is_boss_floor else 22
+        for x ,y in take_cells (cocoon_target ):
+            self.dungeon [y ][x ]=2
         # ダメージ、回復床の配置
         if self.floor >50 :
             for i in range ((7 +int (self.floor //90 )*(self.floor -83 ))*10 ):
@@ -1182,24 +1167,29 @@ class Game:
             fx = self.emy_x + self.imgEnemy.get_width() - self.imgFire.get_width()
             fy = self.emy_y + self.emy_step - self.imgFire.get_height() // 2
             bg .blit (self.imgFire ,[fx ,fy ])
-            self.draw_text (bg ,f"火傷",bg_left +40 ,bg_top +104 ,fnt ,WHITE )
+            self.draw_text (bg ,f"火傷",bg_left +40 ,bg_top +82 ,fnt ,WHITE )
         if self.pow_up >1 :
-            self.draw_text (bg ,f"力上昇",bg_left +40 ,bg_top +104 ,fnt ,WHITE )
+            self.draw_text (bg ,f"力↑",bg_left +40 ,bg_top +82 ,fnt ,WHITE )
+        if self.emy_typ ==16 or self.emy_typ ==21 :
+            self.draw_text (bg ,"Magia : "+str (self.madoka )+"/1000",bg_left +40 ,bg_top +82 ,fnt ,WHITE )
         self.draw_bar (bg ,bg_left +30 ,bg_top +60 ,200 ,10 ,self.emy_life ,self.emy_lifemax )
         if self.emy_blink >0 :
             self.emy_blink =self.emy_blink -1 
+        para_x =bg_left +10
+        para_h =140
+        para_margin_bottom =15
+        para_y =bg_top +bg_h -para_h -para_margin_bottom
+        status_y =para_y -35
         if self.guard_remain >0 :
-            self.draw_text (bg ,f"守護 {self.guard_remain}",40 ,530 ,fnt ,WHITE )
+            self.draw_text (bg ,f"守護 {self.guard_remain}",para_x +30 ,status_y ,fnt ,WHITE )
         if self.poison >0 :
-            self.draw_text (bg ,f"毒 {self.poison}",90 ,530 ,fnt ,WHITE )
+            self.draw_text (bg ,f"毒 {self.poison}",para_x +80 ,status_y ,fnt ,WHITE )
         for i in range (10 ):# 戦闘メッセージの表示
             self.draw_text (bg ,self.message [i ],msg_x +30 ,msg_y +40 +i *48 ,fnt ,WHITE )
         if self.boss ==0 :
             self.draw_text (bg ,f"{self.emy_name}  Lv.{self.lev}",bg_left +40 ,bg_top +30 ,fnt ,WHITE )
         else :
             self.draw_text (bg ,f"{self.emy_name}",bg_left +40 ,bg_top +30 ,fnt ,WHITE )
-        if self.emy_typ ==16 or self.emy_typ ==21 :
-            self.draw_text (bg ,"Magia : "+str (self.madoka )+"/1000",bg_left +40 ,bg_top +82 ,fnt ,WHITE )
         self.draw_para (bg ,fnt ,bg_rect )# 主人公の能力を表示
 
     def menu_command (self ,bg ,fnt ,key ):
@@ -1895,22 +1885,27 @@ class Game:
 
             elif self.idx ==120 :# アイテム入手もしくはトラップ
                 self.draw_dungeon (screen ,fontS )
-                screen .blit (self.imgItem [self.treasure ],[320 ,220 ])
-                self.draw_text (screen ,TRE_NAME [self.treasure ],380 ,230 ,font ,WHITE )
+                if self.tmr ==1 :
+                    x = win_x + win_w//2 - 42
+                    y = title_top +int (title_h *0.4 )
+                screen .blit (self.imgItem [self.treasure ],[x ,y-10 ])
+                self.draw_text (screen ,TRE_NAME [self.treasure ],x+60 ,y ,font ,WHITE )
                 if self.tmr ==10 :
                     self.idx =100 
 
             elif self.idx ==121 :# 武器入手もしくはダメージ床
                 self.draw_dungeon (screen ,fontS )
+                if self.tmr ==1 :
+                    x = win_x + win_w//2 - 42
+                    y = title_top +int (title_h *0.4 )
                 if self.trap ==0 :
-                    self.draw_text (screen ,TRAP_NAME [self.trap ]+" {}".format (30 -10 *((self.floor -1 )//10 )),320 ,230 ,font ,WHITE )
+                    self.draw_text (screen ,TRAP_NAME [self.trap ]+" {}".format (30 -10 *((self.floor -1 )//10 )),x ,y ,font ,WHITE )
                 elif self.trap ==1 :
-                    self.draw_text (screen ,TRAP_NAME [self.trap ]+" +{}".format (-20 +10 *((self.floor -1 )//10 )),320 ,230 ,font ,WHITE )
+                    self.draw_text (screen ,TRAP_NAME [self.trap ]+" +{}".format (-20 +10 *((self.floor -1 )//10 )),x ,y ,font ,WHITE )
                 else :
-                    self.draw_text (screen ,TRAP_NAME [self.trap ]+" Lv. "+str (self.wpn_lev ),320 ,230 ,font ,WHITE )
+                    self.draw_text (screen ,TRAP_NAME [self.trap ]+" Lv. "+str (self.wpn_lev ),x ,y ,font ,WHITE )
                 if self.tmr ==10 :
                     self.idx =100 
-
 
             elif self.idx ==130 :# ボス会話
                 self.draw_dungeon (screen ,fontS )
@@ -2499,15 +2494,20 @@ class Game:
     
             elif self.idx ==225 :#情報
                 self.draw_battle (screen ,fontS )
-                pygame .draw .rect (screen ,BLACK ,[80 ,140 ,720 ,420 ])
-                pygame .draw .rect (screen ,WHITE ,[80 ,140 ,720 ,420 ],2 )
+                screen_w ,screen_h =screen .get_size ()
+                win_w =720 
+                win_h =420 
+                win_x =screen_w //2 -win_w //2 
+                win_y =screen_h //2 -win_h //2 
+                pygame .draw .rect (screen ,BLACK ,[win_x ,win_y ,win_w ,win_h ])
+                pygame .draw .rect (screen ,WHITE ,[win_x ,win_y ,win_w ,win_h ],2 )
                 name = f"{self.emy_name}  Lv.{self.lev}"
                 info = ENEMY_INFO.get(self.emy_typ, "info text")
-                self.draw_text (screen ,name ,110 ,180 ,font ,WHITE )
+                self.draw_text (screen ,name ,win_x + 30 ,win_y + 40 ,font ,WHITE )
                 parts = info.split("\n")
                 for i, part in enumerate(parts):
-                    self.draw_text (screen ,part ,110 ,250 + i * 28 ,fontS ,WHITE )
-                self.draw_text (screen ,"[B]/[←] Back",540 ,520 ,fontS ,WHITE )
+                    self.draw_text (screen ,part ,win_x + 30 ,win_y + 110 + i * 28 ,fontS ,WHITE )
+                self.draw_text (screen ,"[B]/[←] Back",win_x + 460 ,win_y + 380 ,fontS ,WHITE )
                 if self.tmr >5 :
                     if key [K_b ] or key [K_LEFT ]:
                         self.idx =210 
