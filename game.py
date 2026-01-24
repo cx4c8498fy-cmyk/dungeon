@@ -1114,8 +1114,10 @@ class Game:
         self.emy_lifemax =int ((73 *(self.emy_typ +1 )+EMY_LIFE [self.emy_typ ])*(1.2 *((self.floor -1 )//30 )+1 ))+(self.lev -1 )*8 +geta *3 
         self.emy_life =self.emy_lifemax 
         self.emy_str =int (self.emy_lifemax /7 +EMY_STR [self.emy_typ ]*(0.5 *((self.floor -1 )//30 )+1 ))+geta 
-        self.emy_x =440 -self.imgEnemy .get_width ()/2 
-        self.emy_y =570 -self.imgEnemy .get_height ()
+        screen =pygame .display .get_surface ()
+        screen_w ,screen_h =screen .get_size ()
+        self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
+        self.emy_y =screen_h //2 -self.imgEnemy .get_height ()//2 
 
     def init_bossbattle (self ):
         self.emy_skip_turn = False
@@ -1131,8 +1133,10 @@ class Game:
         self.emy_lifemax =EMY_LIFE [self.emy_typ ]+geta *20 
         self.emy_life =self.emy_lifemax 
         self.emy_str =EMY_STR [self.emy_typ ]+geta 
-        self.emy_x =440 -self.imgEnemy .get_width ()/2 
-        self.emy_y =550 -self.imgEnemy .get_height ()
+        screen =pygame .display .get_surface ()
+        screen_w ,screen_h =screen .get_size ()
+        self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
+        self.emy_y =screen_h //2 -self.imgEnemy .get_height ()
 
     def draw_bar (self ,bg ,x ,y ,w ,h ,val ,ma ):
         pygame .draw .rect (bg ,WHITE ,[x -2 ,y -2 ,w +4 ,h +4 ])
@@ -1153,8 +1157,9 @@ class Game:
         bg_top =bg_rect [1 ]
         bg_w =bg_rect [2 ]
         bg_h =bg_rect [3 ]
-        screen_w =bg .get_size ()[0 ]
-        self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
+        # screen_w ,screen_h =bg .get_size ()
+        # self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
+        # self.emy_y =screen_h //2 -self.imgEnemy .get_height ()//2 
         W =300; H =530
         msg_x =bg_left +bg_w -10 -W
         msg_y =bg_top +50
@@ -1759,8 +1764,9 @@ class Game:
                 if self.tmr >=40 :
                     self.draw_text (screen ,"Congratulations!",320 ,630 ,font ,WHITE )
                     self.imgEnemy =pygame .image .load (self.path +"/image/enemy"+str (int (0.1 *(self.tmr -40 )%10 ))+"_0"+".png")
-                    self.emy_x =440 -self.imgEnemy .get_width ()/2 
-                    self.emy_y =560 -self.imgEnemy .get_height ()
+                    screen_w ,screen_h =screen .get_size ()
+                    self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
+                    self.emy_y =screen_h //2 -self.imgEnemy .get_height ()//2 
                     screen .blit (self.imgEnemy ,[self.emy_x ,self.emy_y ])
                 if self.tmr >=80 :
                     self.draw_text (screen ,"Press space key",320 ,580 ,font ,BLINK [self.tmr %6 ])
