@@ -529,6 +529,11 @@ class Game:
                 self.dungeon [y ][x ]=1
             for x ,y in take_cells (3 ):
                 self.dungeon [y ][x ]=4
+        if is_boss_floor :
+            for x ,y in take_cells (10 ):
+                self.dungeon [y ][x ]=1
+            for x ,y in take_cells (5 ):
+                self.dungeon [y ][x ]=4
         cocoon_target =40 if is_boss_floor else 22
         for x ,y in take_cells (cocoon_target ):
             self.dungeon [y ][x ]=2
@@ -1117,7 +1122,7 @@ class Game:
         screen =pygame .display .get_surface ()
         screen_w ,screen_h =screen .get_size ()
         self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
-        self.emy_y =screen_h //2 -self.imgEnemy .get_height ()//2 
+        self.emy_y =1.4*screen_h //2 -self.imgEnemy .get_height () 
 
     def init_bossbattle (self ):
         self.emy_skip_turn = False
@@ -1136,30 +1141,29 @@ class Game:
         screen =pygame .display .get_surface ()
         screen_w ,screen_h =screen .get_size ()
         self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
-        self.emy_y =screen_h //2 -self.imgEnemy .get_height ()
+        self.emy_y =1.4*screen_h //2 -self.imgEnemy .get_height ()
 
     def draw_bar (self ,bg ,x ,y ,w ,h ,val ,ma ):
         pygame .draw .rect (bg ,WHITE ,[x -2 ,y -2 ,w +4 ,h +4 ])
         pygame .draw .rect (bg ,BLACK ,[x ,y ,w ,h ])
         if val >0 :
-            pygame .draw .rect (bg , SILVER,[x ,y ,w *val /ma ,h ])
+            pygame .draw .rect (bg , SILVER, [x ,y ,w *val /ma ,h ])
 
     def draw_battle (self ,bg ,fnt ):
-        bx =0 
-        by =0 
-        if self.dmg_eff >0 :
+        bx =0 ;by =0 
+        if self.dmg_eff >1 :
             self.dmg_eff =self.dmg_eff -1 
             bx =random .randint (-20 ,20 )
             by =random .randint (-10 ,10 )
+        elif self.dmg_eff ==1 :
+            bg.fill(BLACK)
+            self.dmg_eff =self.dmg_eff -1 
         bg_rect =self.blit_scaled_bg (bg ,self.imgBtlBG ,bx ,by )
         self.btl_bg_rect =bg_rect
         bg_left =bg_rect [0 ]
         bg_top =bg_rect [1 ]
         bg_w =bg_rect [2 ]
         bg_h =bg_rect [3 ]
-        # screen_w ,screen_h =bg .get_size ()
-        # self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
-        # self.emy_y =screen_h //2 -self.imgEnemy .get_height ()//2 
         W =300; H =530
         msg_x =bg_left +bg_w -10 -W
         msg_y =bg_top +50
@@ -1167,7 +1171,7 @@ class Game:
         win .fill ((0 ,0 ,0 ,100 ))
         bg .blit (win ,[msg_x ,msg_y ])
         if self.emy_life >0 and self.emy_blink %2 ==0 :
-            bg .blit (self.imgEnemy ,[self.emy_x ,self.emy_y +self.emy_step ])
+            bg .blit (self.imgEnemy ,[self.emy_x ,self.emy_y +self.emy_step])
         if self.burn_turns >0 :
             fx = self.emy_x + self.imgEnemy.get_width() - self.imgFire.get_width()
             fy = self.emy_y + self.emy_step - self.imgFire.get_height() // 2
@@ -2592,7 +2596,7 @@ class Game:
                     if self.emy_typ ==21 :
                         dmg = int(dmg * self.emy_lifemax/self.emy_life)
                     self.set_message (f"　{dmg}　ダメージ！")
-                    self.dmg_eff =5 
+                    self.dmg_eff =6
                     self.emy_step =0 
                 if self.tmr ==12 :
                     self.pl_life =self.pl_life -dmg 
@@ -2738,7 +2742,7 @@ class Game:
                     if self.guard_remain >0 :
                         dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
                     self.set_message (f"　{dmg}　ダメージ！")
-                    self.dmg_eff =5 
+                    self.dmg_eff =6
                     self.emy_step =0 
                 if self.tmr ==12 :
                     self.pl_life =self.pl_life -dmg 
@@ -2769,7 +2773,7 @@ class Game:
                 if self.tmr ==9 :
                     dmg =150 + self.inferno +random .randint (-30 ,30 )
                     self.set_message (f"　{dmg}　ダメージ！")
-                    self.dmg_eff =5 
+                    self.dmg_eff =6
                     self.emy_step =0
                     self.inferno = self.inferno + 30 + random.randint(0, 20)
                 if self.tmr ==12 :
@@ -2815,7 +2819,7 @@ class Game:
                         else :
                             dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
                     self.set_message (f"　{dmg}　ダメージ！")
-                    self.dmg_eff =5 
+                    self.dmg_eff =6
                     self.emy_step =0 
                 if self.tmr ==12 :
                     self.pl_life =self.pl_life -dmg 
