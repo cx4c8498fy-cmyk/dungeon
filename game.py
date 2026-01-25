@@ -893,10 +893,10 @@ class Game:
 
     def draw_epilogue (self ,bg ,fnt ,key ):
         lines = EPILOGUE_LINES
-        line_duration =20 
-        fade_in =15 
+        line_duration =15
+        fade_in =13
         end_hold =30 
-        end_fade =60 
+        end_fade =30 
         max_lines =12 
         line_height =32 
         start_y =90 
@@ -974,51 +974,8 @@ class Game:
         return False
 
     def get_font (self ,size ):
-        font_dir =os .path .join (self.path ,"fonts")
-        if os .path .isdir (font_dir ):
-            patterns =[
-                os .path .join (font_dir ,"**","*.otf"),
-                os .path .join (font_dir ,"**","*.ttf"),
-            ]
-            font_paths =[]
-            for pattern in patterns :
-                font_paths .extend (glob .glob (pattern ,recursive =True ))
-            font_paths =sorted (font_paths )
-            preferred =None 
-            for path in font_paths :
-                if "PixelMplus12-Regular.ttf" in path :
-                    preferred =path 
-                    break 
-            if preferred is None :
-                for path in font_paths :
-                    if "Regular" in os .path .basename (path ):
-                        preferred =path 
-                        break 
-            if preferred :
-                try :
-                    return pygame .font .Font (preferred ,size )
-                except Exception :
-                    pass 
-            for font_path in font_paths :
-                try :
-                    return pygame .font .Font (font_path ,size )
-                except Exception :
-                    pass 
-        candidates =[
-            "Hiragino Sans",
-            "Hiragino Kaku Gothic ProN",
-            "Yu Gothic",
-            "Meiryo",
-            "MS Gothic",
-        ]
-        for name in candidates :
-            font =pygame .font .SysFont (name ,size )
-            if font :
-                return font 
-            path =pygame .font .match_font (name )
-            if path :
-                return pygame .font .Font (path ,size )
-        return pygame .font .Font (None ,size )
+        font_path =os .path .join (self.path ,"fonts","PixelMplus12-Regular.ttf")
+        return pygame .font .Font (font_path ,size )
 
     def draw_para (self ,bg ,fnt ,view_rect =None ):
         if view_rect :
@@ -1192,7 +1149,7 @@ class Game:
         if self.guard_remain >0 :
             self.draw_text (bg ,f"守護 {self.guard_remain}",para_x +30 ,status_y ,fnt ,WHITE )
         if self.poison >0 :
-            self.draw_text (bg ,f"毒 {self.poison}",para_x +80 ,status_y ,fnt ,WHITE )
+            self.draw_text (bg ,f"毒 {self.poison}",para_x +100 ,status_y ,fnt ,WHITE )
         for i in range (10 ):# 戦闘メッセージの表示
             self.draw_text (bg ,self.message [i ],msg_x +30 ,msg_y +40 +i *48 ,fnt ,WHITE )
         if self.boss ==0 :
