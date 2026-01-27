@@ -589,7 +589,6 @@ class Game:
                     self.event_wall_pos = random.choice(wall_cells)
 
     def move_player (self ,key ):
-
         if self.dungeon [self.pl_y ][self.pl_x ]==1 :# 宝箱に載った
             self.dungeon [self.pl_y ][self.pl_x ]=0 
             self.treasure =random .choice ([0 ,0 ,1 ,1 ,1 ,2 ])
@@ -1033,7 +1032,6 @@ class Game:
                 self.map_grid_surface.set_at((x, y), (140, 140, 140, 160))
 
     def draw_minimap (self ,bg ,view_rect ,new_seen ):
-
         view_left ,view_top ,view_w ,view_h =view_rect
         margin =20
         max_w =int (view_w *0.3 )
@@ -1072,6 +1070,9 @@ class Game:
             geta =0 
         self.lev =random .randint (1 ,self.floor )
         self.imgEnemy =pygame .image .load (self.path +"/image/enemy"+str (self.emy_typ )+"_"+str ((self.floor -1 )//30 )+".png")
+        new_w =int (self.imgEnemy .get_width ()*1.1 )
+        new_h =int (self.imgEnemy .get_height ()*1.1 )
+        self.imgEnemy =pygame .transform .scale (self.imgEnemy ,(new_w ,new_h ))
         self.emy_name =EMY_NAME [self.emy_typ ]
         self.emy_lifemax =int ((73 *(self.emy_typ +1 )+EMY_LIFE [self.emy_typ ])*(1.2 *((self.floor -1 )//30 )+1 ))+(self.lev -1 )*8 +geta *3 
         self.emy_life =self.emy_lifemax 
@@ -1079,7 +1080,7 @@ class Game:
         screen =pygame .display .get_surface ()
         screen_w ,screen_h =screen .get_size ()
         self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
-        self.emy_y =1.4*screen_h //2 -self.imgEnemy .get_height () 
+        self.emy_y =1.45*screen_h //2 -self.imgEnemy .get_height () 
 
     def init_bossbattle (self ):
         self.emy_skip_turn = False
@@ -1091,6 +1092,9 @@ class Game:
         self.emy_typ =base_typ + self.change#10~
         geta =((self.floor -1 )//90 )*(19 -self.emy_typ )*30 
         self.imgEnemy =pygame .image .load (self.path +"/image/boss_"+str (self.emy_typ -9 )+".png")
+        new_w =int (self.imgEnemy .get_width ()*1.1 )
+        new_h =int (self.imgEnemy .get_height ()*1.1 )
+        self.imgEnemy =pygame .transform .scale (self.imgEnemy ,(new_w ,new_h ))
         self.emy_name =EMY_NAME [self.emy_typ ]
         self.emy_lifemax =EMY_LIFE [self.emy_typ ]+geta *20 
         self.emy_life =self.emy_lifemax 
@@ -1098,7 +1102,7 @@ class Game:
         screen =pygame .display .get_surface ()
         screen_w ,screen_h =screen .get_size ()
         self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
-        self.emy_y =1.4*screen_h //2 -self.imgEnemy .get_height ()
+        self.emy_y =1.45*screen_h //2 -self.imgEnemy .get_height ()
 
     def draw_bar (self ,bg ,x ,y ,w ,h ,val ,ma ):
         pygame .draw .rect (bg ,WHITE ,[x -2 ,y -2 ,w +4 ,h +4 ])
