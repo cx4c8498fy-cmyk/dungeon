@@ -115,6 +115,8 @@ class Game:
         self.init_floor_flip_map()
         self.prologue_lines = PROLOGUE_LINES
         self.prologue_input_lock = False
+        self.floor_title_active = False
+        self.floor_title_pos = None
         self.boss_pos = None
         self.boss_area = set()
         self.boss_talk_lines = []
@@ -836,6 +838,13 @@ class Game:
 
         if key [K_s ]:
             self.start_new_game ()
+            # Show floor title after prologue using transition screen.
+            bg_rect =self.blit_scaled_bg (bg ,self.imgBtlBG ,0 ,0 ,False )
+            bg_left ,bg_top ,bg_w ,bg_h =bg_rect
+            self.floor_title_active = True
+            self.floor_title_pos = (bg_left +bg_w //2 -42 ,bg_top +int (bg_h *0.4 ))
+            self.idx =110
+            self.tmr =6
             return 
 
         line_index =self.tmr //line_duration 
@@ -862,6 +871,12 @@ class Game:
             end_phase =self.tmr -total_duration 
             if end_phase >=end_hold +end_fade :
                 self.start_new_game ()
+                # Show floor title after prologue using transition screen.
+                bg_left ,bg_top ,bg_w ,bg_h =bg_rect
+                self.floor_title_active = True
+                self.floor_title_pos = (bg_left +bg_w //2 -42 ,bg_top +int (bg_h *0.4 ))
+                self.idx =110
+                self.tmr =6
                 return 
             if end_phase <end_hold :
                 alpha =255 
@@ -1821,7 +1836,10 @@ class Game:
 
             elif self.idx ==110 :# 画面切り替え
                 self.draw_dungeon (screen ,fontS )
-                if self.tmr == 1:
+                if self.floor_title_active and self.floor_title_pos :
+                    disp_floor =self.floor
+                    x ,y =self.floor_title_pos
+                elif self.tmr == 1:
                     disp_floor =self.floor +1 
                     x = win_x + win_w//2 - 42
                     y = title_top +int (title_h *0.4 )
@@ -1852,6 +1870,8 @@ class Game:
                     screen .blit (fade ,[0 ,0 ])
                 self.draw_text (screen ,f"地下 {disp_floor}階" ,x ,y ,font ,WHITE )
                 if self.tmr ==14 :
+                    self.floor_title_active = False
+                    self.floor_title_pos = None
                     self.idx =100 
 
             elif self.idx ==120 :# アイテム入手もしくはトラップ
