@@ -536,7 +536,7 @@ class Game:
                 self.dungeon [y ][x ]=1
             for x ,y in take_cells (5 ):
                 self.dungeon [y ][x ]=4
-        cocoon_target =40 if is_boss_floor else 22
+        cocoon_target =35 if is_boss_floor else 20
         for x ,y in take_cells (cocoon_target ):
             self.dungeon [y ][x ]=2
         # ダメージ、回復床の配置
