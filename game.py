@@ -35,7 +35,7 @@ class Game:
         self.wall_item = None
         self.imgBtlBG = images.btl_bg
         self.imgEnemy = images.enemy
-        self.imgItem = images.items
+        # self.imgItem = images.items
         self.imgFloor = images.floors
         self.imgPlayer = images.players
         self.imgEffect = images.effects
@@ -1356,10 +1356,10 @@ class Game:
 
     def emy_action (self ,bg ):
         action =True 
-        if self.emy_typ ==4 or self.emy_typ ==8 or self.emy_typ ==15 :
+        if self.emy_typ ==4 or self.emy_typ ==15 :
             self.pow_up =1 
             if random .random ()>0.7 :
-                self.pow_up ={4:2 ,8:2 ,15:3 }[self.emy_typ ]
+                self.pow_up ={4:2 ,15:3 }[self.emy_typ ]
                 self.set_message ("　敵は　力をためた!")
             action =False 
         if self.emy_typ ==5 or self.emy_typ ==12:
@@ -1382,9 +1382,9 @@ class Game:
             self.emy_life =min (self.emy_life +cure ,self.emy_lifemax )
             action =False 
         self.poison =max (self.poison -1 ,0 )
-        if self.emy_typ ==11:
-            if random .random ()>0.84:
-                self.poison =2
+        if self.emy_typ ==8 or self.emy_typ ==11:
+            if random .random ()>{8:0.3, 11:0.84}[self.emy_typ]:
+                self.poison ={8:1, 11:2}[self.emy_typ]
                 self.set_message ("　毒を喰らった!")
                 action =False 
         if self.poison >0 :
@@ -1879,8 +1879,10 @@ class Game:
                 if self.tmr ==1 :
                     x = win_x + win_w//2 - 42
                     y = title_top +int (title_h *0.4 )
-                screen .blit (self.imgItem [self.treasure ],[x ,y-10 ])
-                self.draw_text (screen ,TRE_NAME [self.treasure ],x+60 ,y ,font ,WHITE )
+                dialog = pygame.Surface((400, 100), pygame.SRCALPHA)
+                dialog.fill((0, 0, 0, 100))
+                screen.blit(dialog, [x-100, y-40])
+                self.draw_text (screen ,TRE_NAME [self.treasure ],x ,y ,font ,WHITE )
                 if self.tmr ==10 :
                     self.idx =100 
 
@@ -1889,24 +1891,23 @@ class Game:
                 if self.tmr ==1 :
                     x = win_x + win_w//2 - 42
                     y = title_top +int (title_h *0.4 )
+                dialog = pygame.Surface((400, 100), pygame.SRCALPHA)
+                dialog.fill((0, 0, 0, 100))
+                screen.blit(dialog, [x-100, y-40])
                 if self.trap ==0 :
                     self.draw_text (screen ,TRAP_NAME [self.trap ]+" {}".format (30 -10 *((self.floor -1 )//10 )),x ,y ,font ,WHITE )
                 elif self.trap ==1 :
                     self.draw_text (screen ,TRAP_NAME [self.trap ]+" +{}".format (-20 +10 *((self.floor -1 )//10 )),x ,y ,font ,WHITE )
                 else :
                     self.draw_text (screen ,TRAP_NAME [self.trap ]+" Lv. "+str (self.wpn_lev ),x ,y ,font ,WHITE )
+                    # self.draw_text (screen ,TRAP_NAME [self.trap ]+" Lv. "+str (self.wpn_lev ) ,text_x ,text_y ,fontS ,WHITE )
                 if self.tmr ==10 :
                     self.idx =100 
 
             elif self.idx ==130 :# ボス会話
                 self.draw_dungeon (screen ,fontS )
                 view_rect =getattr (self ,"dungeon_view_rect",None )
-                if view_rect :
-                    view_left ,view_top ,view_w ,view_h =view_rect
-                else :
-                    view_left =0 
-                    view_top =0 
-                    view_w ,view_h =screen .get_size ()
+                view_left ,view_top ,view_w ,view_h =view_rect
                 scale_x =view_w /880 
                 scale_y =view_h /720 
                 dlg_x =view_left +int (40 *scale_x )
@@ -2249,6 +2250,7 @@ class Game:
                         pygame .mixer .music .load (self.path +"/sound/bgm_battle_0.wav")
                         pygame .mixer .music .play (-1 )
                         self.init_message ()
+                    print(self.emy_name, bg_idx, self.floor, self.boss)
                     self.set_message (f"{self.emy_name}が　あらわれた！")
                 elif self.tmr <=4 :
                     alpha =int (255 *self.tmr /4 )
@@ -2299,11 +2301,11 @@ class Game:
                     if self.pl_sword [0 ][0 ]==1 :
                         if random .random ()>0.7 :
                             cri =1 
-                            self.set_message ("　クリティカルヒット！")
+                            self.set_message ("　会心の一撃！")
                     dmg =self.pl_str +random .randint (0 ,9 )-EMY_APRO [self.emy_typ ]
                     dmg =int (dmg *(1 +0.01 *cri *self.pl_sword [0 ][1 ]))+2 *self.pl_sword [0 ][1 ]+self.pl_sword [2 ][1 ]
                     dmg =max (1 +cri ,int (dmg /(2 *self.poison +1 )))
-                    if self.emy_typ ==8 or self.emy_typ ==10 :
+                    if self.emy_typ ==10 :
                         if random .random ()>0.7 :
                             self.set_message ("　攻撃は　防御された！")
                             dmg =int (dmg /2 )
@@ -2568,7 +2570,7 @@ class Game:
                             dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
                     if self.emy_typ ==2 or self.emy_typ ==10 or (self.emy_typ ==18 and self.boss_mode == "normal"):
                         if random .random ()>0.7 :
-                            self.set_message ("　クリティカルヒット！")
+                            self.set_message ("　会心の一撃！")
                             dmg =int (dmg *{2:1.5, 10:2, 18:2.5}[self.emy_typ] )
                     if self.emy_typ ==17 :
                         self.inferno -= 15 + random .randint (0 ,10 )
