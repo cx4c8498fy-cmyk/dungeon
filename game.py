@@ -40,7 +40,7 @@ class Game:
         self.imgPlayer = images.players
         self.imgEffect = images.effects
         self.imgFire = pygame.image.load(self.path + "/image/fire.png")
-        self.imgPoison = pygame.image.load(self.path + "/image/poison.png")
+        # self.imgPoison = pygame.image.load(self.path + "/image/poison.png")
 
         self.floor_variants = load_floor_variants(self.path, 0)
         if not self.floor_variants:
