@@ -277,7 +277,7 @@ class Game:
         boss_id = 9 + int(self.floor // 10)
         if 90 < self.floor < 100:
             boss_id = 9 + int(self.floor % 10)
-        boss_map_id = boss_id - 9
+        boss_map_id = boss_id - 10
         self.boss_talk_lines = BOSS_TALK[boss_map_id]
         self.boss_talk_index = 0
         self.boss_talk_char_count = 0
@@ -329,7 +329,7 @@ class Game:
         boss_id = 9 + int(self.floor // 10)
         if 90 < self.floor < 100:
             boss_id = 9 + int(self.floor % 10)
-        boss_map_id = boss_id - 9
+        boss_map_id = boss_id - 10
         if boss_map_id not in self.boss_map_cache:
             path = self.path + "/image/boss_map" + str(boss_map_id) + ".png"
             self.boss_map_cache[boss_map_id] = pygame.image.load(path)
@@ -1106,7 +1106,7 @@ class Game:
             base_typ =20 
         self.emy_typ =base_typ + self.change#10~
         geta =((self.floor -1 )//90 )*(19 -self.emy_typ )*30 
-        self.imgEnemy =pygame .image .load (self.path +"/image/boss_"+str (self.emy_typ -9 )+".png")
+        self.imgEnemy =pygame .image .load (self.path +"/image/boss_"+str (self.emy_typ -10 )+".png")
         new_w =int (self.imgEnemy .get_width ()*1.1 )
         new_h =int (self.imgEnemy .get_height ()*1.1 )
         self.imgEnemy =pygame .transform .scale (self.imgEnemy ,(new_w ,new_h ))
