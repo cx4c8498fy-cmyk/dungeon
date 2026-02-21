@@ -2237,7 +2237,8 @@ class Game:
                         now =time .time ()
                         self.move_bgm_pos_ms =int ((now -self.move_bgm_start_time )*1000 )
                     bg_idx = (self.floor - 1) // 10
-                    self.imgBtlBG =pygame .image .load (self.path +"/image/btlbg{}.png".format (bg_idx ))
+                    self.imgBtlBG =pygame .image .load (self.path +f"/image/btlbg{bg_idx}.png")
+                    print(f"/image/btlbg{bg_idx}.png")
                     if self.boss ==1 :
                         self.init_bossbattle ()
                         pygame .mixer .music .load (self.path +"/sound/bgm_battle_1.wav")

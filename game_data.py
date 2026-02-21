@@ -183,7 +183,7 @@ EVENT_TALK = [
     ["Event 9: Placeholder line 1", "Event 9: Placeholder line 2"],
 ]
 MENU = ["[S]ave data", "Back to the [T]itle", "[C]lose menu"]
-COMMAND = ["[A]ttack", "[M]agic", "[P]otion", "[B]laze gem", "[G]uard", "[R]un", "[I]nfo"]
+# COMMAND = ["[A]ttack", "[M]agic", "[P]otion", "[B]laze gem", "[G]uard", "[R]un", "[I]nfo"]
 TRE_NAME = ["傷薬 x 1", "爆弾 x 1", "守護 x 1", "食料 +40", "魔法の水 +20 +40", "魔力のたね +120"]
 TRAP_NAME = [
     "Damege Floor!",
@@ -217,7 +217,7 @@ EMY_NAME = [
     "サイファトゥ", #パワーアップ
     "トキ系", #Magia
     "ジャバン", #インフェルノ
-    "マンモス系", #モード変化
+    "スリーモード", #モード変化
     "ゆうしゃ",
     "White slime",
     "White slime",
