@@ -123,6 +123,7 @@ class Game:
         self.boss_talk_index = 0
         self.boss_map_cache = {}
         self.bg_cache = {}
+        self.last_btl_bg_idx = None
         self.prev_return = False
         self.prev_a = False
         self.boss_talk_char_count = 0
@@ -2237,6 +2238,9 @@ class Game:
                         now =time .time ()
                         self.move_bgm_pos_ms =int ((now -self.move_bgm_start_time )*1000 )
                     bg_idx = (self.floor - 1) // 10
+                    if self.last_btl_bg_idx != bg_idx:
+                        self.bg_cache.clear()
+                        self.last_btl_bg_idx = bg_idx
                     self.imgBtlBG =pygame .image .load (self.path +f"/image/btlbg{bg_idx}.png")
                     print(f"/image/btlbg{bg_idx}.png")
                     if self.boss ==1 :
