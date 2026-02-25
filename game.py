@@ -195,10 +195,8 @@ class Game:
             self.wall_variantsB = [self.imgWall2]
         self.imgWall = self.wall_variantsA[0]
         self.imgWall2 = self.wall_variantsB[0]
-        item_path = os.path.join(self.path, "image", "wallA{}_item.png".format(wall_set))
-        self.wall_item = pygame.image.load(item_path) if os.path.exists(item_path) else None
         event_path = os.path.join(self.path, "image", "wallA{}_event.png".format(wall_set))
-        self.wall_event = pygame.image.load(event_path) if os.path.exists(event_path) else None
+        self.wall_event = pygame.image.load(event_path)
 
     def set_floor_assets_for_current_floor(self):
         floor_index = (self.floor - 1) // 10
@@ -452,13 +450,13 @@ class Game:
                 dy =self.pl_y +y 
                 if 0 <=dx <DUNGEON_W and 0 <=dy <DUNGEON_H :
                     tile_id =self.dungeon [dy ][dx ]
-                    if tile_id !=9 :
+                    if tile_id not in (7 ,8 ,9 ):
                         if not self.map_seen [dy ][dx ]:
                             self.map_seen [dy ][dx ]=True
                             new_seen .append ((dx ,dy ))
                         if tile_id ==3 :
                             self.map_stairs .add ((dx ,dy ))
-                    if tile_id <=7 :
+                    if tile_id in (0 ,1 ,2 ,3 ,4 ,5 ,6 ):
                         if tile_id in (0 ,1 ,2 ,4 ):
                             variant =self.floor_var_map [dy ][dx ]
                             if self.floor_flip_map [dy ][dx ]:
@@ -469,14 +467,14 @@ class Game:
                                 bg .blit (self.imgFloor [tile_id ],[X ,Y ])
                         else :
                             bg .blit (self.imgFloor [tile_id ],[X ,Y ])
-                    if tile_id ==9 :
-                        if self.event_wall_pos and (dx, dy) == self.event_wall_pos and self.wall_event:
+                    if tile_id in (7 ,8 ,9 ):
+                        if tile_id ==8 and self.wall_event:
                             bg .blit (self.wall_event ,[X ,Y -40 ])
-                        elif self.item_wall_pos and (dx, dy) == self.item_wall_pos and self.wall_item:
-                            bg .blit (self.wall_item ,[X ,Y -40 ])
-                        else:
+                        else :
                             bg .blit (self.imgWall ,[X ,Y -40 ])
-                        if dy >=1 and self.dungeon [dy -1 ][dx ]==9 :
+                        if tile_id ==7 :
+                            bg .blit (self.imgFloor [7 ],[X ,Y ])
+                        if dy >=1 and self.dungeon [dy -1 ][dx ] in (7 ,8 ,9 ):
                             bg .blit (self.imgWall2 ,[X ,Y -80 ])
                     if self.boss_pos and dx == self.boss_pos[0] + 1 and dy == self.boss_pos[1] + 1:
                         boss_map = self.get_boss_map_image()
@@ -562,17 +560,17 @@ class Game:
         self.pl_d =1 
         self.pl_a =2 
         if self.floor >= 91:
-            if self.wall_item:
-                wall_cells = [
-                    (x, y)
-                    for y in range(DUNGEON_H - 1)
-                    for x in range(DUNGEON_W)
-                    if self.dungeon[y][x] == 9 and self.dungeon[y + 1][x] == 0
-                ]
-                if wall_cells:
-                    self.item_wall_pos = random.choice(wall_cells)
+            wall_cells = [
+                (x, y)
+                for y in range(DUNGEON_H - 1)
+                for x in range(DUNGEON_W)
+                if self.dungeon[y][x] == 9 and self.dungeon[y + 1][x] == 0
+            ]
+            if wall_cells:
+                wx, wy = random.choice(wall_cells)
+                self.dungeon[wy][wx] = 7
         else:
-            if self.floor %10 ==7 and self.wall_item:
+            if self.floor %10 ==7:
                 wall_cells = [
                     (x, y)
                     for y in range(DUNGEON_H - 1)
@@ -580,7 +578,8 @@ class Game:
                     if self.dungeon[y][x] == 9 and self.dungeon[y + 1][x] == 0
                 ]
                 if wall_cells:
-                    self.item_wall_pos = random.choice(wall_cells)
+                    wx, wy = random.choice(wall_cells)
+                    self.dungeon[wy][wx] = 7
             if self.floor %10 ==4 and self.wall_event:
                 wall_cells = [
                     (x, y)
@@ -589,7 +588,8 @@ class Game:
                     if self.dungeon[y][x] == 9 and self.dungeon[y + 1][x] == 0
                 ]
                 if wall_cells:
-                    self.event_wall_pos = random.choice(wall_cells)
+                    wx, wy = random.choice(wall_cells)
+                    self.dungeon[wy][wx] = 8
 
     def move_player (self ,key ):
         if self.dungeon [self.pl_y ][self.pl_x ]==1 :# 宝箱に載った
@@ -675,19 +675,19 @@ class Game:
         y =self.pl_y 
         if key [K_UP ]==1 :
             self.pl_d =0 
-            if self.dungeon [self.pl_y -1 ][self.pl_x ]!=9 and self.dungeon [self.pl_y -1 ][self.pl_x ]!=3 and not self.is_boss_tile (self.pl_x ,self.pl_y -1 ):
+            if self.dungeon [self.pl_y -1 ][self.pl_x ] not in (3 ,7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x ,self.pl_y -1 ):
                 self.pl_y =self.pl_y -1 
         if key [K_DOWN ]==1 :
             self.pl_d =1 
-            if self.dungeon [self.pl_y +1 ][self.pl_x ]!=9 and self.dungeon [self.pl_y +1 ][self.pl_x ]!=3 and not self.is_boss_tile (self.pl_x ,self.pl_y +1 ):
+            if self.dungeon [self.pl_y +1 ][self.pl_x ] not in (3 ,7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x ,self.pl_y +1 ):
                 self.pl_y =self.pl_y +1 
         if key [K_LEFT ]==1 :
             self.pl_d =2 
-            if self.dungeon [self.pl_y ][self.pl_x -1 ]!=9 and self.dungeon [self.pl_y ][self.pl_x -1 ]!=3 and not self.is_boss_tile (self.pl_x -1 ,self.pl_y ):
+            if self.dungeon [self.pl_y ][self.pl_x -1 ] not in (3 ,7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x -1 ,self.pl_y ):
                 self.pl_x =self.pl_x -1 
         if key [K_RIGHT ]==1 :
             self.pl_d =3 
-            if self.dungeon [self.pl_y ][self.pl_x +1 ]!=9 and self.dungeon [self.pl_y ][self.pl_x +1 ]!=3 and not self.is_boss_tile (self.pl_x +1 ,self.pl_y ):
+            if self.dungeon [self.pl_y ][self.pl_x +1 ] not in (3 ,7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x +1 ,self.pl_y ):
                 self.pl_x =self.pl_x +1 
         self.pl_a =self.pl_d *2 
         if self.pl_x !=x or self.pl_y !=y :
@@ -784,21 +784,8 @@ class Game:
                 else:
                     self.boss_pos = None
                     self.boss_area = set()
-                if "item_wall_pos" in loaddata and loaddata ["item_wall_pos"] is not None:
-                    ix, iy = loaddata ["item_wall_pos"]
-                    self.item_wall_pos = (ix, iy)
-                else:
-                    self.item_wall_pos = None
-                self.item_wall_used = bool(loaddata.get("item_wall_used", False))
                 self.item_wall_claimed = set(loaddata.get("item_wall_claimed", []))
-                if 91 <= self.floor <= 99 and self.item_wall_used:
-                    self.item_wall_claimed.add(self.floor)
                 self.true_episode_heard = bool(loaddata.get("true_episode_heard", False))
-                if "event_wall_pos" in loaddata and loaddata ["event_wall_pos"] is not None:
-                    ex, ey = loaddata ["event_wall_pos"]
-                    self.event_wall_pos = (ex, ey)
-                else:
-                    self.event_wall_pos = None
                 self.item_event_phase = 0
                 self.item_choice = 0
                 self.item_reward = None
@@ -808,17 +795,6 @@ class Game:
                 self.item_talk_char_count = 0
                 self.item_talk_last_tick = pygame.time.get_ticks()
                 self.set_floor_assets_for_current_floor ()
-                if self.floor >= 91:
-                    self.event_wall_pos = None
-                    if self.item_wall_pos is None and self.wall_item:
-                        wall_cells = [
-                            (x, y)
-                            for y in range(DUNGEON_H - 1)
-                            for x in range(DUNGEON_W)
-                            if self.dungeon[y][x] == 9 and self.dungeon[y + 1][x] == 0
-                        ]
-                        if wall_cells:
-                            self.item_wall_pos = random.choice(wall_cells)
                 self.init_floor_variant_map ()
                 self.init_map_state ()
                 self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
@@ -1041,7 +1017,7 @@ class Game:
             for y in range (DUNGEON_H ):
                 row =self.map_seen [y ]
                 for x in range (DUNGEON_W ):
-                    if row [x ]and self.dungeon [y ][x ]!=9 :
+                    if row [x ]and self.dungeon [y ][x ] not in (7 ,8 ,9 ) :
                         self.map_grid_surface.set_at((x, y), (140, 140, 140, 160))
         if new_seen :
             for x ,y in new_seen :
@@ -1521,21 +1497,8 @@ class Game:
                             else:
                                 self.boss_pos = None
                                 self.boss_area = set()
-                            if "item_wall_pos" in loaddata and loaddata ["item_wall_pos"] is not None:
-                                ix, iy = loaddata ["item_wall_pos"]
-                                self.item_wall_pos = (ix, iy)
-                            else:
-                                self.item_wall_pos = None
-                            self.item_wall_used = bool(loaddata.get("item_wall_used", False))
                             self.item_wall_claimed = set(loaddata.get("item_wall_claimed", []))
-                            if 91 <= self.floor <= 99 and self.item_wall_used:
-                                self.item_wall_claimed.add(self.floor)
                             self.true_episode_heard = bool(loaddata.get("true_episode_heard", False))
-                            if "event_wall_pos" in loaddata and loaddata ["event_wall_pos"] is not None:
-                                ex, ey = loaddata ["event_wall_pos"]
-                                self.event_wall_pos = (ex, ey)
-                            else:
-                                self.event_wall_pos = None
                             self.item_event_phase = 0
                             self.item_choice = 0
                             self.item_reward = None
@@ -1545,17 +1508,6 @@ class Game:
                             self.item_talk_char_count = 0
                             self.item_talk_last_tick = pygame.time.get_ticks()
                             self.set_floor_assets_for_current_floor ()
-                            if self.floor >= 91:
-                                self.event_wall_pos = None
-                                if self.item_wall_pos is None and self.wall_item:
-                                    wall_cells = [
-                                        (x, y)
-                                        for y in range(DUNGEON_H - 1)
-                                        for x in range(DUNGEON_W)
-                                        if self.dungeon[y][x] == 9 and self.dungeon[y + 1][x] == 0
-                                    ]
-                                    if wall_cells:
-                                        self.item_wall_pos = random.choice(wall_cells)
                             self.init_floor_variant_map ()
                             self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
                             self.move_bgm_pos_ms =0 
@@ -1564,6 +1516,7 @@ class Game:
                             pygame .mixer .music .play (-1 )
 
             elif self.idx ==30 :#メニュー
+                print(self.dungeon[self.pl_y - 1][self.pl_x])
                 self.draw_dungeon (screen ,fontS )
                 if self.menu_back_lock:
                     if not (key [K_b ]or key [K_LEFT ]):
@@ -1621,11 +1574,8 @@ class Game:
                 "pl_x":self.pl_x ,
                 "pl_y":self.pl_y ,
                 "boss_pos":self.boss_pos ,
-                "item_wall_pos":self.item_wall_pos ,
-                "item_wall_used":self.item_wall_used ,
                 "item_wall_claimed":sorted(self.item_wall_claimed),
-                "true_episode_heard":self.true_episode_heard,
-                "event_wall_pos":self.event_wall_pos 
+                "true_episode_heard":self.true_episode_heard
                 }
                 if self.floorlist [self.save_cmd ]>0 :
                     if self.save_confirm_lock:
@@ -1807,25 +1757,28 @@ class Game:
                 menu_label ="[M]enu "
                 menu_x =view_left +view_w -int (view_w *0.1 )-fontS .size (menu_label )[0 ]
                 self.draw_text (screen ,menu_label ,menu_x ,view_top +40 ,fontS ,WHITE )
-                if accept and self.event_wall_pos:
-                    if self.pl_d == 0 and (self.pl_x, self.pl_y - 1) == self.event_wall_pos:
-                        self.init_event_talk ()
-                        self.idx =132 
-                        self.tmr =0 
-                if accept and self.item_wall_pos and not self.item_wall_used:
-                    if self.pl_d == 0 and (self.pl_x, self.pl_y - 1) == self.item_wall_pos:
-                        if self.floor >= 91 and not self.all_cocoons_cleared():
-                            pass
-                        else:
-                            if self.floor >= 91:
-                                if self.floor == 100 and self.all_item_walls_claimed() and not self.true_episode_heard:
+                if accept and self.pl_d == 0:
+                    tx = self.pl_x
+                    ty = self.pl_y - 1
+                    if 0 <= ty < DUNGEON_H:
+                        front_tile = self.dungeon[ty][tx]
+                        if front_tile == 8:
+                            self.init_event_talk ()
+                            self.idx =132 
+                            self.tmr =0 
+                        elif front_tile == 7:
+                            if self.floor >= 91 and not self.all_cocoons_cleared():
+                                pass
+                            else:
+                                if 91 <= self.floor <= 99:
+                                    self.item_wall_claimed.add(self.floor)
+                                    self.init_item_event (kind="item", reward_count=5)
+                                elif self.floor == 100 and self.all_item_walls_claimed() and not self.true_episode_heard:
                                     self.init_item_event (kind="true_episode", lines=TRUE_EPISODE_TALK)
                                 else:
-                                    self.init_item_event (kind="item", reward_count=5)
-                            else:
-                                self.init_item_event ()
-                            self.idx =131 
-                            self.tmr =0 
+                                    self.init_item_event ()
+                                self.idx =131 
+                                self.tmr =0 
                 if accept and self.stair_in_front ():
                     self.idx =110 
                     self.tmr =0 
@@ -2115,10 +2068,10 @@ class Game:
                                     self.trap =4 +3 *((w_a )//3 )
                                 self.pl_sword [self.trap //3 -1 ][0 ]=1 
                                 self.pl_sword [self.trap //3 -1 ][1 ]=max (self.wpn_lev ,self.pl_sword [self.trap //3 -1 ][1 ])
-                            self.item_wall_used = True
+                            self.dungeon[self.pl_y - 1][self.pl_x] = 9
                             self.idx =121
                             self.tmr =0
-                else:
+                elif self.item_event_kind == "item":
                     if self.item_event_phase in (0, 2):
                         if self.item_talk_index <len (self.item_talk_lines ):
                             line = self.item_talk_lines [self.item_talk_index ]
@@ -2144,10 +2097,10 @@ class Game:
                                 if self.item_event_phase == 0:
                                     self.item_event_phase = 1
                                 elif self.item_event_phase == 2:
-                                    self.item_wall_used = True
                                     self.treasure = self.item_reward if self.item_reward is not None else self.item_choice                            
                                     if 91 <= self.floor <= 99:
                                         self.item_wall_claimed.add(self.floor)
+                                    self.dungeon[self.pl_y - 1][self.pl_x] = 9
                                     self.idx =120
                         self.tmr =0 
                     elif self.item_event_phase == 1:
@@ -2242,7 +2195,6 @@ class Game:
                         self.bg_cache.clear()
                         self.last_btl_bg_idx = bg_idx
                     self.imgBtlBG =pygame .image .load (self.path +f"/image/btlbg{bg_idx}.png")
-                    print(f"/image/btlbg{bg_idx}.png")
                     if self.boss ==1 :
                         self.init_bossbattle ()
                         pygame .mixer .music .load (self.path +"/sound/bgm_battle_1.wav")
@@ -2255,7 +2207,6 @@ class Game:
                         pygame .mixer .music .load (self.path +"/sound/bgm_battle_0.wav")
                         pygame .mixer .music .play (-1 )
                         self.init_message ()
-                    print(self.emy_name, bg_idx, self.floor, self.boss)
                     self.set_message (f"{self.emy_name}が　あらわれた！")
                 elif self.tmr <=4 :
                     alpha =int (255 *self.tmr /4 )
