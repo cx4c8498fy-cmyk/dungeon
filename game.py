@@ -438,25 +438,27 @@ class Game:
         tile =80 
         cols =view_w //tile +2 
         rows =view_h //tile +2 
+        extra_wall_rows =1 
         start_x =-(cols //2 )
         start_y =-(rows //2 )
         offset_x =view_left +view_w //2 -tile //2 -(cols //2 )*tile 
         offset_y =view_top +view_h //2 -tile //2 -(rows //2 )*tile 
-        for y in range (start_y ,start_y +rows ):
+        for y in range (start_y ,start_y +rows +extra_wall_rows ):
             for x in range (start_x ,start_x +cols ):
                 X =offset_x +(x -start_x )*tile 
                 Y =offset_y +(y -start_y )*tile 
                 dx =self.pl_x +x 
                 dy =self.pl_y +y 
+                wall_only =(y >=start_y +rows )
                 if 0 <=dx <DUNGEON_W and 0 <=dy <DUNGEON_H :
                     tile_id =self.dungeon [dy ][dx ]
-                    if tile_id not in (7 ,8 ,9 ):
+                    if not wall_only and tile_id not in (7 ,8 ,9 ):
                         if not self.map_seen [dy ][dx ]:
                             self.map_seen [dy ][dx ]=True
                             new_seen .append ((dx ,dy ))
                         if tile_id ==3 :
                             self.map_stairs .add ((dx ,dy ))
-                    if tile_id in (0 ,1 ,2 ,3 ,4 ,5 ,6 ):
+                    if not wall_only and tile_id in (0 ,1 ,2 ,3 ,4 ,5 ,6 ):
                         if tile_id in (0 ,1 ,2 ,4 ):
                             variant =self.floor_var_map [dy ][dx ]
                             if self.floor_flip_map [dy ][dx ]:
@@ -481,7 +483,7 @@ class Game:
                         bx = X - 80
                         by = Y - 80
                         bg .blit (boss_map ,[bx ,by ])
-                if x ==0 and y ==0 :# 主人公キャラの表示
+                if not wall_only and x ==0 and y ==0 :# 主人公キャラの表示
                     bg .blit (self.imgPlayer [self.pl_a ],[X ,Y -40 ])
         bg .set_clip (prev_clip )
         self.update_minimap_grid (new_seen )
