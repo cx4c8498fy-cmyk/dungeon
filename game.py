@@ -1518,7 +1518,6 @@ class Game:
                             pygame .mixer .music .play (-1 )
 
             elif self.idx ==30 :#メニュー
-                print(self.dungeon[self.pl_y - 1][self.pl_x])
                 self.draw_dungeon (screen ,fontS )
                 if self.menu_back_lock:
                     if not (key [K_b ]or key [K_LEFT ]):
