@@ -24,11 +24,9 @@ def load_images(base_path: str) -> ImageAssets:
     """Load image assets from disk."""
     img_title = pygame.image.load(base_path + "/image/title.png")
     wall_as = load_wall_variants(base_path, "wallA", 0)
-    wall_bs = load_wall_variants(base_path, "wallB", 0)
     if not wall_as:
         wall_as = [pygame.image.load(base_path + "/image/wall.png")]
-    if not wall_bs:
-        wall_bs = [pygame.image.load(base_path + "/image/wall2.png")]
+    wall_bs = [make_wall_top(img) for img in wall_as]
     # img_dark = pygame.image.load(base_path + "/image/dark.png")
     img_btl_bg = pygame.image.load(base_path + "/image/btlbg0.png")
     img_enemy = pygame.image.load(base_path + "/image/enemy0_0.png")
@@ -126,3 +124,12 @@ def load_wall_variants(base_path: str, wall_prefix: str, wall_set: int) -> list:
     if os.path.exists(fallback):
         return [pygame.image.load(fallback)]
     return []
+
+
+def make_wall_top(wall_a_img: pygame.Surface) -> pygame.Surface:
+    """Create wallB-like image by cropping top 40px from a wallA image."""
+    width = wall_a_img.get_width()
+    height = max(1, min(40, wall_a_img.get_height()))
+    top = pygame.Surface((width, height), pygame.SRCALPHA)
+    top.blit(wall_a_img, (0, 0), pygame.Rect(0, 0, width, height))
+    return top

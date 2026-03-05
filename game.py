@@ -10,7 +10,7 @@ import json
 import glob
 from pygame.locals import *
 from game_data import *
-from assets import load_images, load_sounds, load_floor_variants, load_wall_variants
+from assets import load_images, load_sounds, load_floor_variants, load_wall_variants, make_wall_top
 
 
 def load_floorlist(base_path):
@@ -190,9 +190,7 @@ class Game:
         self.wall_variantsA = load_wall_variants(self.path, "wallA", wall_set)
         if not self.wall_variantsA:
             self.wall_variantsA = [self.imgWall]
-        self.wall_variantsB = load_wall_variants(self.path, "wallB", wall_set)
-        if not self.wall_variantsB:
-            self.wall_variantsB = [self.imgWall2]
+        self.wall_variantsB = [make_wall_top(img) for img in self.wall_variantsA]
         self.imgWall = self.wall_variantsA[0]
         self.imgWall2 = self.wall_variantsB[0]
         event_path = os.path.join(self.path, "image", "wallA{}_event.png".format(wall_set))
