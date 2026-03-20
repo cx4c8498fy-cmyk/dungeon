@@ -251,24 +251,14 @@ class Game:
         self.boss_pos = None
         self.boss_area = set()
         candidates = []
-        for y in range(3, DUNGEON_H - 5):
-            for x in range(3, DUNGEON_W - 4):
-                if (self.dungeon[y][x] == 0 and self.dungeon[y][x + 1] == 0 and
-                    self.dungeon[y + 1][x] == 0 and self.dungeon[y + 1][x + 1] == 0 and
-                    self.dungeon[y + 2][x] == 0 and self.dungeon[y + 2][x + 1] == 0):
+        for y in range(3, DUNGEON_H - 3):
+            for x in range(3, DUNGEON_W - 3):
+                if self.dungeon[y][x] == 0:
                     candidates.append((x, y))
         if candidates:
             x, y = random.choice(candidates)
             self.boss_pos = (x, y)
-            self.boss_area = {(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)}
-            return
-        x = random.randint(3, DUNGEON_W - 4)
-        y = random.randint(3, DUNGEON_H - 5)
-        for ry in range(0, 3):
-            for rx in range(0, 2):
-                self.dungeon[y + ry][x + rx] = 0
-        self.boss_pos = (x, y)
-        self.boss_area = {(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)}
+            self.boss_area = {(x, y)}
 
     def init_boss_talk(self):
         boss_id = 9 + int(self.floor // 10)
@@ -323,14 +313,11 @@ class Game:
         self.event_talk_last_tick = pygame.time.get_ticks()
 
     def get_boss_map_image(self):
-        boss_id = 9 + int(self.floor // 10)
-        if 90 < self.floor < 100:
-            boss_id = 9 + int(self.floor % 10)
-        boss_map_id = boss_id - 10
-        if boss_map_id not in self.boss_map_cache:
-            path = self.path + "/image/boss_map" + str(boss_map_id) + ".png"
-            self.boss_map_cache[boss_map_id] = pygame.image.load(path)
-        return self.boss_map_cache[boss_map_id]
+        cache_key = "boss_map"
+        if cache_key not in self.boss_map_cache:
+            path = self.path + "/image/boss_map.png"
+            self.boss_map_cache[cache_key] = pygame.image.load(path)
+        return self.boss_map_cache[cache_key]
 
     def make_dungeon (self ):
         self.fixed_floor_data = None
@@ -476,11 +463,9 @@ class Game:
                             bg .blit (self.imgFloor [7 ],[X ,Y ])
                         if dy >=1 and self.dungeon [dy -1 ][dx ] in (7 ,8 ,9 ):
                             bg .blit (self.imgWall2 ,[X ,Y -80 ])
-                    if self.boss_pos and dx == self.boss_pos[0] + 1 and dy == self.boss_pos[1] + 1:
+                    if self.boss_pos and dx == self.boss_pos[0] and dy == self.boss_pos[1]:
                         boss_map = self.get_boss_map_image()
-                        bx = X - 80
-                        by = Y - 80
-                        bg .blit (boss_map ,[bx ,by ])
+                        bg .blit (boss_map ,[X ,Y -40 ])
                 if not wall_only and x ==0 and y ==0 :# 主人公キャラの表示
                     bg .blit (self.imgPlayer [self.pl_a ],[X ,Y -40 ])
         bg .set_clip (prev_clip )
@@ -502,7 +487,7 @@ class Game:
             if boss_pos:
                 bx, by = boss_pos
                 self.boss_pos = (bx, by)
-                self.boss_area = {(bx, by), (bx + 1, by), (bx, by + 1), (bx + 1, by + 1)}
+                self.boss_area = {(bx, by)}
         if is_boss_floor :
             if not self.boss_pos:
                 self.place_boss()
@@ -780,7 +765,7 @@ class Game:
                 if "boss_pos" in loaddata and loaddata ["boss_pos"] is not None:
                     bx, by = loaddata ["boss_pos"]
                     self.boss_pos = (bx, by)
-                    self.boss_area = {(bx, by), (bx + 1, by), (bx, by + 1), (bx + 1, by + 1)}
+                    self.boss_area = {(bx, by)}
                 else:
                     self.boss_pos = None
                     self.boss_area = set()
@@ -1493,7 +1478,7 @@ class Game:
                             if "boss_pos" in loaddata and loaddata ["boss_pos"] is not None:
                                 bx, by = loaddata ["boss_pos"]
                                 self.boss_pos = (bx, by)
-                                self.boss_area = {(bx, by), (bx + 1, by), (bx, by + 1), (bx + 1, by + 1)}
+                                self.boss_area = {(bx, by)}
                             else:
                                 self.boss_pos = None
                                 self.boss_area = set()
