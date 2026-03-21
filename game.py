@@ -39,7 +39,7 @@ class Game:
         self.imgFloor = images.floors
         self.imgPlayerBase0 = images.players
         self.imgPlayerBase1 = [
-            pygame.image.load(self.path + f"/image/mychr{i}_1.png")
+            pygame.image.load(self.path + f"/image/mychr/mychr{i}_1.png")
             for i in range(9)
         ]
         self.imgPlayer = self.imgPlayerBase0
@@ -203,7 +203,7 @@ class Game:
             self.floor_variants = [self.imgFloor[0]]
         self.floor_variants_flipped = [pygame.transform.flip(img, True, False) for img in self.floor_variants]
         self.imgFloor[0] = self.floor_variants[0]
-        self.imgFloor[2] = pygame.image.load(self.path + "/image/cocoon" + str(floor_index) + ".png")
+        self.imgFloor[2] = pygame.image.load(self.path + "/image/cocoon/cocoon" + str(floor_index) + ".png")
         wall_set = (floor_value - 1) // 10
         self.wall_variantsA = load_wall_variants(self.path, "wallA", wall_set)
         if not self.wall_variantsA:
@@ -2201,7 +2201,7 @@ class Game:
                     if self.last_btl_bg_idx != bg_idx:
                         self.bg_cache.clear()
                         self.last_btl_bg_idx = bg_idx
-                    self.imgBtlBG =pygame .image .load (self.path +f"/image/btlbg{bg_idx}.png")
+                    self.imgBtlBG =pygame .image .load (self.path +f"/image/btlbg/btlbg{bg_idx}.png")
                     if self.boss ==1 :
                         self.init_bossbattle ()
                         pygame .mixer .music .load (self.path +"/sound/bgm_battle_1.wav")

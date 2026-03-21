@@ -28,7 +28,7 @@ def load_images(base_path: str) -> ImageAssets:
         wall_as = [pygame.image.load(base_path + "/image/wall.png")]
     wall_bs = [make_wall_top(img) for img in wall_as]
     # img_dark = pygame.image.load(base_path + "/image/dark.png")
-    img_btl_bg = pygame.image.load(base_path + "/image/btlbg0.png")
+    img_btl_bg = pygame.image.load(base_path + "/image/btlbg/btlbg0.png")
     img_enemy = pygame.image.load(base_path + "/image/enemy0_0.png")
 
     # img_items = [
@@ -43,11 +43,11 @@ def load_images(base_path: str) -> ImageAssets:
 
 
     floor_variants = load_floor_variants(base_path, 0)
-    base_floor = floor_variants[0] if floor_variants else pygame.image.load(base_path + "/image/floor0.png")
+    base_floor = floor_variants[0] if floor_variants else pygame.image.load(base_path + "/image/floor/floor0.png")
     img_floors = [
         base_floor,
         pygame.image.load(base_path + "/image/tbox.png"),
-        pygame.image.load(base_path + "/image/cocoon0.png"),
+        pygame.image.load(base_path + "/image/cocoon/cocoon0.png"),
         pygame.image.load(base_path + "/image/stairs.png"),
         pygame.image.load(base_path + "/image/wbox.png"),
         pygame.image.load(base_path + "/image/floor_dmg.png"),
@@ -55,16 +55,16 @@ def load_images(base_path: str) -> ImageAssets:
         pygame.image.load(base_path + "/image/wall_item.png"),
     ]
     img_players = [
-        pygame.image.load(base_path + f"/image/mychr{i}_0.png")
+        pygame.image.load(base_path + f"/image/mychr/mychr{i}_0.png")
         for i in range(9)
     ]
     img_effects = [
-        pygame.image.load(base_path + "/image/effect_a_0.png"),
-        pygame.image.load(base_path + "/image/effect_b_0.png"),
-        pygame.image.load(base_path + "/image/effect_c_0.png"),
-        pygame.image.load(base_path + "/image/effect_a_1.png"),
-        pygame.image.load(base_path + "/image/effect_b_1.png"),
-        pygame.image.load(base_path + "/image/effect_c_1.png"),
+        pygame.image.load(base_path + "/image/effect/effect_a_0.png"),
+        pygame.image.load(base_path + "/image/effect/effect_b_0.png"),
+        pygame.image.load(base_path + "/image/effect/effect_c_0.png"),
+        pygame.image.load(base_path + "/image/effect/effect_a_1.png"),
+        pygame.image.load(base_path + "/image/effect/effect_b_1.png"),
+        pygame.image.load(base_path + "/image/effect/effect_c_1.png"),
     ]
 
     return ImageAssets(
@@ -100,11 +100,11 @@ def load_sounds(base_path: str) -> list:
 
 def load_floor_variants(base_path: str, floor_index: int) -> list:
     """Load floor tile variants like floor0_0.png, floor0_1.png, ..."""
-    pattern = os.path.join(base_path, "image", f"floor{floor_index}_*.png")
+    pattern = os.path.join(base_path, "image", "floor", f"floor{floor_index}_*.png")
     paths = sorted(glob.glob(pattern))
     if paths:
         return [pygame.image.load(path) for path in paths]
-    fallback = os.path.join(base_path, "image", f"floor{floor_index}.png")
+    fallback = os.path.join(base_path, "image", "floor", f"floor{floor_index}.png")
     if os.path.exists(fallback):
         return [pygame.image.load(fallback)]
     return []
