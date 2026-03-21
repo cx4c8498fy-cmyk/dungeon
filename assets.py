@@ -55,9 +55,10 @@ def load_images(base_path: str) -> ImageAssets:
         pygame.image.load(base_path + "/image/wall_item.png"),
     ]
     img_players = [
-        pygame.image.load(base_path + f"/image/mychr/mychr{i}_0.png")
-        for i in range(9)
+        pygame.image.load(base_path + f"/image/mychr/mychr_{i//3}_{i%3}_0.png")
+        for i in range(12)
     ]
+    img_players.append(pygame.image.load(base_path + "/image/mychr/mychr_4_0_0.png"))
     img_effects = [
         pygame.image.load(base_path + "/image/effect/effect_a_0.png"),
         pygame.image.load(base_path + "/image/effect/effect_b_0.png"),

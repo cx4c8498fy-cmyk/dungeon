@@ -39,9 +39,10 @@ class Game:
         self.imgFloor = images.floors
         self.imgPlayerBase0 = images.players
         self.imgPlayerBase1 = [
-            pygame.image.load(self.path + f"/image/mychr/mychr{i}_1.png")
-            for i in range(9)
+            pygame.image.load(self.path + f"/image/mychr/mychr_{i//3}_{i%3}_1.png")
+            for i in range(12)
         ]
+        self.imgPlayerBase1.append(pygame.image.load(self.path + "/image/mychr/mychr_4_0_1.png"))
         self.imgPlayer = self.imgPlayerBase0
         self.imgEffect = images.effects
         self.imgFire = pygame.image.load(self.path + "/image/fire.png")
@@ -65,7 +66,7 @@ class Game:
         self.pl_x = 0
         self.pl_y = 0
         self.pl_d = 0
-        self.pl_a = 0
+        self.pl_a = 2
         self.pl_lifemax = 0
         self.pl_life = 0
         self.pl_str = 0
@@ -561,7 +562,7 @@ class Game:
                 if (self.dungeon [self.pl_y ][self.pl_x ]==0 )and not self.is_boss_tile (self.pl_x ,self.pl_y ):
                     break 
         self.pl_d =1 
-        self.pl_a =2 
+        self.pl_a =5 
         if self.floor >= 91:
             wall_cells = [
                 (x, y)
@@ -693,9 +694,10 @@ class Game:
             self.pl_d =3 
             if self.dungeon [self.pl_y ][self.pl_x +1 ] not in (3 ,7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x +1 ,self.pl_y ):
                 self.pl_x =self.pl_x +1 
-        self.pl_a =self.pl_d *2 
+        self.pl_a =self.pl_d *3 +2 
         if self.pl_x !=x or self.pl_y !=y :
-            self.pl_a =self.pl_a +self.tmr %2 # 移動したら足踏みのアニメーション
+            walk_cycle =[0 ,2 ,1 ,2 ]
+            self.pl_a =self.pl_d *3 +walk_cycle [self.tmr %4 ]# 移動したら足踏みのアニメーション
 
     def draw_text (self ,bg ,txt ,x ,y ,fnt ,col ):
         sur =fnt .render (txt ,True ,BLACK )
@@ -1348,7 +1350,7 @@ class Game:
         if self.emy_typ ==5 or self.emy_typ ==12:
             suck = {5:5+self.lev, 12:104}[self.emy_typ] + random .randint (1 ,self.emy_typ )
             suck = min(suck, self.pl_mag)
-            self.set_message (f"　MPを　{suck}　吸収された!")
+            self.set_message (f"　魔力を　{suck}　吸収された!")
             self.pl_mag =self.pl_mag -suck 
             action =False 
         if self.emy_typ ==6 :
@@ -1681,9 +1683,9 @@ class Game:
 
             elif self.idx ==70 :# ゲームオーバー
                 if self.tmr <=30 :
-                    PL_TURN =[2 ,4 ,0 ,6 ]
+                    PL_TURN =[3 ,6 ,0 ,9 ]
                     self.pl_a =PL_TURN [self.tmr %4 ]
-                    if self.tmr ==30 :self.pl_a =8 # 倒れた絵
+                    if self.tmr ==30 :self.pl_a =12 # 倒れた絵
                     self.draw_dungeon (screen ,fontS )
                 elif self.tmr ==31 :
                     se [3 ].play ()
