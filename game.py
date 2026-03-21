@@ -37,7 +37,12 @@ class Game:
         self.imgEnemy = images.enemy
         # self.imgItem = images.items
         self.imgFloor = images.floors
-        self.imgPlayer = images.players
+        self.imgPlayerBase0 = images.players
+        self.imgPlayerBase1 = [
+            pygame.image.load(self.path + f"/image/mychr{i}_1.png")
+            for i in range(9)
+        ]
+        self.imgPlayer = self.imgPlayerBase0
         self.imgEffect = images.effects
         self.imgFire = pygame.image.load(self.path + "/image/fire.png")
         # self.imgPoison = pygame.image.load(self.path + "/image/poison.png")
@@ -178,6 +183,19 @@ class Game:
         self.map_surface = None
         self.map_surface_scale = None
         self.map_surface_size = None
+
+    def has_full_basic_set(self):
+        return (
+            self.pl_shield[0][0] == 1 and
+            self.pl_armor[0][0] == 1 and
+            self.pl_sword[0][0] == 1
+        )
+
+    def update_player_images(self):
+        if self.has_full_basic_set():
+            self.imgPlayer = self.imgPlayerBase1
+        else:
+            self.imgPlayer = self.imgPlayerBase0
 
     def set_floor_assets(self, floor_index, floor_value):
         self.floor_variants = load_floor_variants(self.path, floor_index)
@@ -610,6 +628,7 @@ class Game:
                     self.trap =4 +3 *((w_a )//3 )
                 self.pl_sword [self.trap //3 -1 ][0 ]=1 
                 self.pl_sword [self.trap //3 -1 ][1 ]=max (self.wpn_lev ,self.pl_sword [self.trap //3 -1 ][1 ])
+            self.update_player_images ()
             self.idx =121 
             self.tmr =0 
             return 
@@ -736,6 +755,7 @@ class Game:
         self.pl_shield =[[0 ,0 ],[0 ,0 ],[0 ,0 ]]
         self.pl_armor =[[0 ,0 ],[0 ,0 ],[0 ,0 ]]
         self.pl_sword =[[0 ,0 ],[0 ,0 ],[0 ,0 ]]
+        self.update_player_images ()
         self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
         self.move_bgm_pos_ms =0 
         self.move_bgm_start_time =time .time ()
@@ -762,6 +782,7 @@ class Game:
                 self.pl_shield =loaddata ["shield"]
                 self.pl_armor =loaddata ["armor"]
                 self.pl_sword =loaddata ["sword"]
+                self.update_player_images ()
                 if "boss_pos" in loaddata and loaddata ["boss_pos"] is not None:
                     bx, by = loaddata ["boss_pos"]
                     self.boss_pos = (bx, by)
@@ -1475,6 +1496,7 @@ class Game:
                             self.pl_shield =loaddata ["shield"]
                             self.pl_armor =loaddata ["armor"]
                             self.pl_sword =loaddata ["sword"]
+                            self.update_player_images ()
                             if "boss_pos" in loaddata and loaddata ["boss_pos"] is not None:
                                 bx, by = loaddata ["boss_pos"]
                                 self.boss_pos = (bx, by)
@@ -2052,6 +2074,7 @@ class Game:
                                     self.trap =4 +3 *((w_a )//3 )
                                 self.pl_sword [self.trap //3 -1 ][0 ]=1 
                                 self.pl_sword [self.trap //3 -1 ][1 ]=max (self.wpn_lev ,self.pl_sword [self.trap //3 -1 ][1 ])
+                            self.update_player_images ()
                             self.dungeon[self.pl_y - 1][self.pl_x] = 9
                             self.idx =121
                             self.tmr =0
@@ -2845,6 +2868,7 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
                     pygame .mixer .music .stop ()
+                    self.boss =0 
                     self.btl_cmd =0
                     self.guard_remain =0 
                     self.poison =0 
@@ -2946,6 +2970,7 @@ class Game:
                     if trap_drop %3 ==1 :
                         self.pl_sword [trap_drop //3 -1 ][0 ]=1 
                         self.pl_sword [trap_drop //3 -1 ][1 ]=max (wpn_lev_drop ,self.pl_sword [trap_drop //3 -1 ][1 ])
+                    self.update_player_images ()
                     self.set_message ("Drop {} lv.{}".format (TRAP_NAME [trap_drop ],wpn_lev_drop ))
                 if self.tmr ==23 :
                     self.idx =241 
