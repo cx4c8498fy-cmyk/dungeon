@@ -59,9 +59,10 @@ def load_images(base_path: str) -> ImageAssets:
         for i in range(9)
     ]
     img_effects = [
-        pygame.image.load(base_path + "/image/effect_a.png"),
+        pygame.image.load(base_path + "/image/effect_a_0.png"),
         pygame.image.load(base_path + "/image/effect_b.png"),
         pygame.image.load(base_path + "/image/effect_c.png"),
+        pygame.image.load(base_path + "/image/effect_a_1.png"),
     ]
 
     return ImageAssets(

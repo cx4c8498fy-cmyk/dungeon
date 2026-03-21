@@ -2278,7 +2278,8 @@ class Game:
                     screen_w =screen .get_size ()[0 ]
                     eff_x =screen_w //2 +260 -self.tmr *120 
                     eff_y =-100 +self.tmr *120 
-                    screen .blit (self.imgEffect [0 ],[eff_x ,eff_y ])
+                    atk_effect =self.imgEffect [3 ]if self.pl_sword [0 ][0 ]==1 else self.imgEffect [0 ]
+                    screen .blit (atk_effect ,[eff_x ,eff_y ])
                 if self.tmr ==5 :
                     self.emy_blink =5 
                     self.set_message (f"　{dmg}　ダメージ！")
