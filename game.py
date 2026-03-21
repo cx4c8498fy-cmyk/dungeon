@@ -110,6 +110,11 @@ class Game:
         self.menu_back_lock = False
         self.menu_accept_lock = False
         self.save_cmd = 0
+        self.save_from_stair = False
+        self.stair_save_slot = 0
+        self.stair_choice_cmd = 0
+        self.stair_prompted = False
+        self.stair_choice_input_lock = False
         self.btl_cmd = 0
         self.pow_up = 1
         self.poison = 0
@@ -688,19 +693,19 @@ class Game:
         y =self.pl_y 
         if key [K_UP ]==1 :
             self.pl_d =0 
-            if self.dungeon [self.pl_y -1 ][self.pl_x ] not in (3 ,7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x ,self.pl_y -1 ):
+            if self.dungeon [self.pl_y -1 ][self.pl_x ] not in (7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x ,self.pl_y -1 ):
                 self.pl_y =self.pl_y -1 
         if key [K_DOWN ]==1 :
             self.pl_d =1 
-            if self.dungeon [self.pl_y +1 ][self.pl_x ] not in (3 ,7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x ,self.pl_y +1 ):
+            if self.dungeon [self.pl_y +1 ][self.pl_x ] not in (7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x ,self.pl_y +1 ):
                 self.pl_y =self.pl_y +1 
         if key [K_LEFT ]==1 :
             self.pl_d =2 
-            if self.dungeon [self.pl_y ][self.pl_x -1 ] not in (3 ,7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x -1 ,self.pl_y ):
+            if self.dungeon [self.pl_y ][self.pl_x -1 ] not in (7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x -1 ,self.pl_y ):
                 self.pl_x =self.pl_x -1 
         if key [K_RIGHT ]==1 :
             self.pl_d =3 
-            if self.dungeon [self.pl_y ][self.pl_x +1 ] not in (3 ,7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x +1 ,self.pl_y ):
+            if self.dungeon [self.pl_y ][self.pl_x +1 ] not in (7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x +1 ,self.pl_y ):
                 self.pl_x =self.pl_x +1 
         self.pl_a =self.pl_d *3 +2 
         if self.pl_x !=x or self.pl_y !=y :
@@ -758,6 +763,11 @@ class Game:
         self.potion =0 
         self.blazegem =0 
         self.guard =0 
+        self.save_from_stair = False
+        self.stair_save_slot = 0
+        self.stair_choice_cmd = 0
+        self.stair_prompted = False
+        self.stair_choice_input_lock = False
         self.item_wall_claimed = set()
         self.true_episode_heard = False
         self.encountered_enemies = set()
@@ -789,7 +799,11 @@ class Game:
                 self.potion =loaddata ["potion"]
                 self.blazegem =loaddata ["blazegem"]
                 self.guard =loaddata ["guard"]
-                self.idx =100 
+                self.save_from_stair = False
+                self.stair_save_slot = 0
+                self.stair_choice_cmd = 0
+                self.stair_prompted = False
+                self.stair_choice_input_lock = False
                 self.pl_shield =loaddata ["shield"]
                 self.pl_armor =loaddata ["armor"]
                 self.pl_sword =loaddata ["sword"]
@@ -820,6 +834,21 @@ class Game:
                 self.move_bgm_start_time =time .time ()
                 pygame .mixer .music .load (self.move_bgm_path )
                 pygame .mixer .music .play (-1 )
+                surf =pygame .display .get_surface ()
+                if surf :
+                    screen_w ,screen_h =surf .get_size ()
+                    img_w ,img_h =self.imgBtlBG .get_size ()
+                    scale =min (screen_w /img_w ,screen_h /img_h )
+                    bg_w =max (1 ,int (img_w *scale ))
+                    bg_h =max (1 ,int (img_h *scale ))
+                    bg_left =(screen_w -bg_w )//2 
+                    bg_top =(screen_h -bg_h )//2 
+                    self.floor_title_pos =(bg_left +bg_w //2 -42 ,bg_top +int (bg_h *0.4 ))
+                else :
+                    self.floor_title_pos =None
+                self.floor_title_active = True
+                self.idx =110
+                self.tmr =6
 
     def draw_prologue (self ,bg ,fnt ,key ):
         line_duration =20 
@@ -1176,7 +1205,9 @@ class Game:
 
     def menu_command (self ,bg ,fnt ,key ):
         ent =False 
-        options = ["データをセーブする", "図鑑を見る", "タイトルに戻る", "メニューを閉じる"]
+        options = ["図鑑を見る", "タイトルに戻る", "メニューを閉じる"]
+        if self.menu_cmd >=len (options ):
+            self.menu_cmd =len (options )-1 
         if key [K_UP ]and self.menu_cmd >0 :
             self.menu_cmd -=1 
         if key [K_DOWN ]and self.menu_cmd <len (options )-1 :
@@ -1406,6 +1437,35 @@ class Game:
             self.draw_text (bg ,label ,win_x +50 ,y ,fnt ,WHITE )
         return ent 
 
+    def stair_choice_command (self ,bg ,fnt ,key ,enable_input =True ):
+        ent =False 
+        options =[
+            "下の階に移動する",
+            "データをセーブして下の階に移動する",
+            "移動しない",
+        ]
+        if enable_input:
+            if key [K_UP ]and self.stair_choice_cmd >0 :
+                self.stair_choice_cmd -=1 
+            if key [K_DOWN ]and self.stair_choice_cmd <len (options )-1 :
+                self.stair_choice_cmd +=1 
+            if key [K_RETURN ]or key [K_a ]:
+                ent =True 
+        win_w =560 
+        line_h =32 
+        win_h =line_h *len (options )+20 
+        screen_w ,screen_h =bg .get_size ()
+        win_x =(screen_w -win_w )//2 
+        win_y =(screen_h -win_h )//2 
+        pygame .draw .rect (bg ,BLACK ,[win_x ,win_y ,win_w ,win_h ])
+        pygame .draw .rect (bg ,WHITE ,[win_x ,win_y ,win_w ,win_h ],2 )
+        for i, label in enumerate (options ):
+            y =win_y +10 +i *line_h 
+            if self.stair_choice_cmd ==i :
+                self.draw_text (bg ,"▶",win_x +20 ,y ,fnt ,WHITE )
+            self.draw_text (bg ,label ,win_x +50 ,y ,fnt ,WHITE )
+        return ent 
+
     def battle_command (self ,bg ,fnt ,key ):
         ent =False 
         labels = ["攻撃", "魔法", "傷薬", "爆弾", "守護", "逃走", "情報"]
@@ -1613,7 +1673,7 @@ class Game:
                         else:
                             self.title_mode = 1
                 else:
-                    if key [K_b ]or key [K_LEFT ]:
+                    if key [K_b ]or key [K_BACKSPACE ]:
                         self.title_mode = 0
                         options = ["はじめから", "つづきから"]
                         selected = self.title_cmd
@@ -1710,12 +1770,12 @@ class Game:
             elif self.idx ==30 :#メニュー
                 self.draw_dungeon (screen ,fontS )
                 if self.menu_back_lock:
-                    if not (key [K_b ]or key [K_LEFT ]):
+                    if not (key [K_b ]or key [K_BACKSPACE ]):
                         self.menu_back_lock = False
                 if self.menu_accept_lock:
                     if not (key [K_RETURN ]or key [K_a ]):
                         self.menu_accept_lock = False
-                if (key [K_b ]or key [K_LEFT ]) and not self.menu_back_lock:
+                if (key [K_b ]or key [K_BACKSPACE ]) and not self.menu_back_lock:
                     self.idx =100 
                     self.tmr =0 
                 else:
@@ -1723,10 +1783,7 @@ class Game:
                     if self.menu_accept_lock:
                         ent = False
                     if ent == True :
-                        if self.menu_cmd ==0 :#savedata
-                            self.load_accept_lock = True
-                            self.idx =40 
-                        elif self.menu_cmd ==1 :#zukan
+                        if self.menu_cmd ==0 :#zukan
                             self.zukan_menu_cmd =0
                             self.zukan_kind =0
                             self.zukan_cursor =0
@@ -1734,12 +1791,12 @@ class Game:
                             self.zukan_accept_lock = True
                             self.idx =31
                             self.tmr =0
-                        elif self.menu_cmd ==2 :#go_title
+                        elif self.menu_cmd ==1 :#go_title
                             self.confirm_cmd =0 
                             self.title_confirm_lock = True
                             self.idx =60 
                             self.tmr =0 
-                        elif self.menu_cmd ==3 :#close
+                        elif self.menu_cmd ==2 :#close
                             self.idx =100 
                             self.tmr =0 
 
@@ -1815,9 +1872,15 @@ class Game:
                     self.save_confirm_lock = True
                     self.idx =50 
                     self.tmr =0 
-                if key [K_b ]==1 or key [K_LEFT ]==1 :
-                    self.menu_back_lock = True
-                    self.idx =30 
+                if key [K_b ]==1 or key [K_BACKSPACE ]==1 :
+                    if self.save_from_stair:
+                        self.save_from_stair = False
+                        self.stair_choice_input_lock = True
+                        self.idx =111 
+                        self.tmr =0 
+                    else:
+                        self.menu_back_lock = True
+                        self.idx =30 
 
             elif self.idx ==50 :#確認とセーブ
                 self.draw_dungeon (screen ,fontS )
@@ -1876,22 +1939,32 @@ class Game:
                             self.draw_text (screen ,"▶",win_x +20 ,y ,fontS ,WHITE )
                         self.draw_text (screen ,label ,win_x +50 ,y ,fontS ,WHITE )
                     if confirm_yes :
+                        if self.save_from_stair:
+                            self.stair_save_slot = self.save_cmd
+                            self.idx =110 
+                            self.tmr =0 
+                        else:
+                            with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
+                                json .dump (d ,f )
+                            se [9 ].play ()
+                            self.floorlist [self.save_cmd ]=self.floor 
+                            self.load_accept_lock = True
+                            self.idx =40 
+                    if confirm_no :
+                        self.load_accept_lock = True
+                        self.idx =40 
+                else :
+                    if self.save_from_stair:
+                        self.stair_save_slot = self.save_cmd
+                        self.idx =110 
+                        self.tmr =0 
+                    else:
                         with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
                             json .dump (d ,f )
                         se [9 ].play ()
                         self.floorlist [self.save_cmd ]=self.floor 
                         self.load_accept_lock = True
                         self.idx =40 
-                    if confirm_no :
-                        self.load_accept_lock = True
-                        self.idx =40 
-                else :
-                    with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
-                        json .dump (d ,f )
-                    se [9 ].play ()
-                    self.floorlist [self.save_cmd ]=self.floor 
-                    self.load_accept_lock = True
-                    self.idx =40 
 
             elif self.idx ==60 :#タイトルへ
                 self.draw_dungeon (screen ,fontS )
@@ -1908,7 +1981,7 @@ class Game:
                     self.confirm_cmd -=1 
                 if key [K_DOWN ]and self.confirm_cmd <len (options )-1 :
                     self.confirm_cmd +=1 
-                if key [K_LEFT ]or key [K_b ]:
+                if key [K_BACKSPACE ]or key [K_b ]:
                     self.menu_back_lock = True
                     self.idx =30 
                     self.tmr =0 
@@ -2022,7 +2095,15 @@ class Game:
                 menu_label ="[M]enu "
                 menu_x =view_left +view_w -int (view_w *0.1 )-fontS .size (menu_label )[0 ]
                 self.draw_text (screen ,menu_label ,menu_x ,view_top +40 ,fontS ,WHITE )
-                if accept and self.pl_d == 0:
+                if self.dungeon [self.pl_y ][self.pl_x ]!=3 :
+                    self.stair_prompted =False 
+                elif not self.stair_prompted:
+                    self.stair_prompted =True 
+                    self.stair_choice_cmd =0 
+                    self.stair_choice_input_lock = True
+                    self.idx =111 
+                    self.tmr =0 
+                if self.idx ==100 and accept and self.pl_d == 0:
                     tx = self.pl_x
                     ty = self.pl_y - 1
                     if 0 <= ty < DUNGEON_H:
@@ -2044,14 +2125,37 @@ class Game:
                                     self.init_item_event ()
                                 self.idx =131 
                                 self.tmr =0 
-                if accept and self.stair_in_front ():
-                    self.idx =110 
-                    self.tmr =0 
-                if accept and self.boss_in_front ():
+                if self.idx ==100 and accept and self.boss_in_front ():
                     self.init_boss_talk ()
                     self.idx =130 
                     self.tmr =0 
                     self.boss =1 
+
+            elif self.idx ==111 :# 階段選択
+                self.draw_dungeon (screen ,fontS )
+                if self.stair_choice_input_lock:
+                    self.stair_choice_command (screen ,fontS ,key ,enable_input =False )
+                    if not (key [K_UP ]or key [K_DOWN ]or key [K_LEFT ]or key [K_RIGHT ]or key [K_RETURN ]or key [K_a ]or key [K_b ]or key [K_BACKSPACE ]):
+                        self.stair_choice_input_lock = False
+                else:
+                    if self.stair_choice_command (screen ,fontS ,key )==True :
+                        if self.stair_choice_cmd ==0 :
+                            self.save_from_stair = False
+                            self.idx =110 
+                            self.tmr =0 
+                        elif self.stair_choice_cmd ==1 :
+                            self.save_from_stair = True
+                            self.load_accept_lock = True
+                            self.idx =40 
+                            self.tmr =0 
+                        else :
+                            self.save_from_stair = False
+                            self.idx =100 
+                            self.tmr =0 
+                    if key [K_b ]or key [K_BACKSPACE ]:
+                        self.save_from_stair = False
+                        self.idx =100 
+                        self.tmr =0 
 
             elif self.idx ==110 :# 画面切り替え
                 self.draw_dungeon (screen ,fontS )
@@ -2078,6 +2182,34 @@ class Game:
                         pygame .mixer .music .play (-1 )
                     self.make_dungeon ()
                     self.put_event ()
+                    if self.save_from_stair:
+                        d ={
+                        "floor":self.floor ,
+                        "pl_lifemax":self.pl_lifemax ,
+                        "pl_life":self.pl_life ,
+                        "pl_mag":self.pl_mag ,
+                        "pl_str":self.pl_str ,
+                        "pl_exp":self.pl_exp ,
+                        "potion":self.potion ,
+                        "blazegem":self.blazegem ,
+                        "guard":self.guard ,
+                        "shield":self.pl_shield ,
+                        "armor":self.pl_armor ,
+                        "sword":self.pl_sword ,
+                        "dungeon":self.dungeon ,
+                        "pl_x":self.pl_x ,
+                        "pl_y":self.pl_y ,
+                        "boss_pos":self.boss_pos ,
+                        "item_wall_claimed":sorted(self.item_wall_claimed),
+                        "true_episode_heard":self.true_episode_heard,
+                        "encountered_enemies":sorted(self.encountered_enemies)
+                        }
+                        with open (self.path +"/savedata/data{}.json".format (self.stair_save_slot +1 ),"w")as f :
+                            json .dump (d ,f )
+                        se [9 ].play ()
+                        self.floorlist [self.stair_save_slot ]=self.floor 
+                        self.save_from_stair = False
+                        self.load_accept_lock = True
                 if 6 <=self.tmr and self.tmr <=9 :
                     fade =pygame .Surface (screen .get_size (),pygame .SRCALPHA )
                     fade .fill ((0 ,0 ,0 ,255 ))
@@ -2728,9 +2860,9 @@ class Game:
                 parts = info.split("\n")
                 for i, part in enumerate(parts):
                     self.draw_text (screen ,part ,win_x + 30 ,win_y + 110 + i * 28 ,fontS ,WHITE )
-                self.draw_text (screen ,"[B]/[←] Back",win_x + 460 ,win_y + 380 ,fontS ,WHITE )
+                self.draw_text (screen ,"[B]/[Back] Back",win_x + 460 ,win_y + 380 ,fontS ,WHITE )
                 if self.tmr >5 :
-                    if key [K_b ] or key [K_LEFT ]:
+                    if key [K_b ] or key [K_BACKSPACE ]:
                         self.idx =210 
                         self.tmr =1 
 
