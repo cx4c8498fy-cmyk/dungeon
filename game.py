@@ -2206,7 +2206,8 @@ class Game:
                     self.imgBtlBG =pygame .image .load (self.path +f"/image/btlbg/btlbg{bg_idx}.png")
                     if self.boss ==1 :
                         self.init_bossbattle ()
-                        pygame .mixer .music .load (self.path +"/sound/bgm_battle_1.wav")
+                        battle_bgm ="bgm_battle_2.wav" if self.floor ==100 else "bgm_battle_1.wav"
+                        pygame .mixer .music .load (self.path +"/sound/"+battle_bgm)
                         pygame .mixer .music .play (-1 )
                         self.init_message ()
                         if self.emy_typ ==16 :
