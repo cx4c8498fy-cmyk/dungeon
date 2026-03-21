@@ -102,6 +102,7 @@ class Game:
         self.zukan_back_lock = False
         self.zukan_accept_lock = False
         self.zukan_enemy_cache = {}
+        self.encountered_enemies = set()
         self.confirm_cmd = 0
         self.load_accept_lock = False
         self.title_confirm_lock = False
@@ -745,7 +746,7 @@ class Game:
         return (base_x +off_x ,base_y +off_y ,new_w ,new_h )
 
     def start_new_game (self ):
-        self.floor =1 
+        self.floor =1
         self.set_floor_assets_for_current_floor ()
         self.make_dungeon ()
         self.put_event ()
@@ -759,6 +760,7 @@ class Game:
         self.guard =0 
         self.item_wall_claimed = set()
         self.true_episode_heard = False
+        self.encountered_enemies = set()
         self.idx =100 
         self.tmr =0 
         self.pl_shield =[[0 ,0 ],[0 ,0 ],[0 ,0 ]]
@@ -801,6 +803,7 @@ class Game:
                     self.boss_area = set()
                 self.item_wall_claimed = set(loaddata.get("item_wall_claimed", []))
                 self.true_episode_heard = bool(loaddata.get("true_episode_heard", False))
+                self.encountered_enemies = set(loaddata.get("encountered_enemies", []))
                 self.item_event_phase = 0
                 self.item_choice = 0
                 self.item_reward = None
@@ -1071,7 +1074,8 @@ class Game:
     def init_battle (self ):
         self.emy_skip_turn = False
         self.emy_typ =random .randint (0 ,EMY_APPEAR [self.floor -1 ])
-        geta =((self.floor -1 )//90 )*(9 -self.emy_typ )*10 
+        self.encountered_enemies.add(self.emy_typ)
+        geta =((self.floor -1 )//90 )*(9 -self.emy_typ )*10
         if self.emy_typ ==10 :
             self.emy_typ =22 
             geta =0 
@@ -1095,9 +1099,10 @@ class Game:
         if 90 <self.floor <100 :
             base_typ =9 +int (self.floor %10 )
         elif self.floor ==100 :
-            base_typ =20 
+            base_typ =20
         self.emy_typ =base_typ + self.change#10~
-        geta =((self.floor -1 )//90 )*(19 -self.emy_typ )*30 
+        self.encountered_enemies.add(self.emy_typ)
+        geta =((self.floor -1 )//90 )*(19 -self.emy_typ )*30
         self.imgEnemy =pygame .image .load (self.path +"/image/boss_"+str (self.emy_typ -10 )+".png")
         new_w =int (self.imgEnemy .get_width ()*1.1 )
         new_h =int (self.imgEnemy .get_height ()*1.1 )
@@ -1210,6 +1215,9 @@ class Game:
         slot = trap_id // 3 - 1
         return self.pl_sword[slot][0] > 0
 
+    def is_enemy_encountered_for_zukan(self, enemy_index):
+        return enemy_index in self.encountered_enemies
+
     def get_enemy_catalog_image(self, enemy_id):
         if enemy_id in self.zukan_enemy_cache:
             return self.zukan_enemy_cache[enemy_id]
@@ -1305,7 +1313,7 @@ class Game:
             if i < count:
                 pygame.draw.rect(bg, WHITE, [x, y, cell, cell], 1)
                 if self.zukan_kind == 0:
-                    label = str(i)
+                    label = str(i) if self.is_enemy_encountered_for_zukan(i) else "？"
                 elif self.zukan_kind == 1:
                     label = item_names[i]
                 else:
@@ -1779,7 +1787,9 @@ class Game:
                     if ent:
                         cols ,rows ,count ,_ =self.get_zukan_layout ()
                         if 0 <=self.zukan_cursor <count:
-                            if self.zukan_kind ==2 and not self.is_weapon_owned_for_zukan (self.zukan_cursor ):
+                            if self.zukan_kind ==0 and not self.is_enemy_encountered_for_zukan (self.zukan_cursor ):
+                                self.zukan_accept_lock = True
+                            elif self.zukan_kind ==2 and not self.is_weapon_owned_for_zukan (self.zukan_cursor ):
                                 self.zukan_accept_lock = True
                             else:
                                 self.zukan_detail =self.zukan_cursor
@@ -1829,7 +1839,8 @@ class Game:
                 "pl_y":self.pl_y ,
                 "boss_pos":self.boss_pos ,
                 "item_wall_claimed":sorted(self.item_wall_claimed),
-                "true_episode_heard":self.true_episode_heard
+                "true_episode_heard":self.true_episode_heard,
+                "encountered_enemies":sorted(self.encountered_enemies)
                 }
                 if self.floorlist [self.save_cmd ]>0 :
                     if self.save_confirm_lock:
