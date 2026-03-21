@@ -95,6 +95,13 @@ class Game:
 
         self.dmg_eff = 0
         self.menu_cmd = 0
+        self.zukan_menu_cmd = 0
+        self.zukan_kind = 0
+        self.zukan_cursor = 0
+        self.zukan_detail = 0
+        self.zukan_back_lock = False
+        self.zukan_accept_lock = False
+        self.zukan_enemy_cache = {}
         self.confirm_cmd = 0
         self.load_accept_lock = False
         self.title_confirm_lock = False
@@ -1164,7 +1171,7 @@ class Game:
 
     def menu_command (self ,bg ,fnt ,key ):
         ent =False 
-        options = ["Save data", "Back to title", "Close menu"]
+        options = ["データをセーブする", "図鑑を見る", "タイトルに戻る", "メニューを閉じる"]
         if key [K_UP ]and self.menu_cmd >0 :
             self.menu_cmd -=1 
         if key [K_DOWN ]and self.menu_cmd <len (options )-1 :
@@ -1184,6 +1191,174 @@ class Game:
                 self.draw_text (bg ,"▶",win_x +20 ,y ,fnt ,WHITE )
             self.draw_text (bg ,label ,win_x +50 ,y ,fnt ,WHITE )
         return ent 
+
+    def get_zukan_layout(self):
+        if self.zukan_kind == 0:
+            return 4, 7, len(EMY_NAME), "敵の図鑑"
+        if self.zukan_kind == 1:
+            return 3, 1, 3, "アイテムの図鑑"
+        return 3, 3, 9, "武器の図鑑"
+
+    def is_weapon_owned_for_zukan(self, weapon_index):
+        trap_id = weapon_index + 2
+        if trap_id % 3 == 2:
+            slot = trap_id // 3
+            return self.pl_shield[slot][0] > 0
+        if trap_id % 3 == 0:
+            slot = trap_id // 3 - 1
+            return self.pl_armor[slot][0] > 0
+        slot = trap_id // 3 - 1
+        return self.pl_sword[slot][0] > 0
+
+    def get_enemy_catalog_image(self, enemy_id):
+        if enemy_id in self.zukan_enemy_cache:
+            return self.zukan_enemy_cache[enemy_id]
+        paths = [self.path + f"/image/enemy{enemy_id}_{i}.png" for i in range(4)]
+        if enemy_id >= 10:
+            paths.append(self.path + f"/image/boss_{enemy_id - 10}.png")
+        img = None
+        for path in paths:
+            if os.path.exists(path):
+                img = pygame.image.load(path)
+                break
+        if img is None:
+            img = pygame.Surface((240, 240), pygame.SRCALPHA)
+            img.fill((40, 40, 40, 255))
+            pygame.draw.rect(img, WHITE, [0, 0, 240, 240], 2)
+        self.zukan_enemy_cache[enemy_id] = img
+        return img
+
+    def zukan_category_command(self, bg, fnt, key):
+        ent = False
+        options = ["敵の図鑑", "アイテムの図鑑", "武器の図鑑"]
+        if key[K_UP] and self.zukan_menu_cmd > 0:
+            self.zukan_menu_cmd -= 1
+        if key[K_DOWN] and self.zukan_menu_cmd < len(options) - 1:
+            self.zukan_menu_cmd += 1
+        if key[K_RETURN] or key[K_a]:
+            ent = True
+        win_w = 360
+        line_h = 32
+        win_h = line_h * len(options) + 20
+        screen_w, screen_h = bg.get_size()
+        win_x = (screen_w - win_w) // 2
+        win_y = (screen_h - win_h) // 2
+        pygame.draw.rect(bg, BLACK, [win_x, win_y, win_w, win_h])
+        pygame.draw.rect(bg, WHITE, [win_x, win_y, win_w, win_h], 2)
+        for i, label in enumerate(options):
+            y = win_y + 10 + i * line_h
+            if self.zukan_menu_cmd == i:
+                self.draw_text(bg, "▶", win_x + 20, y, fnt, WHITE)
+            self.draw_text(bg, label, win_x + 50, y, fnt, WHITE)
+        return ent
+
+    def zukan_grid_command(self, bg, fnt, key):
+        ent = False
+        cols, rows, count, title = self.get_zukan_layout()
+        if count <= 0:
+            return ent
+        if self.zukan_cursor >= count:
+            self.zukan_cursor = count - 1
+        row = self.zukan_cursor // cols
+        col = self.zukan_cursor % cols
+        if key[K_UP] and row > 0:
+            nxt = self.zukan_cursor - cols
+            if nxt < count:
+                self.zukan_cursor = nxt
+        if key[K_DOWN] and row < rows - 1:
+            nxt = self.zukan_cursor + cols
+            if nxt < count:
+                self.zukan_cursor = nxt
+        if key[K_LEFT] and col > 0:
+            nxt = self.zukan_cursor - 1
+            if nxt < count:
+                self.zukan_cursor = nxt
+        if key[K_RIGHT] and col < cols - 1:
+            nxt = self.zukan_cursor + 1
+            if nxt < count:
+                self.zukan_cursor = nxt
+        if key[K_RETURN] or key[K_a]:
+            ent = True
+
+        cell = 72
+        gap = 10
+        pad = 20
+        title_h = 30
+        win_w = pad * 2 + cols * cell + (cols - 1) * gap
+        win_h = pad * 2 + rows * cell + (rows - 1) * gap + title_h
+        screen_w, screen_h = bg.get_size()
+        win_x = (screen_w - win_w) // 2
+        win_y = (screen_h - win_h) // 2
+        pygame.draw.rect(bg, BLACK, [win_x, win_y, win_w, win_h])
+        pygame.draw.rect(bg, WHITE, [win_x, win_y, win_w, win_h], 2)
+        self.draw_text(bg, title, win_x + 20, win_y + 8, fnt, WHITE)
+
+        start_x = win_x + pad
+        start_y = win_y + pad + title_h
+        total = cols * rows
+        item_names = ["傷薬", "爆弾", "守護"]
+        for i in range(total):
+            r = i // cols
+            c = i % cols
+            x = start_x + c * (cell + gap)
+            y = start_y + r * (cell + gap)
+            if i < count:
+                pygame.draw.rect(bg, WHITE, [x, y, cell, cell], 1)
+                if self.zukan_kind == 0:
+                    label = str(i)
+                elif self.zukan_kind == 1:
+                    label = item_names[i]
+                else:
+                    label = TRAP_NAME[i + 2] if self.is_weapon_owned_for_zukan(i) else "？"
+                self.draw_text(bg, label, x + 8, y + cell // 2 - 10, fnt, WHITE)
+            else:
+                pygame.draw.rect(bg, (80, 80, 80), [x, y, cell, cell], 1)
+            if i == self.zukan_cursor:
+                pygame.draw.rect(bg, (255, 220, 90), [x, y, cell, cell], 3)
+
+        return ent
+
+    def draw_zukan_detail(self, bg, fnt):
+        win_w = 760
+        win_h = 430
+        screen_w, screen_h = bg.get_size()
+        win_x = (screen_w - win_w) // 2
+        win_y = (screen_h - win_h) // 2
+        pygame.draw.rect(bg, BLACK, [win_x, win_y, win_w, win_h])
+        pygame.draw.rect(bg, WHITE, [win_x, win_y, win_w, win_h], 2)
+
+        if self.zukan_kind == 0:
+            enemy_id = self.zukan_detail
+            name = EMY_NAME[enemy_id] if 0 <= enemy_id < len(EMY_NAME) else f"Enemy {enemy_id}"
+            info = ENEMY_INFO.get(enemy_id, "情報が登録されていません。")
+            img = self.get_enemy_catalog_image(enemy_id)
+            max_w = 260
+            max_h = 260
+            scale = min(max_w / max(1, img.get_width()), max_h / max(1, img.get_height()))
+            draw_img = pygame.transform.scale(img, (max(1, int(img.get_width() * scale)), max(1, int(img.get_height() * scale))))
+            img_x = win_x + 30 + (max_w - draw_img.get_width()) // 2
+            img_y = win_y + 90 + (max_h - draw_img.get_height()) // 2
+            bg.blit(draw_img, [img_x, img_y])
+            pygame.draw.rect(bg, WHITE, [win_x + 30, win_y + 90, max_w, max_h], 1)
+        elif self.zukan_kind == 1:
+            item_names = ["傷薬", "爆弾", "守護"]
+            item_id = self.zukan_detail
+            name = item_names[item_id] if 0 <= item_id < len(item_names) else f"Item {item_id}"
+            info = ITEM_INFO.get(item_id, "情報が登録されていません。")
+            pygame.draw.rect(bg, WHITE, [win_x + 30, win_y + 90, 260, 260], 2)
+            self.draw_text(bg, name, win_x + 70, win_y + 210, fnt, WHITE)
+        else:
+            weapon_id = self.zukan_detail + 2
+            name = TRAP_NAME[weapon_id] if 0 <= weapon_id < len(TRAP_NAME) else f"Weapon {weapon_id}"
+            info = WEAPON_INFO.get(weapon_id, "情報が登録されていません。")
+            pygame.draw.rect(bg, WHITE, [win_x + 30, win_y + 90, 260, 260], 2)
+            self.draw_text(bg, name, win_x + 55, win_y + 210, fnt, WHITE)
+
+        self.draw_text(bg, name, win_x + 320, win_y + 45, self.get_font(22), WHITE)
+        parts = str(info).split("\n")
+        for i, part in enumerate(parts):
+            self.draw_text(bg, part, win_x + 320, win_y + 110 + i * 28, fnt, WHITE)
+        self.draw_text(bg, "[B]/[Back] Back", win_x + win_w - 180, win_y + win_h - 36, fnt, WHITE)
 
     def save_command (self ,bg ,fnt ,key ):
         ent =False 
@@ -1543,14 +1718,85 @@ class Game:
                         if self.menu_cmd ==0 :#savedata
                             self.load_accept_lock = True
                             self.idx =40 
-                        if self.menu_cmd ==1 :#go_title
+                        elif self.menu_cmd ==1 :#zukan
+                            self.zukan_menu_cmd =0
+                            self.zukan_kind =0
+                            self.zukan_cursor =0
+                            self.zukan_detail =0
+                            self.zukan_accept_lock = True
+                            self.idx =31
+                            self.tmr =0
+                        elif self.menu_cmd ==2 :#go_title
                             self.confirm_cmd =0 
                             self.title_confirm_lock = True
                             self.idx =60 
                             self.tmr =0 
-                        if self.menu_cmd ==2 :#close
+                        elif self.menu_cmd ==3 :#close
                             self.idx =100 
                             self.tmr =0 
+
+            elif self.idx ==31 :# 図鑑カテゴリ選択
+                self.draw_dungeon (screen ,fontS )
+                if self.zukan_back_lock:
+                    if not (key [K_b ]or key [K_BACKSPACE ]):
+                        self.zukan_back_lock = False
+                if self.zukan_accept_lock:
+                    if not (key [K_RETURN ]or key [K_a ]):
+                        self.zukan_accept_lock = False
+                if (key [K_b ]or key [K_BACKSPACE ]) and not self.zukan_back_lock:
+                    self.zukan_back_lock = True
+                    self.menu_back_lock = True
+                    self.idx =30
+                    self.tmr =0
+                else:
+                    ent = self.zukan_category_command (screen ,fontS ,key )
+                    if self.zukan_accept_lock:
+                        ent = False
+                    if ent:
+                        self.zukan_kind = self.zukan_menu_cmd
+                        self.zukan_cursor =0
+                        self.zukan_detail =0
+                        self.zukan_accept_lock = True
+                        self.idx =32
+                        self.tmr =0
+
+            elif self.idx ==32 :# 図鑑グリッド
+                self.draw_dungeon (screen ,fontS )
+                if self.zukan_back_lock:
+                    if not (key [K_b ]or key [K_BACKSPACE ]):
+                        self.zukan_back_lock = False
+                if self.zukan_accept_lock:
+                    if not (key [K_RETURN ]or key [K_a ]):
+                        self.zukan_accept_lock = False
+                if (key [K_b ]or key [K_BACKSPACE ]) and not self.zukan_back_lock:
+                    self.zukan_back_lock = True
+                    self.idx =31
+                    self.tmr =0
+                else:
+                    ent = self.zukan_grid_command (screen ,fontS ,key )
+                    if self.zukan_accept_lock:
+                        ent = False
+                    if ent:
+                        cols ,rows ,count ,_ =self.get_zukan_layout ()
+                        if 0 <=self.zukan_cursor <count:
+                            if self.zukan_kind ==2 and not self.is_weapon_owned_for_zukan (self.zukan_cursor ):
+                                self.zukan_accept_lock = True
+                            else:
+                                self.zukan_detail =self.zukan_cursor
+                                self.zukan_accept_lock = True
+                                self.idx =33
+                                self.tmr =0
+
+            elif self.idx ==33 :# 図鑑詳細
+                self.draw_dungeon (screen ,fontS )
+                self.draw_zukan_detail (screen ,fontS )
+                if self.zukan_back_lock:
+                    if not (key [K_b ]or key [K_BACKSPACE ]):
+                        self.zukan_back_lock = False
+                if (key [K_b ]or key [K_BACKSPACE ]) and not self.zukan_back_lock:
+                    self.zukan_back_lock = True
+                    self.idx =32
+                    self.tmr =0
 
             elif self.idx ==40 :#セーブデータ選択
                 self.draw_dungeon (screen ,fontS )
@@ -2264,9 +2510,17 @@ class Game:
                 if self.tmr ==1 :
                     self.set_message (f"　{self.emy_name}に　攻撃！")
                     se [0 ].play ()
+                if 2 <=self.tmr <=4 :
+                    screen_w =screen .get_size ()[0 ]
+                    eff_x =screen_w //2 +260 -self.tmr *120 
+                    eff_y =-100 +self.tmr *120 
+                    atk_effect =self.imgEffect [3 ]if self.pl_sword [0 ][0 ]==1 else self.imgEffect [0 ]
+                    screen .blit (atk_effect ,[eff_x ,eff_y ])
+                if self.tmr ==4 :
                     if self.pl_sword [0 ][0 ]==1 :
                         if random .random ()>0.7 :
                             cri =1 
+                            se [0 ].play ()
                             self.set_message ("　会心の一撃！")
                     dmg =self.pl_str +random .randint (0 ,9 )-EMY_APRO [self.emy_typ ]
                     dmg =int (dmg *(1 +0.01 *cri *self.pl_sword [0 ][1 ]))+2 *self.pl_sword [0 ][1 ]+self.pl_sword [2 ][1 ]
@@ -2277,12 +2531,6 @@ class Game:
                             dmg =int (dmg /2 )
                     if self.guard_remain >0 and self.emy_typ ==20 :
                         dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
-                if 2 <=self.tmr <=4 :
-                    screen_w =screen .get_size ()[0 ]
-                    eff_x =screen_w //2 +260 -self.tmr *120 
-                    eff_y =-100 +self.tmr *120 
-                    atk_effect =self.imgEffect [3 ]if self.pl_sword [0 ][0 ]==1 else self.imgEffect [0 ]
-                    screen .blit (atk_effect ,[eff_x ,eff_y ])
                 if self.tmr ==5 :
                     self.emy_blink =5 
                     self.set_message (f"　{dmg}　ダメージ！")
@@ -2517,7 +2765,7 @@ class Game:
                         self.set_message (f"　{self.emy_name}の　攻撃！")
                         se [0 ].play ()
                         self.emy_step =30 
-                if self.tmr ==9 :
+                if self.tmr ==8 :
                     if self.pl_shield [0 ][0 ]==1 :
                         if random .random ()>0.7 and self.emy_typ !=20 :
                             pro =0.3 +0.01 *self.pl_shield [0 ][1 ]
@@ -2539,6 +2787,7 @@ class Game:
                             dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
                     if self.emy_typ ==2 or self.emy_typ ==10 or (self.emy_typ ==18 and self.boss_mode == "normal"):
                         if random .random ()>0.7 :
+                            se [0 ].play ()
                             self.set_message ("　会心の一撃！")
                             dmg =int (dmg *{2:1.5, 10:2, 18:2.5}[self.emy_typ] )
                     if self.emy_typ ==17 :
