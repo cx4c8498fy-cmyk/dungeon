@@ -1652,7 +1652,7 @@ class Game:
 
             if self.idx ==0 :# タイトル画面
                 if self.tmr ==1 :
-                    pygame .mixer .music .load (self.path +"/sound/ohd_bgm_title.wav")
+                    pygame .mixer .music .load (self.path +"/sound/bgm_title.wav")
                     pygame .mixer .music .play (-1 )
                     self.title_mode = 0
                     self.title_cmd = 0
