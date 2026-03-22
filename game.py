@@ -546,13 +546,15 @@ class Game:
         if not is_boss_floor :
             for x ,y in take_cells (5 ):
                 self.dungeon [y ][x ]=1
-            for x ,y in take_cells (3 ):
-                self.dungeon [y ][x ]=4
+            if self.floor >=15 :
+                for x ,y in take_cells (3 ):
+                    self.dungeon [y ][x ]=4
         if is_boss_floor :
             for x ,y in take_cells (10 ):
                 self.dungeon [y ][x ]=1
-            for x ,y in take_cells (5 ):
-                self.dungeon [y ][x ]=4
+            if self.floor >=15 :
+                for x ,y in take_cells (5 ):
+                    self.dungeon [y ][x ]=4
         cocoon_target =35 if is_boss_floor else 20
         for x ,y in take_cells (cocoon_target ):
             self.dungeon [y ][x ]=2
@@ -613,6 +615,7 @@ class Game:
         if self.dungeon [self.pl_y ][self.pl_x ]==1 :# 宝箱に載った
             self.dungeon [self.pl_y ][self.pl_x ]=0 
             self.treasure =random .choice ([0 ,0 ,1 ,1 ,1 ,2 ])
+            self.item_reward_count =1
             if self.treasure ==0 :
                 self.potion =self.potion +1 
             if self.treasure ==1 :
@@ -673,6 +676,7 @@ class Game:
             r =random .randint (0 ,99 )
             if r <35 :# 食料
                 self.treasure =random .choice ([3 ,3 ,3 ,3 ,3 ,4 ,4 ,4 ,4 ,4 ,5 ])
+                self.item_reward_count =1
                 if self.treasure ==3 :
                     self.pl_life =min (self.pl_life +40 ,self.pl_lifemax )
                 if self.treasure ==4 :
@@ -1171,9 +1175,9 @@ class Game:
             fx = self.emy_x + self.imgEnemy.get_width() - self.imgFire.get_width()
             fy = self.emy_y + self.emy_step - self.imgFire.get_height() // 2
             bg .blit (self.imgFire ,[fx ,fy ])
-            self.draw_text (bg ,f"火傷",bg_left +40 ,bg_top +82 ,fnt ,WHITE )
+            self.draw_text (bg ,f"火傷",bg_left +40 ,bg_top +82 ,fnt ,RED )
         if self.pow_up >1 :
-            self.draw_text (bg ,f"力↑",bg_left +40 ,bg_top +82 ,fnt ,WHITE )
+            self.draw_text (bg ,f"力↑",bg_left +40 ,bg_top +82 ,fnt ,RED )
         if self.emy_typ ==16 or self.emy_typ ==21 :
             self.draw_text (bg ,"Magia : "+str (self.madoka )+"/1000",bg_left +40 ,bg_top +82 ,fnt ,WHITE )
         self.draw_bar (bg ,bg_left +30 ,bg_top +60 ,200 ,10 ,self.emy_life ,self.emy_lifemax )
@@ -1185,9 +1189,9 @@ class Game:
         para_y =bg_top +bg_h -para_h -para_margin_bottom
         status_y =para_y -35
         if self.guard_remain >0 :
-            self.draw_text (bg ,f"守護 {self.guard_remain}",para_x +30 ,status_y ,fnt ,WHITE )
+            self.draw_text (bg ,f"守護 {'・'*self.guard_remain}",para_x +30 ,status_y ,fnt ,GREEN )
         if self.poison >0 :
-            self.draw_text (bg ,f"毒 {self.poison}",para_x +100 ,status_y ,fnt ,WHITE )
+            self.draw_text (bg ,f"毒 {'・'*self.poison}",para_x +100 ,status_y ,fnt ,COPPER )
         for i in range (10 ):# 戦闘メッセージの表示
             self.draw_text (bg ,self.message [i ],msg_x +30 ,msg_y +40 +i *48 ,fnt ,WHITE )
         if self.boss ==0 :
@@ -1562,7 +1566,7 @@ class Game:
             if random .random ()>0.7 :
                 cure =self.pl_armor [0 ][1 ]*2 -random .randint (0 ,self.pl_armor [0 ][1 ]//3 )
                 self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
-                self.set_message ("　鎧の癒し +{}" .format (cure ))
+                self.set_message ("　鎧の癒し 生命+{}" .format (cure ))
                 self.se [2 ].play ()
             else :
                 self.tmr =self.tmr +1 
@@ -1570,7 +1574,7 @@ class Game:
             if random .random ()>0.7 :
                 mgup =int (10 +self.pl_armor [1 ][1 ]*0.7 +random .randint (0 ,self.pl_armor [1 ][1 ]//5 ))
                 self.pl_mag =self.pl_mag +mgup 
-                self.set_message ("　鎧の魔力 +{}" .format (mgup ))
+                self.set_message ("　鎧の魔力 魔力+{}" .format (mgup ))
                 self.se [9 ].play ()
             else :
                 self.tmr =self.tmr +1 
@@ -2229,7 +2233,10 @@ class Game:
                 dialog = pygame.Surface((400, 100), pygame.SRCALPHA)
                 dialog.fill((0, 0, 0, 100))
                 screen.blit(dialog, [x-100, y-40])
-                self.draw_text (screen ,TRE_NAME [self.treasure ],x ,y ,font ,WHITE )
+                item_text =TRE_NAME [self.treasure ]
+                if self.treasure in (0 ,1 ,2 ):
+                    item_text =f"{item_text} x {self.item_reward_count}"
+                self.draw_text (screen ,item_text ,x ,y ,font ,WHITE )
                 if self.tmr ==10 :
                     self.idx =100 
 

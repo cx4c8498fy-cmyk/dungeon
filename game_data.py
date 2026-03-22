@@ -196,7 +196,7 @@ EVENT_TALK = [
 ]
 MENU = ["データをセーブする", "図鑑を見る", "タイトルに戻る", "メニューを閉じる"]
 # COMMAND = ["[A]ttack", "[M]agic", "[P]otion", "[B]laze gem", "[G]uard", "[R]un", "[I]nfo"]
-TRE_NAME = ["傷薬 x 1", "爆弾 x 1", "守護 x 1", "食料 生命+40", "魔水 生命+20 魔力+40", "魔力のたね 魔力+120"]
+TRE_NAME = ["傷薬", "爆弾", "守護", "食料 生命+40", "魔水 生命+20 魔力+40", "魔力のたね 魔力+120"]
 TRAP_NAME = [
     "Damege Floor!",
     "Cure Floor",
