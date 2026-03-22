@@ -72,6 +72,7 @@ class Game:
         self.pl_str = 0
         self.pl_mag = 0
         self.pl_exp = 0
+        self.pl_level = 1
         self.pl_shield = [[0, 0], [0, 0], [0, 0]]
         self.pl_armor = [[0, 0], [0, 0], [0, 0]]
         self.pl_sword = [[0, 0], [0, 0], [0, 0]]
@@ -760,6 +761,7 @@ class Game:
         self.pl_str =100 
         self.pl_mag =0 
         self.pl_exp =0 
+        self.pl_level =1 
         self.potion =0 
         self.blazegem =0 
         self.guard =0 
@@ -796,6 +798,7 @@ class Game:
                 self.pl_str =loaddata ["pl_str"]
                 self.pl_mag =loaddata ["pl_mag"]
                 self.pl_exp =loaddata ["pl_exp"]
+                self.pl_level =loaddata .get ("pl_level",1 )
                 self.potion =loaddata ["potion"]
                 self.blazegem =loaddata ["blazegem"]
                 self.guard =loaddata ["guard"]
@@ -1032,30 +1035,20 @@ class Game:
         # pygame .draw .rect (win ,WHITE ,[0 ,0 ,W ,H ],2 )
         bg .blit (win ,[X ,Y ])
 
-        self.draw_text (bg ,"傷薬",X +10 ,Y +8 ,fnt ,WHITE )
-        self.draw_text (bg ,str (self.potion ),X +55 ,Y +8 ,fnt ,WHITE )
-        self.draw_text (bg ,"爆弾",X +110 ,Y +8 ,fnt ,WHITE )
-        self.draw_text (bg ,str (self.blazegem ),X +155 ,Y +8 ,fnt ,WHITE )
-        self.draw_text (bg ,"守護",X +210 ,Y +8 ,fnt ,WHITE )
-        self.draw_text (bg ,str (self.guard ),X +255 ,Y +8 ,fnt ,WHITE )
+        self.draw_text (bg ,f"傷薬: {self.potion}",X +10 ,Y +8 ,fnt ,WHITE )
+        self.draw_text (bg ,f"爆弾: {self.blazegem}",X +110 ,Y +8 ,fnt ,WHITE )
+        self.draw_text (bg ,f"守護: {self.guard}",X +210 ,Y +8 ,fnt ,WHITE )
 
         col =WHITE 
         if self.pl_life <int (self.pl_lifemax /5 )and self.tmr %2 ==0 :col =RED 
-        self.draw_text (bg ,"生命",X +10 ,Y +44 ,fnt ,WHITE )
-        self.draw_text (bg ,"{}/{}".format (self.pl_life ,self.pl_lifemax ),X +73 ,Y +44 ,fnt ,col )
-        self.draw_text (bg ,"攻撃",X +10 ,Y +69 ,fnt ,WHITE )
-        self.draw_text (bg ,str (self.pl_str ),X +73 ,Y +69 ,fnt ,WHITE )
-        self.draw_text (bg ,"魔力",X +10 ,Y +95 ,fnt ,WHITE )
-        self.draw_text (bg ,str (self.pl_mag ),X +73 ,Y +95 ,fnt ,WHITE )
-        self.draw_text (bg ,"経験",X +10 ,Y +120 ,fnt ,WHITE )
-        self.draw_text (bg ,str (self.pl_exp )+"/"+str ((self.pl_lifemax -250 )*20 ),X +73 ,Y +120 ,fnt ,WHITE )
+        self.draw_text (bg ,f"生命　{self.pl_life}/{self.pl_lifemax}",X +10 ,Y +40 ,fnt ,col )
+        self.draw_text (bg ,f"攻撃　{self.pl_str}",X +10 ,Y +65 ,fnt ,WHITE )
+        self.draw_text (bg ,f"魔力　{self.pl_mag}",X +10 ,Y +90 ,fnt ,WHITE )
+        self.draw_text (bg ,f"レベル　{self.pl_level}　　経験　{self.pl_exp}/{(self.pl_lifemax -250 )*20}",X +10 ,Y +115 ,fnt ,WHITE )
 
-        self.draw_text (bg ,"盾",X +180 ,Y +46 ,fnt ,WHITE )
-        self.draw_text (bg ,"{}-{}-{}".format (self.pl_shield [0 ][1 ],self.pl_shield [1 ][1 ],self.pl_shield [2 ][1 ]),X +225 ,Y +46 ,fnt ,WHITE )
-        self.draw_text (bg ,"鎧",X +180 ,Y +71 ,fnt ,WHITE )
-        self.draw_text (bg ,"{}-{}-{}".format (self.pl_armor [0 ][1 ],self.pl_armor [1 ][1 ],self.pl_armor [2 ][1 ]),X +225 ,Y +71 ,fnt ,WHITE )
-        self.draw_text (bg ,"剣",X +180 ,Y +97 ,fnt ,WHITE )
-        self.draw_text (bg ,"{}-{}-{}".format (self.pl_sword [0 ][1 ],self.pl_sword [1 ][1 ],self.pl_sword [2 ][1 ]),X +225 ,Y +97 ,fnt ,WHITE )
+        self.draw_text (bg ,f"盾　{self.pl_shield[0][1]}-{self.pl_shield[1][1]}-{self.pl_shield[2][1]}",X +180 ,Y +40 ,fnt ,WHITE )
+        self.draw_text (bg ,f"鎧　{self.pl_armor[0][1]}-{self.pl_armor[1][1]}-{self.pl_armor[2][1]}",X +180 ,Y +65 ,fnt ,WHITE )
+        self.draw_text (bg ,f"剣　{self.pl_sword[0][1]}-{self.pl_sword[1][1]}-{self.pl_sword[2][1]}",X +180 ,Y +90 ,fnt ,WHITE )
 
     def update_minimap_grid (self ,new_seen ):
         if self.map_grid_surface is None or self.map_grid_surface.get_size ()!=(DUNGEON_W ,DUNGEON_H ):
@@ -1440,8 +1433,8 @@ class Game:
     def stair_choice_command (self ,bg ,fnt ,key ,enable_input =True ):
         ent =False 
         options =[
-            "下の階に移動する",
-            "データをセーブして下の階に移動する",
+            "下の階に移動",
+            "下の階に移動＋データセーブ",
             "移動しない",
         ]
         if enable_input:
@@ -1734,6 +1727,7 @@ class Game:
                             self.pl_str =loaddata ["pl_str"]
                             self.pl_mag =loaddata ["pl_mag"]
                             self.pl_exp =loaddata ["pl_exp"]
+                            self.pl_level =loaddata .get ("pl_level",1 )
                             self.potion =loaddata ["potion"]
                             self.blazegem =loaddata ["blazegem"]
                             self.guard =loaddata ["guard"]
@@ -1891,6 +1885,7 @@ class Game:
                 "pl_mag":self.pl_mag ,
                 "pl_str":self.pl_str ,
                 "pl_exp":self.pl_exp ,
+                "pl_level":self.pl_level ,
                 "potion":self.potion ,
                 "blazegem":self.blazegem ,
                 "guard":self.guard ,
@@ -2190,6 +2185,7 @@ class Game:
                         "pl_mag":self.pl_mag ,
                         "pl_str":self.pl_str ,
                         "pl_exp":self.pl_exp ,
+                        "pl_level":self.pl_level ,
                         "potion":self.potion ,
                         "blazegem":self.blazegem ,
                         "guard":self.guard ,
@@ -3286,6 +3282,7 @@ class Game:
                 if self.tmr ==1 :
                     self.set_message ("レベルアップ！")
                     se [4 ].play ()
+                    self.pl_level =self.pl_level +1 
                     lif_p =random .randint (10 ,20 )
                     str_p =random .randint (7 ,9 )
                     mag_p =random .randint (15 ,30 )
