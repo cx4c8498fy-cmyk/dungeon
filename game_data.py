@@ -61,7 +61,7 @@ EPILOGUE_LINES = [
 END_ROLL = [
     "監督：KOYO KUZE",
     "MUSIC：KOYO KUZE",
-    "イラスト：KOYO KUZE/RIN",
+    "イラスト：KOYO KUZE/RIN/KYOSUKE",
     "プログラム：KOYO KUZE",
     "企画・制作：KOYO KUZE",
 ]

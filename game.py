@@ -112,10 +112,13 @@ class Game:
         self.menu_accept_lock = False
         self.save_cmd = 0
         self.save_from_stair = False
+        self.save_from_boss = False
         self.stair_save_slot = 0
         self.stair_choice_cmd = 0
         self.stair_prompted = False
         self.stair_choice_input_lock = False
+        self.boss_save_cmd = 0
+        self.boss_save_input_lock = False
         self.btl_cmd = 0
         self.pow_up = 1
         self.poison = 0
@@ -770,10 +773,13 @@ class Game:
         self.blazegem =0 
         self.guard =0 
         self.save_from_stair = False
+        self.save_from_boss = False
         self.stair_save_slot = 0
         self.stair_choice_cmd = 0
         self.stair_prompted = False
         self.stair_choice_input_lock = False
+        self.boss_save_cmd = 0
+        self.boss_save_input_lock = False
         self.item_wall_claimed = set()
         self.true_episode_heard = False
         self.encountered_enemies = set()
@@ -807,10 +813,13 @@ class Game:
                 self.blazegem =loaddata ["blazegem"]
                 self.guard =loaddata ["guard"]
                 self.save_from_stair = False
+                self.save_from_boss = False
                 self.stair_save_slot = 0
                 self.stair_choice_cmd = 0
                 self.stair_prompted = False
                 self.stair_choice_input_lock = False
+                self.boss_save_cmd = 0
+                self.boss_save_input_lock = False
                 self.pl_shield =loaddata ["shield"]
                 self.pl_armor =loaddata ["armor"]
                 self.pl_sword =loaddata ["sword"]
@@ -1463,6 +1472,52 @@ class Game:
             self.draw_text (bg ,label ,win_x +50 ,y ,fnt ,WHITE )
         return ent 
 
+    def boss_save_choice_command (self ,bg ,fnt ,key ,enable_input =True ):
+        ent =False 
+        options =["はい","いいえ"]
+        if enable_input:
+            if key [K_UP ]and self.boss_save_cmd >0 :
+                self.boss_save_cmd -=1 
+            if key [K_DOWN ]and self.boss_save_cmd <len (options )-1 :
+                self.boss_save_cmd +=1 
+            if key [K_RETURN ]or key [K_a ]:
+                ent =True 
+        view_rect =getattr (self ,"dungeon_view_rect",None )
+        if view_rect :
+            view_left ,view_top ,view_w ,view_h =view_rect
+        else :
+            view_left =0 
+            view_top =0 
+            view_w ,view_h =bg .get_size ()
+        scale_x =view_w /880 
+        scale_y =view_h /720 
+        dlg_x =view_left +int (40 *scale_x )
+        dlg_y =view_top +int (525 *scale_y )
+        dlg_w =max (1 ,int (800 *scale_x ))
+        dlg_h =max (1 ,int (160 *scale_y ))
+        text_x =view_left +int (60 *scale_x )
+        text_y =view_top +int (560 *scale_y )
+        dialog =pygame .Surface ((dlg_w ,dlg_h ),pygame .SRCALPHA )
+        dialog .fill ((0 ,0 ,0 ,255 ))
+        bg .blit (dialog ,[dlg_x ,dlg_y ])
+        pygame .draw .rect (bg ,WHITE ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ],2 )
+        self.draw_text (bg ,"セーブしますか？",text_x ,text_y ,fnt ,WHITE )
+        sel_line_h =max (1 ,int (25 *scale_y ))
+        box_h =max (1 ,int (15 *scale_y ))+sel_line_h *len (options )
+        box_w =max (1 ,int (280 *scale_x ))
+        box_x =view_left +int (520 *scale_x )
+        box_y =view_top +int (420 *scale_y )
+        arrow_x =view_left +int (540 *scale_x )
+        text_sel_x =view_left +int (560 *scale_x )
+        arrow_y =view_top +int (435 *scale_y )
+        pygame .draw .rect (bg ,BLACK ,[box_x ,box_y ,box_w ,box_h ])
+        pygame .draw .rect (bg ,WHITE ,[box_x ,box_y ,box_w ,box_h ],2 )
+        for i, option in enumerate(options):
+            if i == self.boss_save_cmd:
+                self.draw_text (bg ,"▶",arrow_x ,arrow_y + i *sel_line_h ,fnt ,WHITE )
+            self.draw_text (bg ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fnt ,WHITE )
+        return ent 
+
     def battle_command (self ,bg ,fnt ,key ):
         ent =False 
         labels = ["攻撃", "魔法", "傷薬", "爆弾", "守護", "逃走", "情報"]
@@ -1864,14 +1919,22 @@ class Game:
                     self.tmr =0
 
             elif self.idx ==40 :#セーブデータ選択
-                self.draw_dungeon (screen ,fontS )
+                if self.save_from_boss:
+                    screen .fill (BLACK )
+                else:
+                    self.draw_dungeon (screen ,fontS )
                 if self.save_command (screen ,fontS ,key )==True :
                     self.confirm_cmd =0 
                     self.save_confirm_lock = True
                     self.idx =50 
                     self.tmr =0 
                 if key [K_b ]==1 or key [K_BACKSPACE ]==1 :
-                    if self.save_from_stair:
+                    if self.save_from_boss:
+                        self.save_from_boss = False
+                        self.boss_save_input_lock = True
+                        self.idx =112 
+                        self.tmr =0 
+                    elif self.save_from_stair:
                         self.save_from_stair = False
                         self.stair_choice_input_lock = True
                         self.idx =111 
@@ -1881,7 +1944,10 @@ class Game:
                         self.idx =30 
 
             elif self.idx ==50 :#確認とセーブ
-                self.draw_dungeon (screen ,fontS )
+                if self.save_from_boss:
+                    screen .fill (BLACK )
+                else:
+                    self.draw_dungeon (screen ,fontS )
                 d ={
                 "floor":self.floor ,
                 "pl_lifemax":self.pl_lifemax ,
@@ -1904,6 +1970,10 @@ class Game:
                 "true_episode_heard":self.true_episode_heard,
                 "encountered_enemies":sorted(self.encountered_enemies)
                 }
+                if key [K_b ]==1 or key [K_BACKSPACE ]==1 :
+                    self.load_accept_lock = True
+                    self.idx =40
+                    self.tmr =0
                 if self.floorlist [self.save_cmd ]>0 :
                     if self.save_confirm_lock:
                         if not (key [K_RETURN ]or key [K_a ]):
@@ -1938,7 +2008,7 @@ class Game:
                             self.draw_text (screen ,"▶",win_x +20 ,y ,fontS ,WHITE )
                         self.draw_text (screen ,label ,win_x +50 ,y ,fontS ,WHITE )
                     if confirm_yes :
-                        if self.save_from_stair:
+                        if self.save_from_stair or self.save_from_boss:
                             self.stair_save_slot = self.save_cmd
                             self.idx =110 
                             self.tmr =0 
@@ -1953,7 +2023,7 @@ class Game:
                         self.load_accept_lock = True
                         self.idx =40 
                 else :
-                    if self.save_from_stair:
+                    if self.save_from_stair or self.save_from_boss:
                         self.stair_save_slot = self.save_cmd
                         self.idx =110 
                         self.tmr =0 
@@ -2156,6 +2226,28 @@ class Game:
                         self.idx =100 
                         self.tmr =0 
 
+            elif self.idx ==112 :# ボス戦後セーブ確認
+                screen .fill (BLACK )
+                if self.boss_save_input_lock:
+                    self.boss_save_choice_command (screen ,fontS ,key ,enable_input =False )
+                    if not (key [K_UP ]or key [K_DOWN ]or key [K_LEFT ]or key [K_RIGHT ]or key [K_RETURN ]or key [K_a ]or key [K_b ]or key [K_BACKSPACE ]):
+                        self.boss_save_input_lock = False
+                else:
+                    if self.boss_save_choice_command (screen ,fontS ,key )==True :
+                        if self.boss_save_cmd ==0 :
+                            self.save_from_boss = True
+                            self.load_accept_lock = True
+                            self.idx =40 
+                            self.tmr =0 
+                        else :
+                            self.save_from_boss = False
+                            self.idx =110 
+                            self.tmr =0 
+                    # if key [K_b ]or key [K_BACKSPACE ]:
+                    #     self.save_from_boss = False
+                    #     self.idx =110 
+                    #     self.tmr =0 
+
             elif self.idx ==110 :# 画面切り替え
                 self.draw_dungeon (screen ,fontS )
                 if self.floor_title_active and self.floor_title_pos :
@@ -2181,7 +2273,7 @@ class Game:
                         pygame .mixer .music .play (-1 )
                     self.make_dungeon ()
                     self.put_event ()
-                    if self.save_from_stair:
+                    if self.save_from_stair or self.save_from_boss:
                         d ={
                         "floor":self.floor ,
                         "pl_lifemax":self.pl_lifemax ,
@@ -2209,6 +2301,7 @@ class Game:
                         se [9 ].play ()
                         self.floorlist [self.stair_save_slot ]=self.floor 
                         self.save_from_stair = False
+                        self.save_from_boss = False
                         self.load_accept_lock = True
                 if 6 <=self.tmr and self.tmr <=9 :
                     fade =pygame .Surface (screen .get_size (),pygame .SRCALPHA )
@@ -3294,11 +3387,14 @@ class Game:
                     str_p =random .randint (7 ,9 )
                     mag_p =random .randint (15 ,30 )
                     self.pl_exp =self.pl_exp -(self.pl_lifemax -250 )*20 
-                if self.tmr ==13 :
+                if self.tmr ==10 :
                     self.pl_lifemax =self.pl_lifemax +lif_p 
                     self.pl_life =self.pl_life +lif_p 
                     self.pl_mag =self.pl_mag +mag_p 
                     self.pl_str =self.pl_str +str_p 
+                    self.set_message (f"　最大生命 +{lif_p}")
+                    self.set_message (f"　攻撃 +{str_p}")
+                    self.set_message (f"　魔力 +{mag_p}")
                 if self.tmr ==23 :
                     if self.pl_exp >(self.pl_lifemax -250 )*20 :
                         self.idx =243 
@@ -3319,11 +3415,14 @@ class Game:
                     self.tmr =0 
                 elif self.boss ==1 :
                     time .sleep (1 )
-                    self.idx =110 
                     self.boss =0 
+                    self.boss_save_cmd =0
+                    self.boss_save_input_lock = True
+                    self.save_from_boss = False
                     if 90 <self.floor <100 :
                         pygame .mixer .music .load (self.path +"/sound/bgm_9.wav")
                         pygame .mixer .music .play (-1 )
+                    self.idx =112 
                     self.tmr =0 
                 else :
                     if self.move_bgm_path :
