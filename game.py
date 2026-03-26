@@ -3041,11 +3041,13 @@ class Game:
             elif self.idx ==223 :# Blaze gem
                 self.draw_battle (screen ,fontS )
                 blaze_effect =self.imgEffect [5 ]if self.pl_sword [2 ][0 ]==1 else self.imgEffect [2 ]
-                img_rz =pygame .transform .rotozoom (blaze_effect ,30 *self.tmr ,(12 -self.tmr )/8 )
+                blit_time = 12
+                img_rz =pygame .transform .rotozoom (blaze_effect ,30 *self.tmr ,(blit_time -self.tmr )/blit_time )
                 screen_w =screen .get_size ()[0 ]
                 X =screen_w //2 -img_rz .get_width ()/2 
                 Y =360 -img_rz .get_height ()/2 
-                screen .blit (img_rz ,[X ,Y ])
+                if self.tmr <=blit_time :
+                    screen .blit (img_rz ,[X ,Y ])
                 if self.tmr ==1 :
                     self.set_message ("　爆弾による攻撃！")
                     se [1 ].play ()
