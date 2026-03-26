@@ -79,6 +79,10 @@ class Game:
         self.potion = 0
         self.blazegem = 0
         self.guard = 0
+        self.truth_fragment = 0
+        self.tool_food = 0
+        self.tool_magic_water = 0
+        self.tool_magic_seed = 0
         self.treasure = 0
         self.trap = 0
         self.wpn_lev = 0
@@ -110,6 +114,11 @@ class Game:
         self.save_confirm_lock = False
         self.menu_back_lock = False
         self.menu_accept_lock = False
+        self.tool_back_lock = False
+        self.tool_accept_lock = False
+        self.tool_cmd = 0
+        self.tool_confirm_active = False
+        self.tool_confirm_cmd = 0
         self.save_cmd = 0
         self.save_from_stair = False
         self.save_from_boss = False
@@ -155,9 +164,6 @@ class Game:
         self.move_bgm_pos_ms = 0
         self.move_bgm_start_time = 0.0
         self.emy_skip_turn = False
-        self.item_wall_pos = None
-        self.item_wall_used = False
-        self.item_wall_used = False
         self.item_talk_lines = []
         self.item_talk_index = 0
         self.item_talk_char_count = 0
@@ -167,9 +173,7 @@ class Game:
         self.item_reward = None
         self.item_event_kind = ""
         self.item_reward_count = 3
-        self.item_wall_claimed = set()
         self.true_episode_heard = False
-        self.item_wall_pos = None
         self.wall_item = None
         self.event_wall_pos = None
         self.event_talk_lines = []
@@ -177,6 +181,7 @@ class Game:
         self.event_talk_char_count = 0
         self.event_talk_last_tick = 0
         self.wall_event = None
+        self.truth_fragment_drop_battle = False
         self.map_seen = None
         self.map_stairs = None
         self.map_grid_surface = None
@@ -278,10 +283,7 @@ class Game:
         return False
 
     def all_cocoons_cleared(self):
-        return all(2 not in row for row in self.dungeon)
-
-    def all_item_walls_claimed(self):
-        return all(floor in self.item_wall_claimed for floor in range(91, 100))
+        return all((2 not in row) and (10 not in row) for row in self.dungeon)
 
     def place_boss(self):
         self.boss_pos = None
@@ -479,15 +481,16 @@ class Game:
                             new_seen .append ((dx ,dy ))
                         if tile_id ==3 :
                             self.map_stairs .add ((dx ,dy ))
-                    if not wall_only and tile_id in (0 ,1 ,2 ,3 ,4 ,5 ,6 ):
-                        if tile_id in (0 ,1 ,2 ,4 ):
+                    if not wall_only and tile_id in (0 ,1 ,2 ,3 ,4 ,5 ,6 ,10 ):
+                        if tile_id in (0 ,1 ,2 ,4 ,10 ):
                             variant =self.floor_var_map [dy ][dx ]
                             if self.floor_flip_map [dy ][dx ]:
                                 bg .blit (self.floor_variants_flipped [variant ],[X ,Y ])
                             else :
                                 bg .blit (self.floor_variants [variant ],[X ,Y ])
-                            if tile_id !=0 :
-                                bg .blit (self.imgFloor [tile_id ],[X ,Y ])
+                            overlay_tile =2 if tile_id ==10 else tile_id
+                            if overlay_tile !=0 :
+                                bg .blit (self.imgFloor [overlay_tile ],[X ,Y ])
                         else :
                             bg .blit (self.imgFloor [tile_id ],[X ,Y ])
                     if tile_id in (7 ,8 ,9 ):
@@ -514,8 +517,6 @@ class Game:
     # 階段かボスの配置
         self.boss_pos = None
         self.boss_area = set()
-        self.item_wall_pos = None
-        self.item_wall_used = False
         self.event_wall_pos = None
         is_boss_floor =self.floor %10 ==0 or self.floor >90
         if self.fixed_floor_data and self.floor == 100:
@@ -559,8 +560,12 @@ class Game:
                 for x ,y in take_cells (5 ):
                     self.dungeon [y ][x ]=4
         cocoon_target =35 if is_boss_floor else 20
-        for x ,y in take_cells (cocoon_target ):
+        cocoon_cells =take_cells (cocoon_target )
+        for x ,y in cocoon_cells:
             self.dungeon [y ][x ]=2
+        if cocoon_cells:
+            sx ,sy =random .choice (cocoon_cells )
+            self.dungeon [sy ][sx ]=10
         # ダメージ、回復床の配置
         if self.floor >50 :
             for i in range ((7 +int (self.floor //90 )*(self.floor -83 ))*10 ):
@@ -679,20 +684,26 @@ class Game:
             r =random .randint (0 ,99 )
             if r <35 :# 食料
                 self.treasure =random .choice ([3 ,3 ,3 ,3 ,3 ,4 ,4 ,4 ,4 ,4 ,5 ])
-                self.item_reward_count =1
+                self.item_reward_count =random .randint (1 ,max (1 ,self.floor //10 ))
                 if self.treasure ==3 :
-                    self.pl_life =min (self.pl_life +40 ,self.pl_lifemax )
+                    self.tool_food =self.tool_food +self.item_reward_count
                 if self.treasure ==4 :
-                    self.pl_life =min (self.pl_life +20 ,self.pl_lifemax )
-                    self.pl_mag =self.pl_mag +40 
+                    self.tool_magic_water =self.tool_magic_water +self.item_reward_count
                 if self.treasure ==5 :
-                    self.pl_mag =self.pl_mag +120 
+                    self.tool_magic_seed =self.tool_magic_seed +self.item_reward_count
                 self.idx =120 
                 self.tmr =0 
             else :# 敵出現
+                self.truth_fragment_drop_battle =False
                 self.idx =200 
                 self.tmr =0 
             return 
+        if self.dungeon [self.pl_y ][self.pl_x ]==10 :# しんじつのかけら繭
+            self.dungeon [self.pl_y ][self.pl_x ]=0
+            self.truth_fragment_drop_battle =True
+            self.idx =200
+            self.tmr =0
+            return
         if key [K_m ]==1 :# メニュー
             self.idx =30 
 
@@ -772,6 +783,11 @@ class Game:
         self.potion =0 
         self.blazegem =0 
         self.guard =0 
+        self.truth_fragment =0
+        self.tool_food =0
+        self.tool_magic_water =0
+        self.tool_magic_seed =0
+        self.truth_fragment_drop_battle =False
         self.save_from_stair = False
         self.save_from_boss = False
         self.stair_save_slot = 0
@@ -780,7 +796,6 @@ class Game:
         self.stair_choice_input_lock = False
         self.boss_save_cmd = 0
         self.boss_save_input_lock = False
-        self.item_wall_claimed = set()
         self.true_episode_heard = False
         self.encountered_enemies = set()
         self.idx =100 
@@ -812,6 +827,11 @@ class Game:
                 self.potion =loaddata ["potion"]
                 self.blazegem =loaddata ["blazegem"]
                 self.guard =loaddata ["guard"]
+                self.truth_fragment =loaddata .get ("truth_fragment",0 )
+                self.tool_food =loaddata .get ("tool_food",0 )
+                self.tool_magic_water =loaddata .get ("tool_magic_water",0 )
+                self.tool_magic_seed =loaddata .get ("tool_magic_seed",0 )
+                self.truth_fragment_drop_battle =False
                 self.save_from_stair = False
                 self.save_from_boss = False
                 self.stair_save_slot = 0
@@ -831,7 +851,6 @@ class Game:
                 else:
                     self.boss_pos = None
                     self.boss_area = set()
-                self.item_wall_claimed = set(loaddata.get("item_wall_claimed", []))
                 self.true_episode_heard = bool(loaddata.get("true_episode_heard", False))
                 self.encountered_enemies = set(loaddata.get("encountered_enemies", []))
                 self.item_event_phase = 0
@@ -1211,7 +1230,7 @@ class Game:
 
     def menu_command (self ,bg ,fnt ,key ):
         ent =False 
-        options = ["図鑑を見る", "タイトルに戻る", "メニューを閉じる"]
+        options = ["図鑑を見る", "どうぐをみる", "タイトルに戻る", "メニューを閉じる"]
         if self.menu_cmd >=len (options ):
             self.menu_cmd =len (options )-1 
         if key [K_UP ]and self.menu_cmd >0 :
@@ -1233,6 +1252,71 @@ class Game:
                 self.draw_text (bg ,"▶",win_x +20 ,y ,fnt ,WHITE )
             self.draw_text (bg ,label ,win_x +50 ,y ,fnt ,WHITE )
         return ent 
+
+    def draw_tool_inventory (self ,bg ,fnt ):
+        tools =self.get_tool_entries ()
+        win_w =520
+        line_h =36
+        header_h =46
+        win_h =header_h +line_h *len (tools )+40
+        screen_w ,screen_h =bg .get_size ()
+        win_x =(screen_w -win_w )//2
+        win_y =(screen_h -win_h )//2
+        pygame .draw .rect (bg ,BLACK ,[win_x ,win_y ,win_w ,win_h ])
+        pygame .draw .rect (bg ,WHITE ,[win_x ,win_y ,win_w ,win_h ],2 )
+        self.draw_text (bg ,"どうぐ一覧",win_x +20 ,win_y +12 ,fnt ,WHITE )
+        start_y =win_y +header_h
+        for i, tool in enumerate (tools ):
+            name =tool ["name"]
+            count =tool ["count"]
+            y =start_y +i *line_h
+            if i ==self.tool_cmd and not self.tool_confirm_active:
+                self.draw_text (bg ,"▶",win_x +8 ,y ,fnt ,WHITE )
+            self.draw_text (bg ,name ,win_x +28 ,y ,fnt ,WHITE )
+            cnt =f"x {count}"
+            cnt_w =fnt .size (cnt )[0 ]
+            self.draw_text (bg ,cnt ,win_x +win_w -30 -cnt_w ,y ,fnt ,WHITE )
+        if len (tools )==0 :
+            self.draw_text (bg ,"（どうぐなし）",win_x +28 ,start_y ,fnt ,WHITE )
+        self.draw_text (bg ,"[B]/[Back] 戻る",win_x +win_w -170 ,win_y +win_h -32 ,fnt ,WHITE )
+        if self.tool_confirm_active and len (tools )>0 :
+            confirm_options =["はい","いいえ"]
+            box_w =220
+            box_h =96
+            box_x =win_x +win_w -box_w -20
+            box_y =win_y +win_h -box_h -46
+            pygame .draw .rect (bg ,BLACK ,[box_x ,box_y ,box_w ,box_h ])
+            pygame .draw .rect (bg ,WHITE ,[box_x ,box_y ,box_w ,box_h ],2 )
+            self.draw_text (bg ,"使用しますか？",box_x +16 ,box_y +10 ,fnt ,WHITE )
+            for i, label in enumerate (confirm_options ):
+                y =box_y +44 +i *24
+                if self.tool_confirm_cmd ==i :
+                    self.draw_text (bg ,"▶",box_x +16 ,y ,fnt ,WHITE )
+                self.draw_text (bg ,label ,box_x +42 ,y ,fnt ,WHITE )
+
+    def get_tool_entries (self ):
+        tools =[]
+        if self.truth_fragment >0 :
+            tools .append ({"id":"truth_fragment","name":"しんじつのかけら","count":self.truth_fragment ,"usable":False })
+        if self.tool_food >0 :
+            tools .append ({"id":"food","name":TRE_NAME [3 ],"count":self.tool_food ,"usable":True })
+        if self.tool_magic_water >0 :
+            tools .append ({"id":"magic_water","name":TRE_NAME [4 ],"count":self.tool_magic_water ,"usable":True })
+        if self.tool_magic_seed >0 :
+            tools .append ({"id":"magic_seed","name":TRE_NAME [5 ],"count":self.tool_magic_seed ,"usable":True })
+        return tools
+
+    def use_selected_tool (self ,tool_id ):
+        if tool_id =="food" and self.tool_food >0 :
+            self.tool_food -=1 
+            self.pl_life =min (self.pl_life +40 ,self.pl_lifemax )
+        elif tool_id =="magic_water" and self.tool_magic_water >0 :
+            self.tool_magic_water -=1 
+            self.pl_life =min (self.pl_life +20 ,self.pl_lifemax )
+            self.pl_mag =self.pl_mag +40 
+        elif tool_id =="magic_seed" and self.tool_magic_seed >0 :
+            self.tool_magic_seed -=1 
+            self.pl_mag =self.pl_mag +120 
 
     def get_zukan_layout(self):
         if self.zukan_kind == 0:
@@ -1704,6 +1788,11 @@ class Game:
 
             if self.idx ==0 :# タイトル画面
                 if self.tmr ==1 :
+                    self.truth_fragment =0
+                    self.tool_food =0
+                    self.tool_magic_water =0
+                    self.tool_magic_seed =0
+                    self.truth_fragment_drop_battle =False
                     pygame .mixer .music .load (self.path +"/sound/bgm_title.wav")
                     pygame .mixer .music .play (-1 )
                     self.title_mode = 0
@@ -1790,6 +1879,11 @@ class Game:
                             self.potion =loaddata ["potion"]
                             self.blazegem =loaddata ["blazegem"]
                             self.guard =loaddata ["guard"]
+                            self.truth_fragment =loaddata .get ("truth_fragment",0 )
+                            self.tool_food =loaddata .get ("tool_food",0 )
+                            self.tool_magic_water =loaddata .get ("tool_magic_water",0 )
+                            self.tool_magic_seed =loaddata .get ("tool_magic_seed",0 )
+                            self.truth_fragment_drop_battle =False
                             self.idx =100 
                             self.pl_shield =loaddata ["shield"]
                             self.pl_armor =loaddata ["armor"]
@@ -1802,7 +1896,6 @@ class Game:
                             else:
                                 self.boss_pos = None
                                 self.boss_area = set()
-                            self.item_wall_claimed = set(loaddata.get("item_wall_claimed", []))
                             self.true_episode_heard = bool(loaddata.get("true_episode_heard", False))
                             self.item_event_phase = 0
                             self.item_choice = 0
@@ -1844,12 +1937,20 @@ class Game:
                             self.zukan_accept_lock = True
                             self.idx =31
                             self.tmr =0
-                        elif self.menu_cmd ==1 :#go_title
+                        elif self.menu_cmd ==1 :#tools
+                            self.tool_back_lock =True
+                            self.tool_accept_lock = True
+                            self.tool_confirm_active = False
+                            self.tool_confirm_cmd = 0
+                            self.tool_cmd = 0
+                            self.idx =34
+                            self.tmr =0
+                        elif self.menu_cmd ==2 :#go_title
                             self.confirm_cmd =0 
                             self.title_confirm_lock = True
                             self.idx =60 
                             self.tmr =0 
-                        elif self.menu_cmd ==2 :#close
+                        elif self.menu_cmd ==3 :#close
                             self.idx =100 
                             self.tmr =0 
 
@@ -1918,6 +2019,55 @@ class Game:
                     self.idx =32
                     self.tmr =0
 
+            elif self.idx ==34 :# どうぐ一覧
+                self.draw_dungeon (screen ,fontS )
+                self.draw_tool_inventory (screen ,fontS )
+                if self.tool_back_lock:
+                    if not (key [K_b ]or key [K_BACKSPACE ]):
+                        self.tool_back_lock = False
+                if self.tool_accept_lock:
+                    if not (key [K_RETURN ]or key [K_a ]):
+                        self.tool_accept_lock = False
+                tool_entries =self.get_tool_entries ()
+                if len (tool_entries )==0 :
+                    self.tool_cmd =0
+                elif self.tool_cmd >=len (tool_entries ):
+                    self.tool_cmd =len (tool_entries )-1
+                if self.tool_confirm_active:
+                    if key [K_UP ]and self.tool_confirm_cmd >0 :
+                        self.tool_confirm_cmd -=1 
+                    if key [K_DOWN ]and self.tool_confirm_cmd <1 :
+                        self.tool_confirm_cmd +=1 
+                    if (key [K_b ]or key [K_BACKSPACE ]) and not self.tool_back_lock:
+                        self.tool_back_lock = True
+                        self.tool_confirm_active = False
+                    elif accept and not self.tool_accept_lock:
+                        if self.tool_confirm_cmd ==0 and len (tool_entries )>0 and tool_entries [self.tool_cmd ]["usable"]:
+                            self.use_selected_tool (tool_entries [self.tool_cmd ]["id"])
+                            tool_entries =self.get_tool_entries ()
+                            if len (tool_entries )==0 :
+                                self.tool_cmd =0
+                            elif self.tool_cmd >=len (tool_entries ):
+                                self.tool_cmd =len (tool_entries )-1
+                        self.tool_confirm_active = False
+                        self.tool_accept_lock = True
+                else:
+                    if (key [K_b ]or key [K_BACKSPACE ]) and not self.tool_back_lock:
+                        self.tool_back_lock = True
+                        self.menu_back_lock = True
+                        self.idx =30
+                        self.tmr =0
+                    else:
+                        if key [K_UP ]and self.tool_cmd >0 :
+                            self.tool_cmd -=1 
+                        if key [K_DOWN ]and len (tool_entries )>0 and self.tool_cmd <len (tool_entries )-1 :
+                            self.tool_cmd +=1 
+                        if accept and not self.tool_accept_lock and len (tool_entries )>0:
+                            if tool_entries [self.tool_cmd ]["usable"]:
+                                self.tool_confirm_active = True
+                                self.tool_confirm_cmd = 0
+                                self.tool_accept_lock = True
+
             elif self.idx ==40 :#セーブデータ選択
                 if self.save_from_boss:
                     screen .fill (BLACK )
@@ -1959,6 +2109,10 @@ class Game:
                 "potion":self.potion ,
                 "blazegem":self.blazegem ,
                 "guard":self.guard ,
+                "truth_fragment":self.truth_fragment ,
+                "tool_food":self.tool_food ,
+                "tool_magic_water":self.tool_magic_water ,
+                "tool_magic_seed":self.tool_magic_seed ,
                 "shield":self.pl_shield ,
                 "armor":self.pl_armor ,
                 "sword":self.pl_sword ,
@@ -1966,7 +2120,6 @@ class Game:
                 "pl_x":self.pl_x ,
                 "pl_y":self.pl_y ,
                 "boss_pos":self.boss_pos ,
-                "item_wall_claimed":sorted(self.item_wall_claimed),
                 "true_episode_heard":self.true_episode_heard,
                 "encountered_enemies":sorted(self.encountered_enemies)
                 }
@@ -2186,9 +2339,8 @@ class Game:
                                 pass
                             else:
                                 if 91 <= self.floor <= 99:
-                                    self.item_wall_claimed.add(self.floor)
                                     self.init_item_event (kind="item", reward_count=5)
-                                elif self.floor == 100 and self.all_item_walls_claimed() and not self.true_episode_heard:
+                                elif self.floor == 100 and self.truth_fragment >= 100 and not self.true_episode_heard:
                                     self.init_item_event (kind="true_episode", lines=TRUE_EPISODE_TALK)
                                 else:
                                     self.init_item_event ()
@@ -2285,6 +2437,10 @@ class Game:
                         "potion":self.potion ,
                         "blazegem":self.blazegem ,
                         "guard":self.guard ,
+                        "truth_fragment":self.truth_fragment ,
+                        "tool_food":self.tool_food ,
+                        "tool_magic_water":self.tool_magic_water ,
+                        "tool_magic_seed":self.tool_magic_seed ,
                         "shield":self.pl_shield ,
                         "armor":self.pl_armor ,
                         "sword":self.pl_sword ,
@@ -2292,7 +2448,6 @@ class Game:
                         "pl_x":self.pl_x ,
                         "pl_y":self.pl_y ,
                         "boss_pos":self.boss_pos ,
-                        "item_wall_claimed":sorted(self.item_wall_claimed),
                         "true_episode_heard":self.true_episode_heard,
                         "encountered_enemies":sorted(self.encountered_enemies)
                         }
@@ -2327,7 +2482,7 @@ class Game:
                 dialog.fill((0, 0, 0, 100))
                 screen.blit(dialog, [x-100, y-40])
                 item_text =TRE_NAME [self.treasure ]
-                if self.treasure in (0 ,1 ,2 ):
+                if self.treasure in (0 ,1 ,2 ,3 ,4 ,5 ):
                     item_text =f"{item_text} x {self.item_reward_count}"
                 self.draw_text (screen ,item_text ,x ,y ,font ,WHITE )
                 if self.tmr ==10 :
@@ -2392,6 +2547,7 @@ class Game:
                             self.boss_talk_char_count = 0
                             self.boss_talk_last_tick = pygame.time.get_ticks()
                     if self.boss_talk_index >=len (self.boss_talk_lines ):
+                        self.truth_fragment_drop_battle =False
                         self.idx =200 
                         self.tmr =0 
 
@@ -2592,8 +2748,6 @@ class Game:
                                     self.item_event_phase = 1
                                 elif self.item_event_phase == 2:
                                     self.treasure = self.item_reward if self.item_reward is not None else self.item_choice                            
-                                    if 91 <= self.floor <= 99:
-                                        self.item_wall_claimed.add(self.floor)
                                     self.dungeon[self.pl_y - 1][self.pl_x] = 9
                                     self.idx =120
                         self.tmr =0 
@@ -3348,15 +3502,20 @@ class Game:
                     self.pl_exp =self.pl_exp +int ((500 +self.emy_typ *50 +EMY_EXP [self.emy_typ ])*(0.7 *((self.floor -1 )//30 )+1 ))
                     self.pl_mag =self.pl_mag +self.emy_typ *2 +self.boss *300 
                     if self.emy_typ ==22 :
+                        self.truth_fragment_drop_battle =False
                         self.idx =246 
                         self.tmr =0 
                 if self.tmr ==15 :
                     if self.boss ==1 :
                         time .sleep (3 )
-                    self.idx =244 
                     if self.pl_exp >=(self.pl_lifemax -250 )*20 :
                         self.idx =243 
                         self.tmr =0 
+                    elif self.truth_fragment_drop_battle:
+                        self.idx =247 
+                        self.tmr =0 
+                    else :
+                        self.idx =244 
 
             elif self.idx ==242 :# 敗北
                 self.draw_battle (screen ,fontS )
@@ -3371,6 +3530,7 @@ class Game:
                     self.burn_turns =0 
                     self.inferno =0
                     self.boss_mode = "normal"
+                    self.truth_fragment_drop_battle =False
                     self.change = 0
                     self.set_message ("負けてしまった")
                 if self.tmr ==11 :
@@ -3400,9 +3560,14 @@ class Game:
                         self.idx =243 
                         self.tmr =0 
                     else :
-                        self.idx =244 
+                        if self.truth_fragment_drop_battle:
+                            self.idx =247 
+                            self.tmr =0 
+                        else :
+                            self.idx =244 
 
             elif self.idx ==244 :# 戦闘終了
+                self.truth_fragment_drop_battle =False
                 if self.emy_typ ==21 :
                     time .sleep (1 )
                     charge =0 
@@ -3476,6 +3641,17 @@ class Game:
                 if self.tmr ==23 :
                     self.idx =241 
                     self.tmr =14 
+
+            elif self.idx ==247 :#しんじつのかけらドロップ
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    self.set_message ("敵は　しんじつのかけらを　落とした！")
+                    self.se [10 ].play ()
+                if self.tmr ==18 :
+                    self.truth_fragment =min (100 ,self.truth_fragment +1 )
+                    self.truth_fragment_drop_battle =False
+                    self.idx =244
+                    self.tmr =0
 
             pygame .display .update ()
             clock .tick (10 )
