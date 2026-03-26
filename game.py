@@ -138,6 +138,7 @@ class Game:
         self.guard_remain = 0
         self.change = 0
         self.wall_item = None
+        self.fixed_floor_offset = (0, 0)  # Track offset for padded fixed floors
 
         self.maze = [[0 for j in range(MAZE_W)] for i in range(MAZE_H)]
         self.dungeon = [[0 for j in range(DUNGEON_W)] for i in range(DUNGEON_H)]
@@ -190,6 +191,7 @@ class Game:
         self.map_surface_size = None
         self.fixed_floor_data = None
         self.last_talk_mode = 1
+        self.reset_tutorial_runtime()
 
     def init_floor_variant_map(self):
         count = max(len(self.floor_variants), 1)
@@ -285,6 +287,245 @@ class Game:
     def all_cocoons_cleared(self):
         return all((2 not in row) and (10 not in row) for row in self.dungeon)
 
+    def default_tutorial_progress(self):
+        return {
+            "talked": [False, False, False, False, False, False, False],
+            "room2_chest_opened": False,
+            "room3_enemy_defeated": False,
+            "room4_item_obtained": False,
+            "room4_item_used": False,
+            "room5_enemy_defeated": False,
+        }
+
+    def reset_tutorial_runtime(self):
+        self.tutorial_enabled = False
+        self.tutorial_wall_stage = {}
+        self.tutorial_gate_pos = {}
+        self.tutorial_stairs_pos = None
+        self.tutorial_room2_chest_pos = None
+        self.tutorial_room3_truth_pos = None
+        self.tutorial_room4_item_pos = None
+        self.tutorial_room5_enemy_pos = None
+        self.tutorial_progress = self.default_tutorial_progress()
+        self.tutorial_active_stage = 0
+        self.tutorial_pending_battle = ""
+
+    def parse_pos(self, value):
+        if (isinstance(value, (list, tuple)) and len(value) == 2 and
+                all(isinstance(v, int) for v in value)):
+            return (value[0], value[1])
+        return None
+
+    def load_fixed_floor_data(self, floor_value):
+        if floor_value not in (1, 100):
+            return None
+        floor_path = os.path.join(self.path, "floor_{}.json".format(floor_value))
+        if not os.path.exists(floor_path):
+            return None
+        with open(floor_path, "r") as f:
+            data = json.load(f)
+        dungeon = data.get("dungeon")
+        # For floor 1 and 100, accept any valid dungeon size (not restricted to DUNGEON_H/W)
+        if isinstance(dungeon, list) and len(dungeon) > 0 and all(isinstance(row, list) and len(row) > 0 for row in dungeon):
+            # Pad the dungeon to standard size if needed
+            padded_dungeon, offset = self.pad_dungeon_to_standard_size(dungeon)
+            data["dungeon"] = padded_dungeon
+            data["_dungeon_offset"] = offset
+            
+            # Adjust all coordinates if padding was applied
+            if offset != (0, 0):
+                offset_x, offset_y = offset
+                
+                # Adjust pl_start
+                if "pl_start" in data:
+                    data["pl_start"] = (data["pl_start"][0] + offset_x, data["pl_start"][1] + offset_y)
+                
+                # Adjust boss_pos if it exists
+                if "boss_pos" in data:
+                    data["boss_pos"] = (data["boss_pos"][0] + offset_x, data["boss_pos"][1] + offset_y)
+                
+                # Adjust all tutorial coordinates
+                if "tutorial" in data and isinstance(data["tutorial"], dict):
+                    tutorial = data["tutorial"]
+                    
+                    # Adjust wall_stages
+                    if "wall_stages" in tutorial:
+                        for entry in tutorial["wall_stages"]:
+                            if isinstance(entry, dict) and "pos" in entry:
+                                entry["pos"] = [entry["pos"][0] + offset_x, entry["pos"][1] + offset_y]
+                    
+                    # Adjust gates
+                    if "gates" in tutorial:
+                        for entry in tutorial["gates"]:
+                            if isinstance(entry, dict) and "pos" in entry:
+                                entry["pos"] = [entry["pos"][0] + offset_x, entry["pos"][1] + offset_y]
+                    
+                    # Adjust stairs_pos
+                    if "stairs_pos" in tutorial and tutorial["stairs_pos"]:
+                        tutorial["stairs_pos"] = [tutorial["stairs_pos"][0] + offset_x, tutorial["stairs_pos"][1] + offset_y]
+                    
+                    # Adjust room chest positions
+                    if "room2_chest" in tutorial and tutorial["room2_chest"]:
+                        tutorial["room2_chest"] = [tutorial["room2_chest"][0] + offset_x, tutorial["room2_chest"][1] + offset_y]
+                    
+                    if "room3_truth_cocoon" in tutorial and tutorial["room3_truth_cocoon"]:
+                        tutorial["room3_truth_cocoon"] = [tutorial["room3_truth_cocoon"][0] + offset_x, tutorial["room3_truth_cocoon"][1] + offset_y]
+                    
+                    if "room4_item_cocoon" in tutorial and tutorial["room4_item_cocoon"]:
+                        tutorial["room4_item_cocoon"] = [tutorial["room4_item_cocoon"][0] + offset_x, tutorial["room4_item_cocoon"][1] + offset_y]
+                    
+                    if "room5_enemy_cocoon" in tutorial and tutorial["room5_enemy_cocoon"]:
+                        tutorial["room5_enemy_cocoon"] = [tutorial["room5_enemy_cocoon"][0] + offset_x, tutorial["room5_enemy_cocoon"][1] + offset_y]
+            
+            return data
+        return None
+
+    def pad_dungeon_to_standard_size(self, dungeon):
+        """Pad a dungeon to DUNGEON_H x DUNGEON_W by adding walls around it.
+        Returns (padded_dungeon, (offset_x, offset_y))"""
+        if len(dungeon) == DUNGEON_H and len(dungeon[0]) == DUNGEON_W:
+            return dungeon, (0, 0)
+        
+        # Create a new dungeon filled with walls (9)
+        padded = [[9 for _ in range(DUNGEON_W)] for _ in range(DUNGEON_H)]
+        
+        # Calculate offset to center the original dungeon
+        orig_h = len(dungeon)
+        orig_w = len(dungeon[0])
+        offset_y = (DUNGEON_H - orig_h) // 2
+        offset_x = (DUNGEON_W - orig_w) // 2
+        
+        # Copy the original dungeon into the center
+        for y in range(orig_h):
+            for x in range(orig_w):
+                if offset_y + y < DUNGEON_H and offset_x + x < DUNGEON_W:
+                    padded[offset_y + y][offset_x + x] = dungeon[y][x]
+        
+        return padded, (offset_x, offset_y)
+
+    def setup_tutorial_floor(self, progress_data=None):
+        self.reset_tutorial_runtime()
+        if self.floor != 1 or not self.fixed_floor_data:
+            return
+        tutorial = self.fixed_floor_data.get("tutorial")
+        if not isinstance(tutorial, dict):
+            return
+        self.tutorial_enabled = True
+        for entry in tutorial.get("wall_stages", []):
+            if not isinstance(entry, dict):
+                continue
+            stage = entry.get("stage")
+            pos = self.parse_pos(entry.get("pos"))
+            if isinstance(stage, int) and pos:
+                self.tutorial_wall_stage[pos] = stage
+        for entry in tutorial.get("gates", []):
+            if not isinstance(entry, dict):
+                continue
+            stage = entry.get("stage")
+            pos = self.parse_pos(entry.get("pos"))
+            if isinstance(stage, int) and pos:
+                self.tutorial_gate_pos[stage] = pos
+        self.tutorial_stairs_pos = self.parse_pos(tutorial.get("stairs_pos"))
+        self.tutorial_room2_chest_pos = self.parse_pos(tutorial.get("room2_chest"))
+        self.tutorial_room3_truth_pos = self.parse_pos(tutorial.get("room3_truth_cocoon"))
+        self.tutorial_room4_item_pos = self.parse_pos(tutorial.get("room4_item_cocoon"))
+        self.tutorial_room5_enemy_pos = self.parse_pos(tutorial.get("room5_enemy_cocoon"))
+        if isinstance(progress_data, dict):
+            progress = self.default_tutorial_progress()
+            talked = progress_data.get("talked")
+            if isinstance(talked, list):
+                for i in range(1, 7):
+                    if i < len(talked):
+                        progress["talked"][i] = bool(talked[i])
+            for key in ("room2_chest_opened", "room3_enemy_defeated", "room4_item_obtained", "room4_item_used", "room5_enemy_defeated"):
+                if key in progress_data:
+                    progress[key] = bool(progress_data[key])
+            self.tutorial_progress = progress
+        else:
+            self.tutorial_progress = self.default_tutorial_progress()
+        self.tutorial_active_stage = 0
+        self.tutorial_pending_battle = ""
+        self.update_tutorial_floor_state()
+
+    def tutorial_save_data(self):
+        if not self.tutorial_enabled:
+            return None
+        return {
+            "talked": list(self.tutorial_progress["talked"]),
+            "room2_chest_opened": self.tutorial_progress["room2_chest_opened"],
+            "room3_enemy_defeated": self.tutorial_progress["room3_enemy_defeated"],
+            "room4_item_obtained": self.tutorial_progress["room4_item_obtained"],
+            "room4_item_used": self.tutorial_progress["room4_item_used"],
+            "room5_enemy_defeated": self.tutorial_progress["room5_enemy_defeated"],
+        }
+
+    def tutorial_stage_for_wall(self, pos):
+        if not self.tutorial_enabled:
+            return 0
+        return self.tutorial_wall_stage.get(pos, 0)
+
+    def init_tutorial_talk(self, stage):
+        lines = TUTORIAL_WALL_TALK.get(stage)
+        if not lines:
+            return False
+        self.event_talk_lines = lines
+        self.event_talk_index = 0
+        self.event_talk_char_count = 0
+        self.event_talk_last_tick = pygame.time.get_ticks()
+        self.tutorial_active_stage = stage
+        return True
+
+    def complete_tutorial_talk(self):
+        if not self.tutorial_enabled:
+            self.tutorial_active_stage = 0
+            return
+        stage = self.tutorial_active_stage
+        if 1 <= stage <= 6:
+            self.tutorial_progress["talked"][stage] = True
+        self.tutorial_active_stage = 0
+        self.update_tutorial_floor_state()
+
+    def update_tutorial_floor_state(self):
+        if not self.tutorial_enabled:
+            return
+        talked = self.tutorial_progress["talked"]
+        open_rules = {
+            1: talked[1],
+            2: talked[2] and self.tutorial_progress["room2_chest_opened"],
+            3: talked[3] and self.tutorial_progress["room3_enemy_defeated"],
+            4: talked[4] and self.tutorial_progress["room4_item_obtained"] and self.tutorial_progress["room4_item_used"],
+            5: talked[5] and self.tutorial_progress["room5_enemy_defeated"],
+        }
+        for stage, pos in self.tutorial_gate_pos.items():
+            x, y = pos
+            if 0 <= x < DUNGEON_W and 0 <= y < DUNGEON_H:
+                self.dungeon[y][x] = 0 if open_rules.get(stage, False) else 9
+        if self.tutorial_stairs_pos:
+            sx, sy = self.tutorial_stairs_pos
+            if 0 <= sx < DUNGEON_W and 0 <= sy < DUNGEON_H:
+                self.dungeon[sy][sx] = 3 if talked[6] else 0
+
+    def restore_tutorial_cocoon(self):
+        if not self.tutorial_enabled or not self.tutorial_pending_battle:
+            return
+        if self.tutorial_pending_battle == "room3":
+            pos = self.tutorial_room3_truth_pos
+            tile = 10
+            done = self.tutorial_progress["room3_enemy_defeated"]
+        elif self.tutorial_pending_battle == "room5":
+            pos = self.tutorial_room5_enemy_pos
+            tile = 2
+            done = self.tutorial_progress["room5_enemy_defeated"]
+        else:
+            pos = None
+            tile = 0
+            done = True
+        if not done and pos:
+            x, y = pos
+            if 0 <= x < DUNGEON_W and 0 <= y < DUNGEON_H and self.dungeon[y][x] == 0:
+                self.dungeon[y][x] = tile
+        self.tutorial_pending_battle = ""
+
     def place_boss(self):
         self.boss_pos = None
         self.boss_area = set()
@@ -341,6 +582,7 @@ class Game:
             ]
 
     def init_event_talk(self):
+        self.tutorial_active_stage = 0
         event_id = (self.floor - 1) // 10
         if 0 <= event_id < len(EVENT_TALK):
             self.event_talk_lines = EVENT_TALK[event_id]
@@ -360,20 +602,15 @@ class Game:
     def make_dungeon (self ):
         self.fixed_floor_data = None
         self.last_talk_mode = 1
-        if self.floor == 100:
-            floor_path = os.path.join(self.path, "floor_100.json")
-            if os.path.exists(floor_path):
-                with open(floor_path, "r") as f:
-                    data = json.load(f)
-                dungeon = data.get("dungeon")
-                if (isinstance(dungeon, list) and len(dungeon) == DUNGEON_H and
-                        all(isinstance(row, list) and len(row) == DUNGEON_W for row in dungeon)):
-                    self.dungeon = dungeon
-                    self.fixed_floor_data = data
-                    self.init_floor_variant_map()
-                    self.init_floor_flip_map()
-                    self.init_map_state()
-                    return
+        self.reset_tutorial_runtime()
+        fixed_data = self.load_fixed_floor_data(self.floor)
+        if fixed_data:
+            self.dungeon = fixed_data["dungeon"]
+            self.fixed_floor_data = fixed_data
+            self.init_floor_variant_map()
+            self.init_floor_flip_map()
+            self.init_map_state()
+            return
         XP =[0 ,1 ,0 ,-1 ]
         YP =[-1 ,0 ,1 ,0 ]
         cell = 9
@@ -518,6 +755,14 @@ class Game:
         self.boss_pos = None
         self.boss_area = set()
         self.event_wall_pos = None
+        if self.fixed_floor_data and self.floor == 1:
+            self.setup_tutorial_floor()
+            if self.fixed_floor_data.get("pl_start"):
+                self.pl_x, self.pl_y = self.fixed_floor_data["pl_start"]
+            self.pl_d =1
+            self.pl_a =5
+            self.stair_prompted =False
+            return
         is_boss_floor =self.floor %10 ==0 or self.floor >90
         if self.fixed_floor_data and self.floor == 100:
             boss_pos = self.fixed_floor_data.get("boss_pos")
@@ -630,6 +875,9 @@ class Game:
                 self.blazegem =self.blazegem +1 
             if self.treasure ==2 :
                 self.guard =self.guard +1 
+            if self.tutorial_enabled and self.floor ==1 :
+                self.tutorial_progress ["room2_chest_opened"]=True
+                self.update_tutorial_floor_state ()
             self.idx =120 
             self.tmr =0 
             return 
@@ -680,6 +928,24 @@ class Game:
             self.tmr =0 
             return 
         if self.dungeon [self.pl_y ][self.pl_x ]==2 :# 繭に載った
+            pos =(self.pl_x ,self.pl_y )
+            if self.tutorial_enabled and self.floor ==1 and pos ==self.tutorial_room4_item_pos:
+                self.dungeon [self.pl_y ][self.pl_x ]=0 
+                self.treasure =5
+                self.item_reward_count =1
+                self.tool_magic_seed =self.tool_magic_seed +1
+                self.tutorial_progress ["room4_item_obtained"]=True
+                self.update_tutorial_floor_state ()
+                self.idx =120
+                self.tmr =0
+                return
+            if self.tutorial_enabled and self.floor ==1 and pos ==self.tutorial_room5_enemy_pos:
+                self.dungeon [self.pl_y ][self.pl_x ]=0
+                self.truth_fragment_drop_battle =False
+                self.tutorial_pending_battle ="room5"
+                self.idx =200
+                self.tmr =0
+                return
             self.dungeon [self.pl_y ][self.pl_x ]=0 
             r =random .randint (0 ,99 )
             if r <35 :# 食料
@@ -701,6 +967,8 @@ class Game:
         if self.dungeon [self.pl_y ][self.pl_x ]==10 :# しんじつのかけら繭
             self.dungeon [self.pl_y ][self.pl_x ]=0
             self.truth_fragment_drop_battle =True
+            if self.tutorial_enabled and self.floor ==1 and (self.pl_x ,self.pl_y )==self.tutorial_room3_truth_pos:
+                self.tutorial_pending_battle ="room3"
             self.idx =200
             self.tmr =0
             return
@@ -864,6 +1132,11 @@ class Game:
                 self.set_floor_assets_for_current_floor ()
                 self.init_floor_variant_map ()
                 self.init_map_state ()
+                self.fixed_floor_data = self.load_fixed_floor_data (self.floor )
+                if self.floor ==1 and self.fixed_floor_data:
+                    self.setup_tutorial_floor (loaddata .get ("tutorial_progress"))
+                else:
+                    self.reset_tutorial_runtime ()
                 self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
                 self.move_bgm_pos_ms =0 
                 self.move_bgm_start_time =time .time ()
@@ -1317,6 +1590,9 @@ class Game:
         elif tool_id =="magic_seed" and self.tool_magic_seed >0 :
             self.tool_magic_seed -=1 
             self.pl_mag =self.pl_mag +120 
+            if self.tutorial_enabled and self.floor ==1 :
+                self.tutorial_progress ["room4_item_used"]=True
+                self.update_tutorial_floor_state ()
 
     def get_zukan_layout(self):
         if self.zukan_kind == 0:
@@ -1907,6 +2183,12 @@ class Game:
                             self.item_talk_last_tick = pygame.time.get_ticks()
                             self.set_floor_assets_for_current_floor ()
                             self.init_floor_variant_map ()
+                            self.init_map_state ()
+                            self.fixed_floor_data = self.load_fixed_floor_data (self.floor )
+                            if self.floor ==1 and self.fixed_floor_data:
+                                self.setup_tutorial_floor (loaddata .get ("tutorial_progress"))
+                            else:
+                                self.reset_tutorial_runtime ()
                             self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
                             self.move_bgm_pos_ms =0 
                             self.move_bgm_start_time =time .time ()
@@ -2121,7 +2403,8 @@ class Game:
                 "pl_y":self.pl_y ,
                 "boss_pos":self.boss_pos ,
                 "true_episode_heard":self.true_episode_heard,
-                "encountered_enemies":sorted(self.encountered_enemies)
+                "encountered_enemies":sorted(self.encountered_enemies),
+                "tutorial_progress":self.tutorial_save_data ()
                 }
                 if key [K_b ]==1 or key [K_BACKSPACE ]==1 :
                     self.load_accept_lock = True
@@ -2335,7 +2618,12 @@ class Game:
                             self.idx =132 
                             self.tmr =0 
                         elif front_tile == 7:
-                            if self.floor >= 91 and not self.all_cocoons_cleared():
+                            if self.tutorial_enabled and self.floor ==1:
+                                stage =self.tutorial_stage_for_wall ((tx ,ty ))
+                                if stage >0 and self.init_tutorial_talk (stage ):
+                                    self.idx =132
+                                    self.tmr =0
+                            elif self.floor >= 91 and not self.all_cocoons_cleared():
                                 pass
                             else:
                                 if 91 <= self.floor <= 99:
@@ -2449,7 +2737,8 @@ class Game:
                         "pl_y":self.pl_y ,
                         "boss_pos":self.boss_pos ,
                         "true_episode_heard":self.true_episode_heard,
-                        "encountered_enemies":sorted(self.encountered_enemies)
+                        "encountered_enemies":sorted(self.encountered_enemies),
+                        "tutorial_progress":self.tutorial_save_data ()
                         }
                         with open (self.path +"/savedata/data{}.json".format (self.stair_save_slot +1 ),"w")as f :
                             json .dump (d ,f )
@@ -2829,6 +3118,8 @@ class Game:
                             self.event_talk_char_count = 0
                             self.event_talk_last_tick = pygame.time.get_ticks()
                     if self.event_talk_index >=len (self.event_talk_lines ):
+                        if self.tutorial_enabled and self.tutorial_active_stage >0 :
+                            self.complete_tutorial_talk ()
                         self.idx =100 
                         self.tmr =0 
 
@@ -3503,6 +3794,13 @@ class Game:
                         se [5 ].play ()
                     self.pl_exp =self.pl_exp +int ((500 +self.emy_typ *50 +EMY_EXP [self.emy_typ ])*(0.7 *((self.floor -1 )//30 )+1 ))
                     self.pl_mag =self.pl_mag +self.emy_typ *2 +self.boss *300 
+                    if self.tutorial_enabled and self.tutorial_pending_battle:
+                        if self.tutorial_pending_battle =="room3":
+                            self.tutorial_progress ["room3_enemy_defeated"]=True
+                        elif self.tutorial_pending_battle =="room5":
+                            self.tutorial_progress ["room5_enemy_defeated"]=True
+                        self.tutorial_pending_battle =""
+                        self.update_tutorial_floor_state ()
                     if self.emy_typ ==22 :
                         self.truth_fragment_drop_battle =False
                         self.idx =246 
@@ -3533,6 +3831,7 @@ class Game:
                     self.inferno =0
                     self.boss_mode = "normal"
                     self.truth_fragment_drop_battle =False
+                    self.tutorial_pending_battle =""
                     self.change = 0
                     self.set_message ("負けてしまった")
                 if self.tmr ==11 :
@@ -3570,6 +3869,8 @@ class Game:
 
             elif self.idx ==244 :# 戦闘終了
                 self.truth_fragment_drop_battle =False
+                if self.tutorial_enabled and self.tutorial_pending_battle:
+                    self.restore_tutorial_cocoon ()
                 if self.emy_typ ==21 :
                     time .sleep (1 )
                     charge =0 
