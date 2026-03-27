@@ -185,6 +185,7 @@ class Game:
         self.truth_fragment_drop_battle = False
         self.map_seen = None
         self.map_stairs = None
+        self.map_bosses = None
         self.map_grid_surface = None
         self.map_surface = None
         self.map_surface_scale = None
@@ -203,6 +204,7 @@ class Game:
     def init_map_state(self):
         self.map_seen = [[False for j in range(DUNGEON_W)] for i in range(DUNGEON_H)]
         self.map_stairs = set()
+        self.map_bosses = set()
         self.map_grid_surface = pygame.Surface((DUNGEON_W, DUNGEON_H), pygame.SRCALPHA)
         self.map_grid_surface.fill((0, 0, 0, 120))
         self.map_surface = None
@@ -740,6 +742,8 @@ class Game:
                         if dy >=1 and self.dungeon [dy -1 ][dx ] in (7 ,8 ,9 ):
                             bg .blit (self.imgWall2 ,[X ,Y -80 ])
                     if self.boss_pos and dx == self.boss_pos[0] and dy == self.boss_pos[1]:
+                        if not wall_only and self.map_bosses is not None:
+                            self.map_bosses.add((dx, dy))
                         boss_map = self.get_boss_map_image()
                         bg .blit (boss_map ,[X ,Y -40 ])
                 if not wall_only and x ==0 and y ==0 :# 主人公キャラの表示
@@ -1393,6 +1397,10 @@ class Game:
         for sx ,sy in self.map_stairs :
             mx =int (sx *scale )
             my =int (sy *scale )
+            bg .fill ((255 ,255 ,255 ,200 ),[map_x +mx ,map_y +my ,marker ,marker ])
+        for bx ,by in self.map_bosses :
+            mx =int (bx *scale )
+            my =int (by *scale )
             bg .fill ((255 ,255 ,255 ,200 ),[map_x +mx ,map_y +my ,marker ,marker ])
         px =int (self.pl_x *scale )
         py =int (self.pl_y *scale )
