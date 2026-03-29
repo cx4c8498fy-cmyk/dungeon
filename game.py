@@ -3266,12 +3266,15 @@ class Game:
                     dmg =max (1 ,dmg )
                     if self.boss_mode == "ice":
                         dmg =0 
-                if 2 <=self.tmr <=4 :
-                    screen_w =screen .get_size ()[0 ]
-                    eff_x =screen_w //2 -190 -self.tmr *12 
-                    eff_y =-150 +self.tmr *50 
+                blit_time =8
+                if self.tmr <=blit_time :
                     magic_effect =self.imgEffect [4 ]if self.pl_sword [1 ][0 ]==1 else self.imgEffect [1 ]
-                    screen .blit (magic_effect ,[eff_x ,eff_y ])
+                    zoom =(blit_time +1 -self.tmr )/blit_time
+                    img_rz =pygame .transform .rotozoom (magic_effect ,30 *self.tmr ,zoom )
+                    screen_w =screen .get_size ()[0 ]
+                    eff_x =screen_w //2 -img_rz .get_width ()/2 
+                    eff_y =360 -img_rz .get_height ()/2 +20
+                    screen .blit (img_rz ,[eff_x ,eff_y ])
                 if self.tmr ==5 :
                     self.emy_blink =5 
                     self.set_message (f"　{dmg}　ダメージ！")
@@ -3340,19 +3343,22 @@ class Game:
             elif self.idx ==223 :# Blaze gem
                 self.draw_battle (screen ,fontS )
                 blaze_effect =self.imgEffect [5 ]if self.pl_sword [2 ][0 ]==1 else self.imgEffect [2 ]
-                blit_time = 12
-                img_rz =pygame .transform .rotozoom (blaze_effect ,30 *self.tmr ,(blit_time -self.tmr )/blit_time )
-                screen_w =screen .get_size ()[0 ]
-                X =screen_w //2 -img_rz .get_width ()/2 
-                Y =360 -img_rz .get_height ()/2 
+                blit_time = 8
                 if self.tmr <=blit_time :
-                    screen .blit (img_rz ,[X ,Y ])
+                    scale =(self.tmr -1 )/max (1 ,blit_time -1 )
+                    if scale >0 :
+                        new_w =max (1 ,int (blaze_effect .get_width ()*scale ))
+                        new_h =max (1 ,int (blaze_effect .get_height ()*scale ))
+                        img_sc =pygame .transform .scale (blaze_effect ,(new_w ,new_h ))
+                        screen_w =screen .get_size ()[0 ]
+                        X =screen_w //2 -img_sc .get_width ()/2
+                        Y =360 -img_sc .get_height ()/2 + 20
+                        screen .blit (img_sc ,[X ,Y ])
                 if self.tmr ==1 :
                     self.set_message ("　爆弾による攻撃！")
                     se [1 ].play ()
-                if self.tmr ==6 :
                     self.blazegem =self.blazegem -1 
-                if self.tmr ==11 :
+                if self.tmr ==8 :
                     dmg =1000 +self.pl_sword [2 ][1 ]*16 
                     if self.emy_typ ==11:
                         self.set_message ("　敵は　爆弾を捕食した！")
@@ -3364,16 +3370,16 @@ class Game:
                         self.emy_skip_turn = True
                     if self.boss_mode == "fire":
                         dmg =0 
-                if self.tmr ==15 :
+                if self.tmr ==12 :
                     self.emy_blink =5 
                     self.set_message (f"　{dmg}　ダメージ！")
-                if self.tmr ==21 :
+                if self.tmr ==18 :
                     self.emy_life =self.emy_life -dmg 
                     if self.emy_life <=0 :
                         self.emy_life =0 
                         self.idx =241 
                         self.tmr =0
-                if self.tmr ==23 :
+                if self.tmr ==20 :
                     if self.emy_typ ==18 :
                         self.boss_mode = "fire"
                     if self.emy_typ ==12:
@@ -3381,7 +3387,7 @@ class Game:
                         self.set_message ("　敵は　火傷した！")
                     else:
                         self.tmr =self.tmr +2
-                if self.tmr ==26 :
+                if self.tmr ==23 :
                     if self.emy_typ ==14:
                         self.idx =231 
                         self.tmr =0 

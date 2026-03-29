@@ -87,7 +87,7 @@ def load_sounds(base_path: str) -> list:
     """Load sound effects and jingles in the existing order."""
     return [
         pygame.mixer.Sound(base_path + "/sound/ohd_se_attack.wav"),
-        pygame.mixer.Sound(base_path + "/sound/ohd_se_blaze.wav"),
+        pygame.mixer.Sound(base_path + "/sound/se_blaze.wav"),
         pygame.mixer.Sound(base_path + "/sound/ohd_se_potion.wav"),
         pygame.mixer.Sound(base_path + "/sound/ohd_jin_gameover.wav"),
         pygame.mixer.Sound(base_path + "/sound/jin_levup.wav"),
