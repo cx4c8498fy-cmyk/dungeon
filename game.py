@@ -2691,10 +2691,6 @@ class Game:
                             self.save_from_boss = False
                             self.idx =110 
                             self.tmr =0 
-                    # if key [K_b ]or key [K_BACKSPACE ]:
-                    #     self.save_from_boss = False
-                    #     self.idx =110 
-                    #     self.tmr =0 
 
             elif self.idx ==110 :# 画面切り替え
                 self.draw_dungeon (screen ,fontS )
@@ -3214,16 +3210,17 @@ class Game:
                             cri =1 
                             se [0 ].play ()
                             self.set_message ("　会心の一撃！")
-                    dmg =self.pl_str +random .randint (0 ,9 )-EMY_APRO [self.emy_typ ]
-                    dmg =int (dmg *(1 +0.01 *cri *self.pl_sword [0 ][1 ]))+2 *self.pl_sword [0 ][1 ]+self.pl_sword [2 ][1 ]
-                    dmg =max (1 +cri ,int (dmg /(2 *self.poison +1 )))
+                    dmg =self.pl_str +random .randint (0 ,9 )
+                    dmg =dmg *(1 +0.01 *cri *self.pl_sword [0 ][1 ])+2 *self.pl_sword [0 ][1 ]+self.pl_sword [2 ][1 ]
+                if self.tmr ==7 :
                     if self.emy_typ ==10 :
                         if random .random ()>0.7 :
                             self.set_message ("　攻撃は　防御された！")
-                            dmg =int (dmg /2 )
+                            se [11 ].play ()
+                            dmg = dmg /2
                     if self.guard_remain >0 and self.emy_typ ==20 :
-                        dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
-                if self.tmr ==5 :
+                        dmg =dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 )
+                    dmg =max (1 +cri ,int (EMY_APRO [self.emy_typ ] * dmg /(2 *self.poison +1 )))
                     self.emy_blink =5 
                     self.set_message (f"　{dmg}　ダメージ！")
                 if self.tmr ==11 :
@@ -3470,6 +3467,7 @@ class Game:
                         if random .random ()>0.7 and self.emy_typ !=20 :
                             pro =0.3 +0.01 *self.pl_shield [0 ][1 ]
                             self.set_message ("　盾で　防御した！")
+                            se [11 ].play ()
                     if self.pl_shield [1 ][0 ]==1 :
                         if random .random ()>0.7 :
                             cou =self.pl_shield [1 ][1 ]
@@ -3701,11 +3699,12 @@ class Game:
                     self.set_message (f"　{self.emy_name}の　攻撃！")
                     se [0 ].play ()
                     self.emy_step =30 
-                if self.tmr ==9 :
+                if self.tmr ==8 :
                     if self.pl_shield [0 ][0 ]==1 :
                         if random .random ()>0.7 and self.emy_typ !=20 :
                             pro =0.3 +0.01 *self.pl_shield [0 ][1 ]
                             self.set_message ("　盾で　防御した！")
+                            se [11 ].play ()
                     if self.pl_shield [1 ][0 ]==1 :
                         if random .random ()>0.7 :
                             cou =self.pl_shield [1 ][1 ]
@@ -3859,7 +3858,7 @@ class Game:
                     se [4 ].play ()
                     self.pl_level =self.pl_level +1 
                     lif_p =random .randint (10 ,20 )
-                    str_p =random .randint (7 ,9 )
+                    str_p =random .randint (6 ,8 )
                     mag_p =random .randint (15 ,30 )
                     self.pl_exp =self.pl_exp -(self.pl_lifemax -250 )*20 
                 if self.tmr ==10 :
