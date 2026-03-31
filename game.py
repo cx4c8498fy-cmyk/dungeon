@@ -88,7 +88,7 @@ class Game:
         self.wpn_lev = 0
 
         self.emy_name = ""
-        self.lev = 0
+        self.emy_lev = 0
         self.emy_lifemax = 0
         self.emy_life = 0
         self.emy_str = 0
@@ -1406,6 +1406,7 @@ class Game:
         py =int (self.pl_y *scale )
         bg .fill ((255 ,0 ,0 ,200 ),[map_x +px ,map_y +py ,marker ,marker ])
 
+
     def init_battle (self ):
         self.emy_skip_turn = False
         self.emy_typ =random .randint (0 ,EMY_APPEAR [self.floor -1 ])
@@ -1414,19 +1415,27 @@ class Game:
         if self.emy_typ ==10 :
             self.emy_typ =22 
             geta =0 
-        self.lev =random .randint (1 ,self.floor )
+        self.emy_lev =random .randint (1 ,self.floor )
         self.imgEnemy =pygame .image .load (self.path +"/image/enemy"+str (self.emy_typ )+"_"+str ((self.floor -1 )//30 )+".png")
         new_w =int (self.imgEnemy .get_width ()*1.1 )
         new_h =int (self.imgEnemy .get_height ()*1.1 )
         self.imgEnemy =pygame .transform .scale (self.imgEnemy ,(new_w ,new_h ))
         self.emy_name =EMY_NAME [self.emy_typ ]
-        self.emy_lifemax =int ((73 *(self.emy_typ +1 )+EMY_LIFE [self.emy_typ ])*(1.2 *((self.floor -1 )//30 )+1 ))+(self.lev -1 )*8 +geta *3 
+        tier =(self.floor -1 )//30
+        base =max (1 ,int (2.4 *EMY_LIFE [self.emy_typ ]-100 ))
+        floor_mul =1.0 +1.2 *tier
+        level_mul =1.0 +0.12 *(self.emy_lev -1 )/99
+        level_add =(self.emy_lev -1 )*9
+        self.emy_lifemax =int (base *floor_mul *level_mul +level_add )+geta *3
         self.emy_life =self.emy_lifemax 
-        self.emy_str =int (self.emy_lifemax /7 +EMY_STR [self.emy_typ ]*(0.5 *((self.floor -1 )//30 )+1 ))+geta 
+        str_base =max (1 ,int (EMY_STR [self.emy_typ ]))
+        str_level_add =(self.emy_lev -1 )
+        self.emy_str =int (str_base *floor_mul *level_mul +str_level_add )+geta 
         screen =pygame .display .get_surface ()
         screen_w ,screen_h =screen .get_size ()
         self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
         self.emy_y =1.45*screen_h //2 -self.imgEnemy .get_height () 
+
 
     def init_bossbattle (self ):
         self.emy_skip_turn = False
@@ -1504,7 +1513,7 @@ class Game:
         for i in range (10 ):# 戦闘メッセージの表示
             self.draw_text (bg ,self.message [i ],msg_x +30 ,msg_y +40 +i *48 ,fnt ,WHITE )
         if self.boss ==0 :
-            self.draw_text (bg ,f"{self.emy_name}  Lv.{self.lev}",bg_left +40 ,bg_top +30 ,fnt ,WHITE )
+            self.draw_text (bg ,f"{self.emy_name}  Lv.{self.emy_lev}",bg_left +40 ,bg_top +30 ,fnt ,WHITE )
         else :
             self.draw_text (bg ,f"{self.emy_name}",bg_left +40 ,bg_top +30 ,fnt ,WHITE )
         self.draw_para (bg ,fnt ,bg_rect )# 主人公の能力を表示
@@ -2011,7 +2020,7 @@ class Game:
                 self.set_message ("　敵は　力をためた!")
             action =False 
         if self.emy_typ ==5 or self.emy_typ ==12:
-            suck = {5:5+self.lev, 12:104}[self.emy_typ] + random .randint (1 ,self.emy_typ )
+            suck = {5:5+self.emy_lev, 12:104}[self.emy_typ] + random .randint (1 ,self.emy_typ )
             suck = min(suck, self.pl_mag)
             self.set_message (f"　魔力を　{suck}　吸収された!")
             self.pl_mag =self.pl_mag -suck 
@@ -3408,7 +3417,7 @@ class Game:
                 win_y =screen_h //2 -win_h //2 
                 pygame .draw .rect (screen ,BLACK ,[win_x ,win_y ,win_w ,win_h ])
                 pygame .draw .rect (screen ,WHITE ,[win_x ,win_y ,win_w ,win_h ],2 )
-                name = f"{self.emy_name}  Lv.{self.lev}"
+                name = f"{self.emy_name}  Lv.{self.emy_lev}"
                 info = ENEMY_INFO.get(self.emy_typ, "info text")
                 self.draw_text (screen ,name ,win_x + 30 ,win_y + 40 ,font ,WHITE )
                 parts = info.split("\n")
@@ -3805,7 +3814,8 @@ class Game:
                         se [7 ].play ()
                     else :
                         se [5 ].play ()
-                    self.pl_exp =self.pl_exp +int ((500 +self.emy_typ *50 +EMY_EXP [self.emy_typ ])*(0.7 *((self.floor -1 )//30 )+1 ))
+                    # self.pl_exp =self.pl_exp +int ((500 +self.emy_typ *50 +EMY_EXP [self.emy_typ ])*(0.7 *((self.floor -1 )//30 )+1 ))
+                    self.pl_exp =self.pl_exp +int(EMY_EXP [self.emy_typ ]*(1+0.01*self.emy_lev))
                     self.pl_mag =self.pl_mag +self.emy_typ *2 +self.boss *300 
                     if self.tutorial_enabled and self.tutorial_pending_battle:
                         if self.tutorial_pending_battle =="room3":
@@ -3941,7 +3951,7 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
                     trap_drop =random .randint (2 ,10 )#最大で2~10を用意
-                    wpn_lev_drop =self.lev 
+                    wpn_lev_drop =self.emy_lev 
                 if self.tmr ==10 :
                     if trap_drop %3 ==2 :
                         self.pl_shield [trap_drop //3 ][0 ]=1 
