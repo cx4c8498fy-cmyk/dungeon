@@ -1440,6 +1440,7 @@ class Game:
     def init_bossbattle (self ):
         self.emy_skip_turn = False
         base_typ =9 +int (self.floor //10 )
+        self.emy_lev =1
         if 90 <self.floor <100 :
             base_typ =9 +int (self.floor %10 )
         elif self.floor ==100 :
@@ -3814,7 +3815,6 @@ class Game:
                         se [7 ].play ()
                     else :
                         se [5 ].play ()
-                    # self.pl_exp =self.pl_exp +int ((500 +self.emy_typ *50 +EMY_EXP [self.emy_typ ])*(0.7 *((self.floor -1 )//30 )+1 ))
                     self.pl_exp =self.pl_exp +int(EMY_EXP [self.emy_typ ]*(1+0.01*self.emy_lev))
                     self.pl_mag =self.pl_mag +self.emy_typ *2 +self.boss *300 
                     if self.tutorial_enabled and self.tutorial_pending_battle:
@@ -3896,7 +3896,7 @@ class Game:
                     self.restore_tutorial_cocoon ()
                 if self.emy_typ ==21 :
                     time .sleep (1 )
-                    charge =0 
+                    # self.change =0 
                     self.boss =0 
                     if self.true_episode_heard:
                         self.init_last_talk (2)
