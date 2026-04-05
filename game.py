@@ -128,6 +128,7 @@ class Game:
         self.stair_choice_input_lock = False
         self.boss_save_cmd = 0
         self.boss_save_input_lock = False
+        self.boss_transition_mode = False
         self.btl_cmd = 0
         self.pow_up = 1
         self.poison = 0
@@ -154,6 +155,7 @@ class Game:
         self.boss_area = set()
         self.boss_talk_lines = []
         self.boss_talk_index = 0
+        self.boss_talk_kind = "init"
         self.boss_map_cache = {}
         self.bg_cache = {}
         self.last_btl_bg_idx = None
@@ -541,12 +543,17 @@ class Game:
             self.boss_pos = (x, y)
             self.boss_area = {(x, y)}
 
-    def init_boss_talk(self):
+    def init_boss_talk(self, mode="init"):
         boss_id = 9 + int(self.floor // 10)
         if 90 < self.floor < 100:
             boss_id = 9 + int(self.floor % 10)
         boss_map_id = boss_id - 10
-        self.boss_talk_lines = BOSS_TALK[boss_map_id]
+        self.boss_talk_kind = mode
+        if mode == "end":
+            talk_table = BOSS_END_TALK
+        else:
+            talk_table = BOSS_INIT_TALK
+        self.boss_talk_lines = talk_table.get(boss_map_id, [])
         self.boss_talk_index = 0
         self.boss_talk_char_count = 0
         self.boss_talk_last_tick = pygame.time.get_ticks()
@@ -1068,6 +1075,7 @@ class Game:
         self.stair_choice_input_lock = False
         self.boss_save_cmd = 0
         self.boss_save_input_lock = False
+        self.boss_transition_mode = False
         self.true_episode_heard = False
         self.encountered_enemies = set()
         self.idx =100 
@@ -1112,6 +1120,7 @@ class Game:
                 self.stair_choice_input_lock = False
                 self.boss_save_cmd = 0
                 self.boss_save_input_lock = False
+                self.boss_transition_mode = False
                 self.pl_shield =loaddata ["shield"]
                 self.pl_armor =loaddata ["armor"]
                 self.pl_sword =loaddata ["sword"]
@@ -2703,14 +2712,23 @@ class Game:
                             self.tmr =0 
 
             elif self.idx ==110 :# 画面切り替え
-                self.draw_dungeon (screen ,fontS )
+                transition_black =self.boss_transition_mode
+                if transition_black and self.tmr <=9 :
+                    screen .fill (BLACK )
+                else:
+                    self.draw_dungeon (screen ,fontS )
                 if self.floor_title_active and self.floor_title_pos :
                     disp_floor =self.floor
                     x ,y =self.floor_title_pos
-                elif self.tmr == 1:
-                    disp_floor =self.floor +1 
-                    x = win_x + win_w//2 - 42
-                    y = title_top +int (title_h *0.4 )
+                else:
+                    if self.tmr <=5 :
+                        disp_floor =self.floor +1
+                    else:
+                        disp_floor =self.floor
+                    title_text =f"地下 {disp_floor}階"
+                    screen_w ,screen_h =screen .get_size ()
+                    x =screen_w //2 -font .size (title_text )[0 ]//2
+                    y =screen_h //2 -font .get_height ()//2
                 if 1 <=self.tmr and self.tmr <=5 :
                     alpha =int (255 *self.tmr /5 )
                     fade =pygame .Surface (screen .get_size (),pygame .SRCALPHA )
@@ -2774,6 +2792,7 @@ class Game:
                 if self.tmr ==14 :
                     self.floor_title_active = False
                     self.floor_title_pos = None
+                    self.boss_transition_mode = False
                     self.idx =100 
 
             elif self.idx ==120 :# アイテム入手もしくはトラップ
@@ -2843,7 +2862,7 @@ class Game:
                         if self.boss_talk_char_count < len(line):
                             self.boss_talk_char_count = len(line)
                         else:
-                            if self.floor ==40 and self.boss_talk_index ==0 :
+                            if self.boss_talk_kind == "init" and self.floor ==40 and self.boss_talk_index ==0 :
                                 se [2 ].play ()
                                 self.pl_life =self.pl_lifemax 
                             self.boss_talk_index +=1 
@@ -2851,7 +2870,16 @@ class Game:
                             self.boss_talk_last_tick = pygame.time.get_ticks()
                     if self.boss_talk_index >=len (self.boss_talk_lines ):
                         self.truth_fragment_drop_battle =False
-                        self.idx =200 
+                        if self.boss_talk_kind == "end":
+                            self.boss_save_cmd =0
+                            self.boss_save_input_lock = True
+                            self.save_from_boss = False
+                            if 90 <self.floor <100 :
+                                pygame .mixer .music .load (self.path +"/sound/bgm_9.wav")
+                                pygame .mixer .music .play (-1 )
+                            self.idx =112 
+                        else:
+                            self.idx =200 
                         self.tmr =0 
 
             elif self.idx ==133 :# ラスボス会話
@@ -3907,13 +3935,9 @@ class Game:
                 elif self.boss ==1 :
                     time .sleep (1 )
                     self.boss =0 
-                    self.boss_save_cmd =0
-                    self.boss_save_input_lock = True
-                    self.save_from_boss = False
-                    if 90 <self.floor <100 :
-                        pygame .mixer .music .load (self.path +"/sound/bgm_9.wav")
-                        pygame .mixer .music .play (-1 )
-                    self.idx =112 
+                    self.boss_transition_mode = True
+                    self.init_boss_talk ("end")
+                    self.idx =130 
                     self.tmr =0 
                 else :
                     if self.move_bgm_path :
