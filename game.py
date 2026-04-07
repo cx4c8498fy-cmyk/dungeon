@@ -80,6 +80,7 @@ class Game:
         self.blazegem = 0
         self.guard = 0
         self.truth_fragment = 0
+        self.heirloom_pendant = 1
         self.tool_food = 0
         self.tool_magic_water = 0
         self.tool_magic_seed = 0
@@ -171,6 +172,9 @@ class Game:
         self.item_talk_index = 0
         self.item_talk_char_count = 0
         self.item_talk_last_tick = 0
+        self.tool_desc_tool_id = ""
+        self.tool_desc_char_count = 0
+        self.tool_desc_last_tick = 0
         self.item_event_phase = 0
         self.item_choice = 0
         self.item_reward = None
@@ -1063,6 +1067,7 @@ class Game:
         self.blazegem =0 
         self.guard =0 
         self.truth_fragment =0
+        self.heirloom_pendant =1
         self.tool_food =0
         self.tool_magic_water =0
         self.tool_magic_seed =0
@@ -1108,6 +1113,7 @@ class Game:
                 self.blazegem =loaddata ["blazegem"]
                 self.guard =loaddata ["guard"]
                 self.truth_fragment =loaddata .get ("truth_fragment",0 )
+                self.heirloom_pendant =loaddata .get ("heirloom_pendant",1 )
                 self.tool_food =loaddata .get ("tool_food",0 )
                 self.tool_magic_water =loaddata .get ("tool_magic_water",0 )
                 self.tool_magic_seed =loaddata .get ("tool_magic_seed",0 )
@@ -1579,6 +1585,10 @@ class Game:
         if len (tools )==0 :
             self.draw_text (bg ,"（どうぐなし）",win_x +28 ,start_y ,fnt ,WHITE )
         self.draw_text (bg ,"[B]/[Back] 戻る",win_x +win_w -170 ,win_y +win_h -32 ,fnt ,WHITE )
+        selected_tool =None
+        if len (tools )>0 and 0 <=self.tool_cmd <len (tools ):
+            selected_tool =tools [self.tool_cmd ]
+        self.draw_tool_description (bg ,fnt ,selected_tool )
         if self.tool_confirm_active and len (tools )>0 :
             confirm_options =["はい","いいえ"]
             box_w =220
@@ -1594,10 +1604,44 @@ class Game:
                     self.draw_text (bg ,"▶",box_x +16 ,y ,fnt ,WHITE )
                 self.draw_text (bg ,label ,box_x +42 ,y ,fnt ,WHITE )
 
+    def draw_tool_description (self ,bg ,fnt ,tool ):
+        view_rect =getattr (self ,"dungeon_view_rect",None )
+        if view_rect :
+            view_left ,view_top ,view_w ,view_h =view_rect
+        else :
+            view_left =0
+            view_top =0
+            view_w ,view_h =bg .get_size ()
+        scale_x =view_w /880
+        scale_y =view_h /720
+        dlg_x =view_left +int (40 *scale_x )
+        dlg_y =view_top +int (525 *scale_y )
+        dlg_w =max (1 ,int (800 *scale_x ))
+        dlg_h =max (1 ,int (160 *scale_y ))
+        text_x =view_left +int (60 *scale_x )
+        text_y =view_top +int (560 *scale_y )
+        line_h =max (1 ,int (28 *scale_y ))
+        pygame .draw .rect (bg ,BLACK ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ])
+        pygame .draw .rect (bg ,WHITE ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ],2 )
+        if tool is None :
+            tool_id =""
+            desc =""
+        else :
+            tool_id =tool ["id"]
+            desc =TOOL_INFO .get (tool_id ,"情報が登録されていません。")
+        if tool_id !=self.tool_desc_tool_id :
+            self.tool_desc_tool_id =tool_id
+        if len (desc )>0 :
+            parts =desc .split ("\n")
+            for i ,part in enumerate (parts ):
+                self.draw_text (bg ,part ,text_x ,text_y +i *line_h ,fnt ,WHITE )
+
     def get_tool_entries (self ):
         tools =[]
         if self.truth_fragment >0 :
             tools .append ({"id":"truth_fragment","name":"しんじつのかけら","count":self.truth_fragment ,"usable":False })
+        if self.heirloom_pendant >0 :
+            tools .append ({"id":"heirloom_pendant","name":"形見のペンダント","count":self.heirloom_pendant ,"usable":False })
         if self.tool_food >0 :
             tools .append ({"id":"food","name":TRE_NAME [3 ],"count":self.tool_food ,"usable":True })
         if self.tool_magic_water >0 :
@@ -2092,6 +2136,7 @@ class Game:
             if self.idx ==0 :# タイトル画面
                 if self.tmr ==1 :
                     self.truth_fragment =0
+                    self.heirloom_pendant =1
                     self.tool_food =0
                     self.tool_magic_water =0
                     self.tool_magic_seed =0
@@ -2183,6 +2228,7 @@ class Game:
                             self.blazegem =loaddata ["blazegem"]
                             self.guard =loaddata ["guard"]
                             self.truth_fragment =loaddata .get ("truth_fragment",0 )
+                            self.heirloom_pendant =loaddata .get ("heirloom_pendant",1 )
                             self.tool_food =loaddata .get ("tool_food",0 )
                             self.tool_magic_water =loaddata .get ("tool_magic_water",0 )
                             self.tool_magic_seed =loaddata .get ("tool_magic_seed",0 )
@@ -2252,6 +2298,9 @@ class Game:
                             self.tool_confirm_active = False
                             self.tool_confirm_cmd = 0
                             self.tool_cmd = 0
+                            self.tool_desc_tool_id =""
+                            self.tool_desc_char_count =0
+                            self.tool_desc_last_tick =0
                             self.idx =34
                             self.tmr =0
                         elif self.menu_cmd ==2 :#go_title
@@ -2419,6 +2468,7 @@ class Game:
                 "blazegem":self.blazegem ,
                 "guard":self.guard ,
                 "truth_fragment":self.truth_fragment ,
+                "heirloom_pendant":self.heirloom_pendant ,
                 "tool_food":self.tool_food ,
                 "tool_magic_water":self.tool_magic_water ,
                 "tool_magic_seed":self.tool_magic_seed ,
@@ -2758,6 +2808,7 @@ class Game:
                         "blazegem":self.blazegem ,
                         "guard":self.guard ,
                         "truth_fragment":self.truth_fragment ,
+                        "heirloom_pendant":self.heirloom_pendant ,
                         "tool_food":self.tool_food ,
                         "tool_magic_water":self.tool_magic_water ,
                         "tool_magic_seed":self.tool_magic_seed ,
