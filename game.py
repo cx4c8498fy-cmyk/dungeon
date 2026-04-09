@@ -590,8 +590,7 @@ class Game:
             self.item_talk_lines = lines
         else:
             self.item_talk_lines = [
-                "迷える子羊よ。そなたに恵みをもたらしましょう。",
-                "あなたが必要としているものは何ですか？",
+                "おお　あわれなニンゲンよ。\nそなたに恵みを　授けよう",
             ]
 
     def init_event_talk(self):
@@ -1353,10 +1352,10 @@ class Game:
         W =325 
         H =140 
         margin_bottom =15 
-        Y =view_top +view_h -H -margin_bottom 
+        # Y =view_top +view_h -H -margin_bottom 
+        Y =view_top +margin_bottom
         win =pygame .Surface ((W ,H ),pygame .SRCALPHA )
         win .fill ((0 ,0 ,0 ,100 ))
-        # pygame .draw .rect (win ,WHITE ,[0 ,0 ,W ,H ],2 )
         bg .blit (win ,[X ,Y ])
 
         self.draw_text (bg ,f"傷薬: {self.potion}",X +10 ,Y +8 ,fnt ,WHITE )
@@ -1497,6 +1496,9 @@ class Game:
         bg_top =bg_rect [1 ]
         bg_w =bg_rect [2 ]
         bg_h =bg_rect [3 ]
+        enemy_name_y =bg_top +bg_h -120
+        enemy_bar_y =enemy_name_y +30
+        enemy_state_y =enemy_name_y +52
         W =300; H =530
         msg_x =bg_left +bg_w -10 -W
         msg_y =bg_top +50
@@ -1509,19 +1511,18 @@ class Game:
             fx = self.emy_x + self.imgEnemy.get_width() - self.imgFire.get_width()
             fy = self.emy_y + self.emy_step - self.imgFire.get_height() // 2
             bg .blit (self.imgFire ,[fx ,fy ])
-            self.draw_text (bg ,f"火傷",bg_left +40 ,bg_top +82 ,fnt ,RED )
+            self.draw_text (bg ,f"火傷",bg_left +40 ,enemy_state_y ,fnt ,RED )
         if self.pow_up >1 :
-            self.draw_text (bg ,f"力↑",bg_left +40 ,bg_top +82 ,fnt ,RED )
+            self.draw_text (bg ,f"力↑",bg_left +40 ,enemy_state_y ,fnt ,RED )
         if self.emy_typ ==16 or self.emy_typ ==21 :
-            self.draw_text (bg ,"Magia : "+str (self.madoka )+"/1000",bg_left +40 ,bg_top +82 ,fnt ,WHITE )
-        self.draw_bar (bg ,bg_left +30 ,bg_top +60 ,200 ,10 ,self.emy_life ,self.emy_lifemax )
+            self.draw_text (bg ,"Magia : "+str (self.madoka )+"/1000",bg_left +40 ,enemy_state_y ,fnt ,WHITE )
+        self.draw_bar (bg ,bg_left +30 ,enemy_bar_y ,200 ,10 ,self.emy_life ,self.emy_lifemax )
         if self.emy_blink >0 :
             self.emy_blink =self.emy_blink -1 
         para_x =bg_left +10
         para_h =140
-        para_margin_bottom =15
-        para_y =bg_top +bg_h -para_h -para_margin_bottom
-        status_y =para_y -35
+        para_margin_top =15
+        status_y =bg_top +para_margin_top +para_h +10
         if self.guard_remain >0 :
             self.draw_text (bg ,f"守護 {'・'*self.guard_remain}",para_x +30 ,status_y ,fnt ,GREEN )
         if self.poison >0 :
@@ -1529,9 +1530,9 @@ class Game:
         for i in range (10 ):# 戦闘メッセージの表示
             self.draw_text (bg ,self.message [i ],msg_x +30 ,msg_y +40 +i *48 ,fnt ,WHITE )
         if self.boss ==0 :
-            self.draw_text (bg ,f"{self.emy_name}  Lv.{self.emy_lev}",bg_left +40 ,bg_top +30 ,fnt ,WHITE )
+            self.draw_text (bg ,f"{self.emy_name}  Lv.{self.emy_lev}",bg_left +40 ,enemy_name_y ,fnt ,WHITE )
         else :
-            self.draw_text (bg ,f"{self.emy_name}",bg_left +40 ,bg_top +30 ,fnt ,WHITE )
+            self.draw_text (bg ,f"{self.emy_name}",bg_left +40 ,enemy_name_y ,fnt ,WHITE )
         self.draw_para (bg ,fnt ,bg_rect )# 主人公の能力を表示
 
     def menu_command (self ,bg ,fnt ,key ):
@@ -2673,7 +2674,7 @@ class Game:
                     view_left =0 
                     view_top =0 
                     view_w ,view_h =screen .get_size ()
-                self.draw_text (screen ,"地下 {}階".format (self.floor),view_left +60 ,view_top +40 ,fontS ,WHITE )
+                self.draw_text (screen ,"地下 {}階".format (self.floor),view_left +60 ,view_h -40 ,fontS ,WHITE )
                 menu_label ="[M]enu "
                 menu_x =view_left +view_w -int (view_w *0.1 )-fontS .size (menu_label )[0 ]
                 self.draw_text (screen ,menu_label ,menu_x ,view_top +40 ,fontS ,WHITE )
@@ -3188,7 +3189,7 @@ class Game:
                                 self.blazegem =self.blazegem +self.item_reward_count
                             if self.item_reward ==2 :
                                 self.guard =self.guard +self.item_reward_count
-                            self.item_talk_lines = ["よろしい。そなたに差し上げます。\n神のお恵みを"]
+                            self.item_talk_lines = ["よろしい。そなたに差し上げよう。"]
                             self.item_talk_index = 0
                             self.item_talk_char_count = 0
                             self.item_talk_last_tick = pygame.time.get_ticks()
