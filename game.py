@@ -2701,7 +2701,9 @@ class Game:
                                     self.idx =132
                                     self.tmr =0
                             elif self.floor >= 91 and not self.all_cocoons_cleared():
-                                pass
+                                self.init_item_event (kind="blocked", lines=["魔物を……滅ぼすのだ……"])
+                                self.idx =131
+                                self.tmr =0
                             else:
                                 if 91 <= self.floor <= 99:
                                     self.init_item_event (kind="item", reward_count=5)
@@ -3033,6 +3035,30 @@ class Game:
                         if self.item_talk_index >=len (self.item_talk_lines ):
                             self.true_episode_heard = True
                             self.init_item_event (kind="item", reward_count=5)
+                elif self.item_event_kind == "blocked":
+                    if self.item_talk_index <len (self.item_talk_lines ):
+                        line = self.item_talk_lines [self.item_talk_index ]
+                        now =pygame .time .get_ticks ()
+                        if self.item_talk_char_count <len (line )and now -self.item_talk_last_tick >=100 :
+                            self.item_talk_char_count +=1
+                            self.item_talk_last_tick =now
+                        visible =line [:self.item_talk_char_count ]
+                        parts =visible .split ("\n")
+                        for i ,part in enumerate (parts ):
+                            self.draw_text (screen ,part ,text_x ,text_y +i *line_h ,fontS ,WHITE )
+                    self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
+                    if accept:
+                        if self.item_talk_index <len (self.item_talk_lines ):
+                            line =self.item_talk_lines [self.item_talk_index ]
+                            if self.item_talk_char_count <len (line ):
+                                self.item_talk_char_count =len (line )
+                            else:
+                                self.item_talk_index +=1
+                                self.item_talk_char_count =0
+                                self.item_talk_last_tick =pygame .time .get_ticks ()
+                        if self.item_talk_index >=len (self.item_talk_lines ):
+                            self.idx =100
+                            self.tmr =0
                 elif self.item_event_kind == "weapon":
                     if self.item_event_phase == 0:
                         if self.item_talk_index <len (self.item_talk_lines ):
@@ -3256,6 +3282,7 @@ class Game:
             elif self.idx ==210 :# プレイヤーのターン（入力待ち）
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
+                    self.btl_cmd =0 
                     self.set_message ("プレイヤーのターン")
                     self.guard_remain =max (self.guard_remain -1 ,0 )
                 if self.battle_command (screen ,fontS ,key )==True :
@@ -3300,7 +3327,7 @@ class Game:
                             se [0 ].play ()
                             self.set_message ("　会心の一撃！")
                     dmg =self.pl_str +random .randint (0 ,9 )
-                    dmg =dmg *(1 +0.01 *cri *self.pl_sword [0 ][1 ])+2 *self.pl_sword [0 ][1 ]+self.pl_sword [2 ][1 ]
+                    dmg =dmg *(1 +0.01 *cri *self.pl_sword [0 ][1 ])+self.pl_sword [0 ][1 ]+0.5*self.pl_sword [2 ][1 ]
                 if self.tmr ==7 :
                     if self.emy_typ ==10 :
                         if random .random ()>0.7 :
@@ -3346,10 +3373,10 @@ class Game:
                     if self.pl_sword [1 ][0 ]==1 :
                         if random .random ()>0.95 -0.003 *self.pl_sword [1 ][1 ]:
                             ice =1 
-                    dmg =int (self.pl_str *1.5 )+random .randint (0 ,9 )-EMY_MPRO [self.emy_typ ]+2 *self.pl_sword [1 ][1 ]+self.pl_sword [2 ][1 ]
+                    dmg =self.pl_str *1.5 +random .randint (0 ,9 )-EMY_MPRO [self.emy_typ ]+ self.pl_sword [1 ][1 ]+0.5*self.pl_sword [2 ][1 ]
                     if self.guard_remain >0 and self.emy_typ ==20 :
-                        dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
-                    dmg =max (1 ,dmg )
+                        dmg =dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 )
+                    dmg =max (1 ,int(dmg) )
                     if self.boss_mode == "ice":
                         dmg =0 
                 blit_time =8
@@ -4007,17 +4034,19 @@ class Game:
 
             elif self.idx ==245 :#最終ボスの形態変化
                 self.draw_battle (screen ,fontS )
+                screen_w ,screen_h =screen .get_size ()
+                bar_h =max (1 ,int (screen_h *320 /720 ))
                 if 1 <=self.tmr <=5 :
-                    pygame .draw .rect (screen ,BLACK ,[0 ,0 ,880 ,320 ])
-                    pygame .draw .rect (screen ,BLACK ,[0 ,720 -320 ,880 ,320 ])
+                    pygame .draw .rect (screen ,BLACK ,[0 ,0 ,screen_w ,bar_h ])
+                    pygame .draw .rect (screen ,BLACK ,[0 ,screen_h -bar_h ,screen_w ,bar_h ])
                 if self.tmr ==1 :
                     self.init_message ()
                 if self.tmr ==5 :
                     self.change +=1 
                     self.init_bossbattle ()
                 if 6 <=self.tmr and self.tmr <=9 :
-                    pygame .draw .rect (screen ,BLACK ,[0 ,0 ,880 ,320 ])
-                    pygame .draw .rect (screen ,BLACK ,[0 ,720 -320 ,880 ,320 ])
+                    pygame .draw .rect (screen ,BLACK ,[0 ,0 ,screen_w ,bar_h ])
+                    pygame .draw .rect (screen ,BLACK ,[0 ,screen_h -bar_h ,screen_w ,bar_h ])
                 if self.tmr ==10 :
                     self.idx =210 
                     self.tmr =0 
