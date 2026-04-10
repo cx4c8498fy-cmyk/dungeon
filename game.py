@@ -167,6 +167,9 @@ class Game:
         self.move_bgm_path = ""
         self.move_bgm_pos_ms = 0
         self.move_bgm_start_time = 0.0
+        self.keep_title_bgm_on_next_title = False
+        self.recollection_stage = 0
+        self.clear_save_payload = None
         self.emy_skip_turn = False
         self.item_talk_lines = []
         self.item_talk_index = 0
@@ -899,7 +902,7 @@ class Game:
             self.dungeon [self.pl_y ][self.pl_x ]=0 
             w_a =WEP_APPEAR [(self.floor -1 )//10 ]
             self.trap =random .randint (2 ,4 +w_a )#最大で2~10を用意
-            low =max (1 ,self.floor -14 )
+            low =max (1 ,self.floor -10 )
             self.wpn_lev =random .randint (low ,self.floor )
             if self.trap %3 ==2 :
                 if self.pl_shield [(w_a +2 )//3 ][0 ]==0 :
@@ -1175,6 +1178,35 @@ class Game:
                 self.floor_title_active = True
                 self.idx =110
                 self.tmr =6
+
+    def make_current_save_data(self):
+        return {
+            "floor": self.floor,
+            "pl_lifemax": self.pl_lifemax,
+            "pl_life": self.pl_life,
+            "pl_mag": self.pl_mag,
+            "pl_str": self.pl_str,
+            "pl_exp": self.pl_exp,
+            "pl_level": self.pl_level,
+            "potion": self.potion,
+            "blazegem": self.blazegem,
+            "guard": self.guard,
+            "truth_fragment": self.truth_fragment,
+            "heirloom_pendant": self.heirloom_pendant,
+            "tool_food": self.tool_food,
+            "tool_magic_water": self.tool_magic_water,
+            "tool_magic_seed": self.tool_magic_seed,
+            "shield": self.pl_shield,
+            "armor": self.pl_armor,
+            "sword": self.pl_sword,
+            "dungeon": self.dungeon,
+            "pl_x": self.pl_x,
+            "pl_y": self.pl_y,
+            "boss_pos": self.boss_pos,
+            "true_episode_heard": self.true_episode_heard,
+            "encountered_enemies": sorted(self.encountered_enemies),
+            "tutorial_progress": self.tutorial_save_data(),
+        }
 
     def draw_prologue (self ,bg ,fnt ,key ):
         line_duration =20 
@@ -2142,8 +2174,11 @@ class Game:
                     self.tool_magic_water =0
                     self.tool_magic_seed =0
                     self.truth_fragment_drop_battle =False
-                    pygame .mixer .music .load (self.path +"/sound/bgm_title.wav")
-                    pygame .mixer .music .play (-1 )
+                    if self.keep_title_bgm_on_next_title:
+                        self.keep_title_bgm_on_next_title = False
+                    else:
+                        pygame .mixer .music .load (self.path +"/sound/bgm_title.wav")
+                        pygame .mixer .music .play (-1 )
                     self.title_mode = 0
                     self.title_cmd = 0
                 screen .fill (BLACK )
@@ -2664,6 +2699,92 @@ class Game:
                     self.idx =0 
                     self.tmr =0 
 
+            elif self.idx ==84 :# ラスボス会話後フェードアウト
+                self.draw_dungeon (screen ,fontS )
+                fade_frames =20
+                alpha =min (255 ,int (255 *self.tmr /fade_frames ))
+                fade =pygame .Surface (screen .get_size (),pygame .SRCALPHA )
+                fade .fill ((0 ,0 ,0 ,alpha ))
+                screen .blit (fade ,[0 ,0 ])
+                if self.tmr >=fade_frames :
+                    pygame .mixer .music .load (self.path +"/sound/bgm_title.wav")
+                    pygame .mixer .music .play (-1 )
+                    self.recollection_stage =0
+                    self.idx =85
+                    self.tmr =0
+
+            elif self.idx ==85 :# 回想（floor0〜9）
+                if self.tmr ==1 :
+                    recollection_floor_index =self.recollection_stage
+                    recollection_floor_value =recollection_floor_index *10 +1
+                    self.set_floor_assets (recollection_floor_index ,recollection_floor_value )
+                self.draw_dungeon (screen ,fontS )
+                fade_len =8
+                hold_len =8
+                cycle_len =fade_len *2 +hold_len
+                if self.tmr <=fade_len :
+                    alpha =int (255 *(1 -self.tmr /fade_len ))
+                elif self.tmr <=fade_len +hold_len :
+                    alpha =0
+                else:
+                    alpha =int (255 *(self.tmr -(fade_len +hold_len ))/fade_len )
+                alpha =max (0 ,min (255 ,alpha ))
+                if alpha >0 :
+                    fade =pygame .Surface (screen .get_size (),pygame .SRCALPHA )
+                    fade .fill ((0 ,0 ,0 ,alpha ))
+                    screen .blit (fade ,[0 ,0 ])
+                if self.tmr >=cycle_len :
+                    self.recollection_stage +=1
+                    if self.recollection_stage >=10 :
+                        self.boss_save_cmd =0
+                        self.boss_save_input_lock = True
+                        self.save_cmd =0
+                        self.load_accept_lock = True
+                        self.idx =86
+                        self.tmr =0
+                    else:
+                        self.tmr =0
+
+            elif self.idx ==86 :# クリア後セーブ確認
+                screen .fill (BLACK )
+                if self.boss_save_input_lock:
+                    self.boss_save_choice_command (screen ,fontS ,key ,enable_input =False )
+                    if not (key [K_UP ]or key [K_DOWN ]or key [K_LEFT ]or key [K_RIGHT ]or key [K_RETURN ]or key [K_a ]or key [K_b ]or key [K_BACKSPACE ]):
+                        self.boss_save_input_lock = False
+                else:
+                    if self.boss_save_choice_command (screen ,fontS ,key )==True :
+                        if self.boss_save_cmd ==0 :
+                            self.load_accept_lock = True
+                            self.idx =87
+                            self.tmr =0
+                        else :
+                            self.idx =88
+                            self.tmr =0
+
+            elif self.idx ==87 :# クリア後セーブ先選択
+                screen .fill (BLACK )
+                self.draw_text (screen ,"セーブ先を選択してください",260 ,200 ,fontS ,WHITE )
+                if self.save_command (screen ,fontS ,key )==True :
+                    save_data =self.clear_save_payload if self.clear_save_payload else self.make_current_save_data ()
+                    with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
+                        json .dump (save_data ,f )
+                    se [9 ].play ()
+                    self.floorlist [self.save_cmd ]=save_data ["floor"]
+                    self.idx =88
+                    self.tmr =0
+                if key [K_b ]or key [K_BACKSPACE ]:
+                    self.boss_save_input_lock = True
+                    self.idx =86
+                    self.tmr =0
+
+            elif self.idx ==88 :# タイトル遷移待機
+                screen .fill (BLACK )
+                if self.tmr >=5 :
+                    self.clear_save_payload = None
+                    self.keep_title_bgm_on_next_title = True
+                    self.idx =0
+                    self.tmr =0
+
             elif self.idx ==100 :# プレイヤーの移動
                 self.move_player (key )
                 self.draw_dungeon (screen ,fontS )
@@ -2982,7 +3103,8 @@ class Game:
                         if self.last_talk_mode == 2:
                             self.idx =82 
                         else:
-                            self.idx =80 
+                            self.clear_save_payload =self.make_current_save_data ()
+                            self.idx =84 
                         self.tmr =0 
 
             elif self.idx ==131 :# itemWallイベント
