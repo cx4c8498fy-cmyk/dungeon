@@ -13,6 +13,39 @@ from game_data import *
 from assets import load_images, load_sounds, load_floor_variants, load_wall_variants, make_wall_top
 
 
+BATTLE_UI_LAYOUT = {
+    "player_panel": {
+        "x_offset": 10,
+        "top_margin": 20,
+        "width": 325,
+        "height": 140,
+    },
+    "status": {
+        "x_offset_from_panel": 30,
+        "y_gap_from_panel": 10,
+        "line_gap": 4,
+    },
+    "enemy": {
+        "name_bottom_offset": 120,
+        "bar_y_offset": 30,
+        "state_y_offset": 52,
+        "label_x_offset": 40,
+        "bar_x_offset": 30,
+        "bar_width": 200,
+        "bar_height": 10,
+    },
+    "message_window": {
+        "width": 300,
+        "height": 530,
+        "right_margin": 10,
+        "top_margin": 50,
+        "text_x_margin": 30,
+        "text_y_margin": 40,
+        "line_height": 48,
+    },
+}
+
+
 def load_floorlist(base_path):
     floorlist = []
     for i in range(3):
@@ -1384,18 +1417,17 @@ class Game:
         return pygame .font .Font (font_path ,size )
 
     def draw_para (self ,bg ,fnt ,view_rect =None ):
+        panel =BATTLE_UI_LAYOUT ["player_panel"]
         if view_rect :
             view_left ,view_top ,view_w ,view_h =view_rect
         else :
             view_left =0 
             view_top =0 
             view_w ,view_h =bg .get_size ()
-        X =view_left +10
-        W =325 
-        H =140 
-        margin_bottom =15 
-        # Y =view_top +view_h -H -margin_bottom 
-        Y =view_top +margin_bottom
+        X =view_left +panel ["x_offset"]
+        W =panel ["width"]
+        H =panel ["height"]
+        Y =view_top +panel ["top_margin"]
         win =pygame .Surface ((W ,H ),pygame .SRCALPHA )
         win .fill ((0 ,0 ,0 ,100 ))
         bg .blit (win ,[X ,Y ])
@@ -1526,6 +1558,10 @@ class Game:
             pygame .draw .rect (bg , SILVER, [x ,y ,w *val /ma ,h ])
 
     def draw_battle (self ,bg ,fnt ):
+        panel =BATTLE_UI_LAYOUT ["player_panel"]
+        status_layout =BATTLE_UI_LAYOUT ["status"]
+        enemy_layout =BATTLE_UI_LAYOUT ["enemy"]
+        msg_layout =BATTLE_UI_LAYOUT ["message_window"]
         bx =0 ;by =0 
         if self.dmg_eff >1 :
             self.dmg_eff =self.dmg_eff -1 
@@ -1540,12 +1576,13 @@ class Game:
         bg_top =bg_rect [1 ]
         bg_w =bg_rect [2 ]
         bg_h =bg_rect [3 ]
-        enemy_name_y =bg_top +bg_h -120
-        enemy_bar_y =enemy_name_y +30
-        enemy_state_y =enemy_name_y +52
-        W =300; H =530
-        msg_x =bg_left +bg_w -10 -W
-        msg_y =bg_top +50
+        enemy_name_y =bg_top +bg_h -enemy_layout ["name_bottom_offset"]
+        enemy_bar_y =enemy_name_y +enemy_layout ["bar_y_offset"]
+        enemy_state_y =enemy_name_y +enemy_layout ["state_y_offset"]
+        W =msg_layout ["width"]
+        H =msg_layout ["height"]
+        msg_x =bg_left +bg_w -msg_layout ["right_margin"]-W
+        msg_y =bg_top +msg_layout ["top_margin"]
         win =pygame .Surface ((W ,H ),pygame .SRCALPHA )
         win .fill ((0 ,0 ,0 ,100 ))
         bg .blit (win ,[msg_x ,msg_y ])
@@ -1555,20 +1592,18 @@ class Game:
             fx = self.emy_x + self.imgEnemy.get_width() - self.imgFire.get_width()
             fy = self.emy_y + self.emy_step - self.imgFire.get_height() // 2
             bg .blit (self.imgFire ,[fx ,fy ])
-            self.draw_text (bg ,f"火傷",bg_left +40 ,enemy_state_y ,fnt ,RED )
+            self.draw_text (bg ,f"火傷 {'・'*self.burn_turns}",bg_left +enemy_layout ["label_x_offset"],enemy_state_y ,fnt ,RED )
         if self.pow_up >1 :
-            self.draw_text (bg ,f"力↑",bg_left +40 ,enemy_state_y ,fnt ,RED )
+            self.draw_text (bg ,f"力↑",bg_left +enemy_layout ["label_x_offset"],enemy_state_y ,fnt ,RED )
         if self.emy_typ ==16 or self.emy_typ ==21 :
-            self.draw_text (bg ,"Magia : "+str (self.madoka )+"/1000",bg_left +40 ,enemy_state_y ,fnt ,WHITE )
-        self.draw_bar (bg ,bg_left +30 ,enemy_bar_y ,200 ,10 ,self.emy_life ,self.emy_lifemax )
+            self.draw_text (bg ,"Magia : "+str (self.madoka )+"/1000",bg_left +enemy_layout ["label_x_offset"],enemy_state_y ,fnt ,WHITE )
+        self.draw_bar (bg ,bg_left +enemy_layout ["bar_x_offset"],enemy_bar_y ,enemy_layout ["bar_width"],enemy_layout ["bar_height"],self.emy_life ,self.emy_lifemax )
         if self.emy_blink >0 :
             self.emy_blink =self.emy_blink -1 
-        para_x =bg_left +10
-        para_h =140
-        para_margin_top =15
-        status_y =bg_top +para_margin_top +para_h +10
-        status_x =para_x +30
-        status_line_h =fnt .get_height ()+4
+        para_x =bg_left +panel ["x_offset"]
+        status_y =bg_top +panel ["top_margin"]+panel ["height"]+status_layout ["y_gap_from_panel"]
+        status_x =para_x +status_layout ["x_offset_from_panel"]
+        status_line_h =fnt .get_height ()+status_layout ["line_gap"]
         status_entries =[]
         if self.guard_remain >0 :
             status_entries .append ((f"守護 {'・'*self.guard_remain}",GREEN ))
@@ -1577,11 +1612,11 @@ class Game:
         for i ,(status_txt ,status_col )in enumerate (status_entries ):
             self.draw_text (bg ,status_txt ,status_x ,status_y +i *status_line_h ,fnt ,status_col )
         for i in range (10 ):# 戦闘メッセージの表示
-            self.draw_text (bg ,self.message [i ],msg_x +30 ,msg_y +40 +i *48 ,fnt ,WHITE )
+            self.draw_text (bg ,self.message [i ],msg_x +msg_layout ["text_x_margin"],msg_y +msg_layout ["text_y_margin"]+i *msg_layout ["line_height"],fnt ,WHITE )
         if self.boss ==0 :
-            self.draw_text (bg ,f"{self.emy_name}  Lv.{self.emy_lev}",bg_left +40 ,enemy_name_y ,fnt ,WHITE )
+            self.draw_text (bg ,f"{self.emy_name}  Lv.{self.emy_lev}",bg_left +enemy_layout ["label_x_offset"],enemy_name_y ,fnt ,WHITE )
         else :
-            self.draw_text (bg ,f"{self.emy_name}",bg_left +40 ,enemy_name_y ,fnt ,WHITE )
+            self.draw_text (bg ,f"{self.emy_name}",bg_left +enemy_layout ["label_x_offset"],enemy_name_y ,fnt ,WHITE )
         self.draw_para (bg ,fnt ,bg_rect )# 主人公の能力を表示
 
     def menu_command (self ,bg ,fnt ,key ):
