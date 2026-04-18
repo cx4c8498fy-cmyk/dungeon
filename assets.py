@@ -25,11 +25,11 @@ def load_images(base_path: str) -> ImageAssets:
     img_title = pygame.image.load(base_path + "/image/title.png")
     wall_as = load_wall_variants(base_path, "wallA", 0)
     if not wall_as:
-        wall_as = [pygame.image.load(base_path + "/image/wall.png")]
+        wall_as = [pygame.image.load(base_path + "/image/wall/wallA0_0.png")]
     wall_bs = [make_wall_top(img) for img in wall_as]
     # img_dark = pygame.image.load(base_path + "/image/dark.png")
     img_btl_bg = pygame.image.load(base_path + "/image/btlbg/btlbg0.png")
-    img_enemy = pygame.image.load(base_path + "/image/enemy0_0.png")
+    img_enemy = pygame.image.load(base_path + "/image/enemy/enemy0_0.png")
 
     # img_items = [
     #     pygame.image.load(base_path + "/image/potion.png"),
@@ -115,11 +115,11 @@ def load_floor_variants(base_path: str, floor_index: int) -> list:
 
 def load_wall_variants(base_path: str, wall_prefix: str, wall_set: int) -> list:
     """Load wall variants like wallA1_0.png, wallA1_1.png, ..."""
-    pattern = os.path.join(base_path, "image", f"{wall_prefix}{wall_set}_*.png")
+    pattern = os.path.join(base_path, "image", "wall", f"{wall_prefix}{wall_set}_*.png")
     paths = sorted(glob.glob(pattern))
     if paths:
         return [pygame.image.load(path) for path in paths]
-    fallback = os.path.join(base_path, "image", f"{wall_prefix}{wall_set}.png")
+    fallback = os.path.join(base_path, "image", "wall", f"{wall_prefix}{wall_set}.png")
     if os.path.exists(fallback):
         return [pygame.image.load(fallback)]
     return []

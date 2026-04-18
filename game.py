@@ -281,7 +281,7 @@ class Game:
         self.wall_variantsB = [make_wall_top(img) for img in self.wall_variantsA]
         self.imgWall = self.wall_variantsA[0]
         self.imgWall2 = self.wall_variantsB[0]
-        event_path = os.path.join(self.path, "image", "wallA{}_event.png".format(wall_set))
+        event_path = os.path.join(self.path, "image", "wall", "wallA{}_event.png".format(wall_set))
         self.wall_event = pygame.image.load(event_path)
 
     def set_floor_assets_for_current_floor(self):
@@ -1502,7 +1502,7 @@ class Game:
             self.emy_typ =22 
             geta =0 
         self.emy_lev =random .randint (1 ,self.floor )
-        self.imgEnemy =pygame .image .load (self.path +"/image/enemy"+str (self.emy_typ )+"_"+str ((self.floor -1 )//30 )+".png")
+        self.imgEnemy =pygame .image .load (self.path +"/image/enemy/enemy"+str (self.emy_typ )+"_"+str ((self.floor -1 )//30 )+".png")
         new_w =int (self.imgEnemy .get_width ()*1.1 )
         new_h =int (self.imgEnemy .get_height ()*1.1 )
         self.imgEnemy =pygame .transform .scale (self.imgEnemy ,(new_w ,new_h ))
@@ -1535,7 +1535,7 @@ class Game:
         self.emy_typ =base_typ + self.change#10~
         self.encountered_enemies.add(self.emy_typ)
         geta =((self.floor -1 )//90 )*(19 -self.emy_typ )*30
-        self.imgEnemy =pygame .image .load (self.path +"/image/boss_"+str (self.emy_typ -10 )+".png")
+        self.imgEnemy =pygame .image .load (self.path +"/image/boss/boss_"+str (self.emy_typ -10 )+".png")
         new_w =int (self.imgEnemy .get_width ()*1.1 )
         new_h =int (self.imgEnemy .get_height ()*1.1 )
         self.imgEnemy =pygame .transform .scale (self.imgEnemy ,(new_w ,new_h ))
@@ -1771,9 +1771,9 @@ class Game:
     def get_enemy_catalog_image(self, enemy_id):
         if enemy_id in self.zukan_enemy_cache:
             return self.zukan_enemy_cache[enemy_id]
-        paths = [self.path + f"/image/enemy{enemy_id}_{i}.png" for i in range(4)]
+        paths = [self.path + f"/image/enemy/enemy{enemy_id}_{i}.png" for i in range(4)]
         if enemy_id >= 10:
-            paths.append(self.path + f"/image/boss_{enemy_id - 10}.png")
+            paths.append(self.path + f"/image/boss/boss_{enemy_id - 10}.png")
         img = None
         for path in paths:
             if os.path.exists(path):
@@ -2703,7 +2703,7 @@ class Game:
                 screen .fill (BLACK )
                 if self.tmr >=40 :
                     self.draw_text (screen ,"Congratulations!",320 ,630 ,font ,WHITE )
-                    self.imgEnemy =pygame .image .load (self.path +"/image/enemy"+str (int (0.1 *(self.tmr -40 )%10 ))+"_0"+".png")
+                    self.imgEnemy =pygame .image .load (self.path +"/image/enemy/enemy"+str (int (0.1 *(self.tmr -40 )%10 ))+"_0"+".png")
                     screen_w ,screen_h =screen .get_size ()
                     self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
                     self.emy_y =screen_h //2 -self.imgEnemy .get_height ()//2 
