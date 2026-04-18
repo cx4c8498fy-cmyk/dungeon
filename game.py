@@ -292,9 +292,6 @@ class Game:
         floor_index = (floor_value - 1) // 10
         self.set_floor_assets(floor_index, floor_value)
 
-    def is_boss_tile(self, x, y):
-        return (x, y) in self.boss_area
-
     def boss_in_front(self):
         if not self.boss_area:
             return False
@@ -837,7 +834,7 @@ class Game:
             (x ,y )
             for y in range (3 ,DUNGEON_H -3 )
             for x in range (3 ,DUNGEON_W -3 )
-            if self.dungeon [y ][x ]==0 and not self.is_boss_tile (x ,y )
+            if self.dungeon [y ][x ]==0 and not (x ,y )in self.boss_area
         ]
         random .shuffle (floor_cells )
         def take_cells (count ):
@@ -845,16 +842,16 @@ class Game:
             del floor_cells [:count ]
             return taken
         if not is_boss_floor :
-            for x ,y in take_cells (5 ):
+            for x ,y in take_cells (4 ): # 宝箱の配置
                 self.dungeon [y ][x ]=1
             if self.floor >=15 :
-                for x ,y in take_cells (3 ):
+                for x ,y in take_cells (3 ): # 武器の配置
                     self.dungeon [y ][x ]=4
         if is_boss_floor :
-            for x ,y in take_cells (10 ):
+            for x ,y in take_cells (7 ): # 宝箱の配置
                 self.dungeon [y ][x ]=1
             if self.floor >=15 :
-                for x ,y in take_cells (5 ):
+                for x ,y in take_cells (5 ): # 武器の配置
                     self.dungeon [y ][x ]=4
         cocoon_target =35 if is_boss_floor else 20
         cocoon_cells =take_cells (cocoon_target )
@@ -868,7 +865,7 @@ class Game:
             for i in range ((7 +int (self.floor //90 )*(self.floor -83 ))*10 ):
                 x =random .randint (3 ,DUNGEON_W -4 )
                 y =random .randint (3 ,DUNGEON_H -4 )
-                if (self.dungeon [y ][x ]==0 )and not self.is_boss_tile (x ,y ):
+                if (self.dungeon [y ][x ]==0 )and not (x ,y )in self.boss_area:
                     if random .random ()>0.5 :
                         self.dungeon [y ][x ]=5 
                     else :
@@ -880,7 +877,7 @@ class Game:
             while True :
                 self.pl_x =random .randint (3 ,DUNGEON_W -4 )
                 self.pl_y =random .randint (3 ,DUNGEON_H -4 )
-                if (self.dungeon [self.pl_y ][self.pl_x ]==0 )and not self.is_boss_tile (self.pl_x ,self.pl_y ):
+                if (self.dungeon [self.pl_y ][self.pl_x ]==0 )and not (self.pl_x ,self.pl_y )in self.boss_area:
                     break 
         self.pl_d =1 
         self.pl_a =5 
@@ -1040,19 +1037,19 @@ class Game:
         y =self.pl_y 
         if key [K_UP ]==1 :
             self.pl_d =0 
-            if self.dungeon [self.pl_y -1 ][self.pl_x ] not in (7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x ,self.pl_y -1 ):
+            if self.dungeon [self.pl_y -1 ][self.pl_x ] not in (7 ,8 ,9 ) and not (self.pl_x ,self.pl_y -1 )in self.boss_area:
                 self.pl_y =self.pl_y -1 
         if key [K_DOWN ]==1 :
             self.pl_d =1 
-            if self.dungeon [self.pl_y +1 ][self.pl_x ] not in (7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x ,self.pl_y +1 ):
+            if self.dungeon [self.pl_y +1 ][self.pl_x ] not in (7 ,8 ,9 ) and not (self.pl_x ,self.pl_y +1 )in self.boss_area:
                 self.pl_y =self.pl_y +1 
         if key [K_LEFT ]==1 :
             self.pl_d =2 
-            if self.dungeon [self.pl_y ][self.pl_x -1 ] not in (7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x -1 ,self.pl_y ):
+            if self.dungeon [self.pl_y ][self.pl_x -1 ] not in (7 ,8 ,9 ) and not (self.pl_x -1 ,self.pl_y )in self.boss_area:
                 self.pl_x =self.pl_x -1 
         if key [K_RIGHT ]==1 :
             self.pl_d =3 
-            if self.dungeon [self.pl_y ][self.pl_x +1 ] not in (7 ,8 ,9 ) and not self.is_boss_tile (self.pl_x +1 ,self.pl_y ):
+            if self.dungeon [self.pl_y ][self.pl_x +1 ] not in (7 ,8 ,9 ) and not (self.pl_x +1 ,self.pl_y )in self.boss_area:
                 self.pl_x =self.pl_x +1 
         self.pl_a =self.pl_d *3 +2 
         if self.pl_x !=x or self.pl_y !=y :
@@ -1512,7 +1509,7 @@ class Game:
         self.emy_name =EMY_NAME [self.emy_typ ]
         tier =(self.floor -1 )//30
         base =max (1 ,int (2.4 *EMY_LIFE [self.emy_typ ]-100 ))
-        floor_mul =1.0 +1.2 *tier
+        floor_mul =1.0 +1.1 *tier
         level_mul =1.0 +0.12 *(self.emy_lev -1 )/99
         level_add =(self.emy_lev -1 )*10
         self.emy_lifemax =int (base *floor_mul *level_mul +level_add )+geta *3
@@ -4253,7 +4250,7 @@ class Game:
             elif self.idx ==247 :#しんじつのかけらドロップ
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    self.set_message ("敵は　しんじつのかけらを　落とした！")
+                    self.set_message ("しんじつのかけらを　落とした！")
                     self.se [10 ].play ()
                 if self.tmr ==18 :
                     self.truth_fragment =min (100 ,self.truth_fragment +1 )
