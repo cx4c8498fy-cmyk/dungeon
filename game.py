@@ -916,7 +916,7 @@ class Game:
     def move_player (self ,key ):
         if self.dungeon [self.pl_y ][self.pl_x ]==1 :# 宝箱に載った
             self.dungeon [self.pl_y ][self.pl_x ]=0 
-            self.treasure =random .choice ([0 ,0 ,1 ,1 ,1 ,2 ])
+            self.treasure =random .choice ([0 ,0 ,1 ,1 ,2 ])
             self.item_reward_count =1
             if self.treasure ==0 :
                 self.potion =self.potion +1 
@@ -3051,7 +3051,6 @@ class Game:
                     self.draw_text (screen ,TRAP_NAME [self.trap ]+" +{}".format (-20 +10 *((self.floor -1 )//10 )),x ,y ,font ,WHITE )
                 else :
                     self.draw_text (screen ,TRAP_NAME [self.trap ]+" Lv. "+str (self.wpn_lev ),x ,y ,font ,WHITE )
-                    # self.draw_text (screen ,TRAP_NAME [self.trap ]+" Lv. "+str (self.wpn_lev ) ,text_x ,text_y ,fontS ,WHITE )
                 if self.tmr ==10 :
                     self.idx =100 
 
@@ -3735,7 +3734,7 @@ class Game:
             elif self.idx ==230 :# 敵のターン、敵の攻撃
                 self.draw_battle (screen ,fontS )
                 defence =self.pl_shield [0 ][1 ]+self.pl_shield [1 ][1 ]+self.pl_shield [2 ][1 ]+self.pl_armor [0 ][1 ]+self.pl_armor [1 ][1 ]+self.pl_armor [2 ][1 ]
-                defence =int (defence /2 )
+                defence =int (defence /3 )
                 if self.tmr ==1 :
                     self.set_message (f"{self.emy_name}のターン")
                     pro =0 
