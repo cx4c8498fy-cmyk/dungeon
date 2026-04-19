@@ -861,7 +861,7 @@ class Game:
             sx ,sy =random .choice (cocoon_cells )
             self.dungeon [sy ][sx ]=10
         # ダメージ、回復床の配置
-        if self.floor >50 :
+        if self.floor >500 :
             for i in range ((7 +int (self.floor //90 )*(self.floor -83 ))*10 ):
                 x =random .randint (3 ,DUNGEON_W -4 )
                 y =random .randint (3 ,DUNGEON_H -4 )
@@ -1495,7 +1495,11 @@ class Game:
     def init_battle (self ):
         self.emy_skip_turn = False
         self.enemy_poison_fail_count = 0
-        self.emy_typ =random .randint (0 ,EMY_APPEAR [self.floor -1 ])
+        max_emy_typ =EMY_APPEAR [self.floor -1 ]
+        self.emy_typ =random .randint (0 ,max_emy_typ )
+        if self.truth_fragment_drop_battle and max_emy_typ >=6 :
+            while self.emy_typ ==6 :
+                self.emy_typ =random .randint (0 ,max_emy_typ )
         self.encountered_enemies.add(self.emy_typ)
         geta =((self.floor -1 )//90 )*(9 -self.emy_typ )*10
         if self.emy_typ ==10 :
@@ -1509,14 +1513,14 @@ class Game:
         self.emy_name =EMY_NAME [self.emy_typ ]
         tier =(self.floor -1 )//30
         base =max (1 ,int (2.4 *EMY_LIFE [self.emy_typ ]-100 ))
-        floor_mul =1.0 +1.1 *tier
+        floor_mul =1.0 +0.6 *tier
         level_mul =1.0 +0.12 *(self.emy_lev -1 )/99
         level_add =(self.emy_lev -1 )*10
-        self.emy_lifemax =int (base *floor_mul *level_mul +level_add )+geta *3
+        self.emy_lifemax =int (base *floor_mul *level_mul +level_add +100*floor_mul )+geta *3
         self.emy_life =self.emy_lifemax 
         str_base =max (1 ,int (EMY_STR [self.emy_typ ]))
         str_level_add =(self.emy_lev -1 )
-        self.emy_str =int (str_base *floor_mul *level_mul +str_level_add )+geta 
+        self.emy_str =int (str_base *floor_mul *level_mul +str_level_add +30*floor_mul)+geta 
         screen =pygame .display .get_surface ()
         screen_w ,screen_h =screen .get_size ()
         self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
@@ -1593,7 +1597,7 @@ class Game:
         if self.pow_up >1 :
             self.draw_text (bg ,f"力↑",bg_left +enemy_layout ["label_x_offset"],enemy_state_y ,fnt ,RED )
         if self.emy_typ ==16 or self.emy_typ ==21 :
-            self.draw_text (bg ,"Magia : "+str (self.madoka )+"/1000",bg_left +enemy_layout ["label_x_offset"],enemy_state_y ,fnt ,WHITE )
+            self.draw_text (bg ,"マギア : "+str (self.madoka )+"/1000",bg_left +enemy_layout ["label_x_offset"],enemy_state_y ,fnt ,WHITE )
         self.draw_bar (bg ,bg_left +enemy_layout ["bar_x_offset"],enemy_bar_y ,enemy_layout ["bar_width"],enemy_layout ["bar_height"],self.emy_life ,self.emy_lifemax )
         if self.emy_blink >0 :
             self.emy_blink =self.emy_blink -1 
@@ -2152,7 +2156,7 @@ class Game:
         if self.emy_typ ==4 or self.emy_typ ==15 :
             self.pow_up =1 
             if random .random ()>0.7 :
-                self.pow_up ={4:2 ,15:3 }[self.emy_typ ]
+                self.pow_up ={4:2 ,15:10 }[self.emy_typ ]
                 self.set_message ("　敵は　力をためた!")
             action =False 
         if self.emy_typ ==5 or self.emy_typ ==12:
@@ -3817,7 +3821,7 @@ class Game:
             elif self.idx ==231 :#destroy
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==5 :
-                    self.set_message (self.emy_name +" destroy!")
+                    self.set_message (self.emy_name +"の デストロイ!")
                     se [1 ].play ()
                     self.emy_step =30 
                 if self.tmr ==9 :
@@ -3844,16 +3848,16 @@ class Game:
                     self.set_message (f"{self.emy_name}のターン")
                 if self.tmr ==5 :
                     if self.madoka <1000 :
-                        self.set_message ("　Magiaのチャージ！")
+                        self.set_message ("　マギアの　チャージ！")
                     elif self.madoka >=1000 :
-                        self.set_message ("　Magiaを発動")
+                        self.set_message ("　敵の　マギア")
                         se [6 ].play ()
                         self.emy_step =30 
                 if self.tmr ==9 :
                     if self.madoka <1000 :
                         dmg =0 
-                        charge_magia = int (self.emy_life *{16:0.02, 21:0.025}[self.emy_typ] +100 )
-                        self.set_message ("　Magia +{}".format (charge_magia ))
+                        charge_magia = int (self.emy_life *{16:0.022, 21:0.025}[self.emy_typ] +100 )
+                        self.set_message ("　マギア +{}".format (charge_magia ))
                         self.madoka =self.madoka +charge_magia
                     elif self.madoka >=1000 :
                         dmg =1000 
@@ -4249,7 +4253,7 @@ class Game:
             elif self.idx ==247 :#しんじつのかけらドロップ
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    self.set_message ("しんじつのかけらを　落とした！")
+                    self.set_message ("しんじつのかけらを　落とした")
                     self.se [10 ].play ()
                 if self.tmr ==18 :
                     self.truth_fragment =min (100 ,self.truth_fragment +1 )
