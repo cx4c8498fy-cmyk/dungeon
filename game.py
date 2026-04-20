@@ -2172,8 +2172,8 @@ class Game:
                 self.tmr =0 
             action =False 
         if self.emy_typ ==7 or self.boss_mode == "ice":
-            cure = self.emy_lifemax //10 + random.randint (-self.emy_lifemax//100, self.emy_lifemax//100)
-            cure += {7:0, 18:-3100}[self.emy_typ]
+            cure = self.emy_lifemax //10 +random.randint (0, self.emy_lifemax//500) +random.randint (0, 10)
+            cure += {7:0, 18:-3500}[self.emy_typ]
             self.set_message ("　敵の回復 +{}".format (int (min (cure ,self.emy_lifemax -self.emy_life ))))
             pygame .mixer .Sound (self.path +"/sound/ohd_se_potion.wav").play ()
             self.emy_life =min (self.emy_life +cure ,self.emy_lifemax )
@@ -2183,7 +2183,7 @@ class Game:
             force_poison =self.enemy_poison_fail_count >=7
             if force_poison or random .random ()>{8:0.3, 11:0.84}[self.emy_typ]:
                 self.poison ={8:1, 11:2}[self.emy_typ]
-                self.set_message ("　毒を喰らった!")
+                self.set_message ("　毒を　くらった!")
                 self.enemy_poison_fail_count =0
                 action =False 
             else :
@@ -3770,14 +3770,14 @@ class Game:
                     dmg =max (self.emy_str +random .randint (0 ,9 )-defence ,1 )
                     dmg =int (dmg /(1 +pro ))*self.pow_up 
                     if self.emy_typ ==18 and self.boss_mode == "fire":
-                        dmg =int (dmg *1.3 )
+                        dmg =int (dmg *2 )
                     if self.guard_remain >0 :
                         if self.emy_typ ==14 or self.emy_typ ==17 :
                             self.set_message ("　守護が破壊された！")
                             self.guard_remain =0 
                         else :
                             dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
-                    if self.emy_typ ==2 or self.emy_typ ==10 or (self.emy_typ ==18 and self.boss_mode == "normal"):
+                    if self.emy_typ ==2 or self.emy_typ ==10:
                         if random .random ()>0.7 :
                             se [0 ].play ()
                             self.set_message ("　会心の一撃！")
@@ -3960,7 +3960,7 @@ class Game:
             elif self.idx ==238 :# 豪炎
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==5 :
-                    self.set_message (f"　{self.emy_name}の　豪炎！")
+                    self.set_message (f"　{self.emy_name}の　インフェルノ！")
                     se [1 ].play ()
                     self.emy_step =30 
                 if self.tmr ==9 :
@@ -3968,7 +3968,7 @@ class Game:
                     self.set_message (f"　{dmg}　ダメージ！")
                     self.dmg_eff =6
                     self.emy_step =0
-                    self.inferno = self.inferno + 30 + random.randint(0, 20)
+                    self.inferno = self.inferno + 35 + random.randint(0, 20)
                 if self.tmr ==12 :
                     self.pl_life =self.pl_life -dmg 
                     if self.pl_life <=0 :
