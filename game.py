@@ -2173,7 +2173,7 @@ class Game:
             action =False 
         if self.emy_typ ==7 or self.boss_mode == "ice":
             cure = self.emy_lifemax //10 +random.randint (0, self.emy_lifemax//500) +random.randint (0, 10)
-            cure += {7:0, 18:-3500}[self.emy_typ]
+            cure += {7:0, 18:-4000}[self.emy_typ]
             self.set_message ("　敵の回復 +{}".format (int (min (cure ,self.emy_lifemax -self.emy_life ))))
             pygame .mixer .Sound (self.path +"/sound/ohd_se_potion.wav").play ()
             self.emy_life =min (self.emy_life +cure ,self.emy_lifemax )
