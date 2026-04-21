@@ -696,7 +696,7 @@ class Game:
                 dx =x *cell +center 
                 dy =y *cell +center 
                 if self.maze [y ][x ]==0 :
-                    if self.floor %10 ==0 or self.floor >90 :
+                    if self.floor %10 ==0 :
                         bossfloor =80 
                     else :
                         bossfloor =0 
@@ -812,7 +812,7 @@ class Game:
             self.pl_a =5
             self.stair_prompted =False
             return
-        is_boss_floor =self.floor %10 ==0 or self.floor >90
+        is_boss_floor =self.floor %10 ==0
         if self.fixed_floor_data and self.floor == 100:
             boss_pos = self.fixed_floor_data.get("boss_pos")
             if boss_pos:
@@ -999,15 +999,7 @@ class Game:
             r =random .randint (0 ,99 )
             if r <35 :# 食料
                 self.treasure =random .choice ([3 ,3 ,3 ,3 ,3 ,4 ,4 ,4 ,4 ,4 ,5 ])
-                if self.floor <=30 :
-                    item_count_max =1
-                elif self.floor <=60 :
-                    item_count_max =2
-                elif self.floor <=90 :
-                    item_count_max =3
-                else :
-                    item_count_max =4
-                self.item_reward_count =random .randint (1 ,item_count_max )
+                self.item_reward_count =1
                 if self.treasure ==3 :
                     self.tool_food =self.tool_food +self.item_reward_count
                 if self.treasure ==4 :
@@ -1501,10 +1493,6 @@ class Game:
             while self.emy_typ ==6 :
                 self.emy_typ =random .randint (0 ,max_emy_typ )
         self.encountered_enemies.add(self.emy_typ)
-        geta =((self.floor -1 )//90 )*(9 -self.emy_typ )*10
-        if self.emy_typ ==10 :
-            self.emy_typ =22 
-            geta =0 
         self.emy_lev =random .randint (1 ,self.floor )
         self.imgEnemy =pygame .image .load (self.path +"/image/enemy/enemy"+str (self.emy_typ )+"_"+str ((self.floor -1 )//30 )+".png")
         new_w =int (self.imgEnemy .get_width ()*1.1 )
@@ -1516,11 +1504,11 @@ class Game:
         floor_mul =1.0 +0.6 *tier
         level_mul =1.0 +0.12 *(self.emy_lev -1 )/99
         level_add =(self.emy_lev -1 )*10
-        self.emy_lifemax =int (base *floor_mul *level_mul +level_add +100*floor_mul )+geta *3
+        self.emy_lifemax =int (base *floor_mul *level_mul +level_add +100*floor_mul )
         self.emy_life =self.emy_lifemax 
         str_base =max (1 ,int (EMY_STR [self.emy_typ ]))
         str_level_add =(self.emy_lev -1 )
-        self.emy_str =int (str_base *floor_mul *level_mul +str_level_add +30*floor_mul)+geta 
+        self.emy_str =int (str_base *floor_mul *level_mul +str_level_add +30*floor_mul)
         screen =pygame .display .get_surface ()
         screen_w ,screen_h =screen .get_size ()
         self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
@@ -1536,10 +1524,11 @@ class Game:
             base_typ =9 +int (self.floor %10 )
         elif self.floor ==100 :
             base_typ =20
-        self.emy_typ =base_typ + self.change#10~
+        self.emy_typ =100 +base_typ +self.change
         self.encountered_enemies.add(self.emy_typ)
-        geta =((self.floor -1 )//90 )*(19 -self.emy_typ )*30
-        self.imgEnemy =pygame .image .load (self.path +"/image/boss/boss_"+str (self.emy_typ -10 )+".png")
+        boss_src_typ =self.emy_typ -100
+        geta =((self.floor -1 )//90 )*(19 -boss_src_typ )*30
+        self.imgEnemy =pygame .image .load (self.path +"/image/boss/boss_"+str (self.emy_typ -110 )+".png")
         new_w =int (self.imgEnemy .get_width ()*1.1 )
         new_h =int (self.imgEnemy .get_height ()*1.1 )
         self.imgEnemy =pygame .transform .scale (self.imgEnemy ,(new_w ,new_h ))
@@ -1596,7 +1585,7 @@ class Game:
             self.draw_text (bg ,f"火傷 {'・'*self.burn_turns}",bg_left +enemy_layout ["label_x_offset"],enemy_state_y ,fnt ,RED )
         if self.pow_up >1 :
             self.draw_text (bg ,f"力↑",bg_left +enemy_layout ["label_x_offset"],enemy_state_y ,fnt ,RED )
-        if self.emy_typ ==16 or self.emy_typ ==21 :
+        if self.emy_typ ==116 or self.emy_typ ==121 :
             self.draw_text (bg ,"マギア : "+str (self.madoka )+"/1000",bg_left +enemy_layout ["label_x_offset"],enemy_state_y ,fnt ,WHITE )
         self.draw_bar (bg ,bg_left +enemy_layout ["bar_x_offset"],enemy_bar_y ,enemy_layout ["bar_width"],enemy_layout ["bar_height"],self.emy_life ,self.emy_lifemax )
         if self.emy_blink >0 :
@@ -1743,17 +1732,17 @@ class Game:
         elif tool_id =="magic_water" and self.tool_magic_water >0 :
             self.tool_magic_water -=1 
             self.pl_life =min (self.pl_life +20 ,self.pl_lifemax )
-            self.pl_mag =self.pl_mag +40 
+            self.pl_mag =self.pl_mag +20 
         elif tool_id =="magic_seed" and self.tool_magic_seed >0 :
             self.tool_magic_seed -=1 
-            self.pl_mag =self.pl_mag +120 
+            self.pl_mag =self.pl_mag +100 
             if self.tutorial_enabled and self.floor ==1 :
                 self.tutorial_progress ["room4_item_used"]=True
                 self.update_tutorial_floor_state ()
 
     def get_zukan_layout(self):
         if self.zukan_kind == 0:
-            return 4, 7, len(EMY_NAME), "敵の図鑑"
+            return 4, 7, len(EMY_ZUKAN_IDS), "敵の図鑑"
         if self.zukan_kind == 1:
             return 3, 1, 3, "アイテムの図鑑"
         return 3, 3, 9, "武器の図鑑"
@@ -1770,13 +1759,20 @@ class Game:
         return self.pl_sword[slot][0] > 0
 
     def is_enemy_encountered_for_zukan(self, enemy_index):
-        return enemy_index in self.encountered_enemies
+        if not (0 <= enemy_index < len(EMY_ZUKAN_IDS)):
+            return False
+        enemy_id = EMY_ZUKAN_IDS[enemy_index]
+        return enemy_id in self.encountered_enemies
 
     def get_enemy_catalog_image(self, enemy_id):
         if enemy_id in self.zukan_enemy_cache:
             return self.zukan_enemy_cache[enemy_id]
-        paths = [self.path + f"/image/enemy/enemy{enemy_id}_{i}.png" for i in range(4)]
-        if enemy_id >= 10:
+        paths = []
+        if enemy_id >= 110:
+            paths.append(self.path + f"/image/boss/boss_{enemy_id - 110}.png")
+        else:
+            paths.extend(self.path + f"/image/enemy/enemy{enemy_id}_{i}.png" for i in range(4))
+        if 10 <= enemy_id < 110:
             paths.append(self.path + f"/image/boss/boss_{enemy_id - 10}.png")
         img = None
         for path in paths:
@@ -1890,8 +1886,11 @@ class Game:
         pygame.draw.rect(bg, WHITE, [win_x, win_y, win_w, win_h], 2)
 
         if self.zukan_kind == 0:
-            enemy_id = self.zukan_detail
-            name = EMY_NAME[enemy_id] if 0 <= enemy_id < len(EMY_NAME) else f"Enemy {enemy_id}"
+            if 0 <= self.zukan_detail < len(EMY_ZUKAN_IDS):
+                enemy_id = EMY_ZUKAN_IDS[self.zukan_detail]
+            else:
+                enemy_id = self.zukan_detail
+            name = EMY_NAME[enemy_id] if 0 <= enemy_id < len(EMY_NAME) and EMY_NAME[enemy_id] else f"Enemy {enemy_id}"
             info = ENEMY_INFO.get(enemy_id, "情報が登録されていません。")
             img = self.get_enemy_catalog_image(enemy_id)
             max_w = 260
@@ -2153,14 +2152,14 @@ class Game:
 
     def emy_action (self ,bg ):
         action =True 
-        if self.emy_typ ==4 or self.emy_typ ==15 :
+        if self.emy_typ ==4 or self.emy_typ ==115 :
             self.pow_up =1 
             if random .random ()>0.7 :
-                self.pow_up ={4:2 ,15:10 }[self.emy_typ ]
+                self.pow_up ={4:2 ,115:10 }[self.emy_typ ]
                 self.set_message ("　敵は　力をためた!")
             action =False 
-        if self.emy_typ ==5 or self.emy_typ ==12:
-            suck = {5:5+self.emy_lev, 12:104}[self.emy_typ] + random .randint (1 ,self.emy_typ )
+        if self.emy_typ ==5 or self.emy_typ ==112:
+            suck = {5:5+self.emy_lev, 112:104}[self.emy_typ] + random .randint (1 ,{5:5, 112:12}[self.emy_typ] )
             suck = min(suck, self.pl_mag)
             self.set_message (f"　魔力を　{suck}　吸収された!")
             self.pl_mag =self.pl_mag -suck 
@@ -2173,16 +2172,16 @@ class Game:
             action =False 
         if self.emy_typ ==7 or self.boss_mode == "ice":
             cure = self.emy_lifemax //10 +random.randint (0, self.emy_lifemax//500) +random.randint (0, 10)
-            cure += {7:0, 18:-4000}[self.emy_typ]
+            cure += {7:0, 118:-4000}[self.emy_typ]
             self.set_message ("　敵の回復 +{}".format (int (min (cure ,self.emy_lifemax -self.emy_life ))))
             pygame .mixer .Sound (self.path +"/sound/ohd_se_potion.wav").play ()
             self.emy_life =min (self.emy_life +cure ,self.emy_lifemax )
             action =False 
         self.poison =max (self.poison -1 ,0 )
-        if self.emy_typ ==8 or self.emy_typ ==11:
+        if self.emy_typ ==8 or self.emy_typ ==111:
             force_poison =self.enemy_poison_fail_count >=7
-            if force_poison or random .random ()>{8:0.3, 11:0.84}[self.emy_typ]:
-                self.poison ={8:1, 11:2}[self.emy_typ]
+            if force_poison or random .random ()>{8:0.3, 111:0.84}[self.emy_typ]:
+                self.poison ={8:1, 111:2}[self.emy_typ]
                 self.set_message ("　毒を　くらった!")
                 self.enemy_poison_fail_count =0
                 action =False 
@@ -3437,7 +3436,7 @@ class Game:
                         pygame .mixer .music .load (self.path +"/sound/"+battle_bgm)
                         pygame .mixer .music .play (-1 )
                         self.init_message ()
-                        if self.emy_typ ==16 :
+                        if self.emy_typ ==116 :
                             self.madoka =0 
                     else :
                         self.init_battle ()
@@ -3507,12 +3506,12 @@ class Game:
                     dmg =self.pl_str +random .randint (0 ,9 )
                     dmg =dmg *(1 +0.01 *cri *self.pl_sword [0 ][1 ])+self.pl_sword [0 ][1 ]+0.5*self.pl_sword [2 ][1 ]
                 if self.tmr ==7 :
-                    if self.emy_typ ==10 :
+                    if self.emy_typ ==110 :
                         if random .random ()>0.7 :
                             self.set_message ("　攻撃は　防御された！")
                             se [11 ].play ()
                             dmg = dmg /2
-                    if self.guard_remain >0 and self.emy_typ ==20 :
+                    if self.guard_remain >0 and self.emy_typ ==120 :
                         dmg =dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 )
                     dmg =max (1 +cri ,int (EMY_APRO [self.emy_typ ] * dmg /(2 *self.poison +1 )))
                     self.emy_blink =5 
@@ -3524,7 +3523,7 @@ class Game:
                         self.idx =241 
                         self.tmr =0
                 if self.tmr ==12 :
-                    if self.emy_typ ==18 :
+                    if self.emy_typ ==118 :
                         self.boss_mode = "normal"
                     if self.burn_turns >0 :
                         se [0 ].play ()
@@ -3552,7 +3551,7 @@ class Game:
                         if random .random ()>0.95 -0.003 *self.pl_sword [1 ][1 ]:
                             ice =1 
                     dmg =self.pl_str *1.5 +random .randint (0 ,9 )-EMY_MPRO [self.emy_typ ]+ self.pl_sword [1 ][1 ]+0.5*self.pl_sword [2 ][1 ]
-                    if self.guard_remain >0 and self.emy_typ ==20 :
+                    if self.guard_remain >0 and self.emy_typ ==120 :
                         dmg =dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 )
                     dmg =max (1 ,int(dmg) )
                     if self.boss_mode == "ice":
@@ -3577,7 +3576,7 @@ class Game:
                         self.idx =241 
                         self.tmr =0 
                 if self.tmr ==13 :
-                    if self.emy_typ ==18 :
+                    if self.emy_typ ==118 :
                         self.boss_mode = "ice"
                     if ice ==1 :
                         self.set_message ("　敵は　凍りついた！")
@@ -3597,7 +3596,7 @@ class Game:
                 if self.tmr ==24 :
                     if ice ==1 :
                         self.apply_armor_effects ()
-                    elif self.emy_typ ==21 :
+                    elif self.emy_typ ==121 :
                         self.idx =239
                         self.tmr =0
                     else :
@@ -3611,7 +3610,7 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
                     cure =min (500 +3 *self.pl_armor [2 ][1 ],self.pl_lifemax -self.pl_life )
-                    if self.emy_typ ==13 :
+                    if self.emy_typ ==113 :
                         self.set_message ("　傷薬を無効化されている！")
                         cure =0 
                     else:
@@ -3621,10 +3620,10 @@ class Game:
                     self.pl_life =min (self.pl_lifemax ,self.pl_life +cure )
                     self.potion =self.potion -1 
                 if self.tmr ==11 :
-                    if self.emy_typ ==16 or self.emy_typ ==21 :
+                    if self.emy_typ ==116 or self.emy_typ ==121 :
                         self.idx =232 
                         self.tmr =0 
-                    elif self.emy_typ ==20 :
+                    elif self.emy_typ ==120 :
                         self.idx =233 
                         self.tmr =0 
                     else :
@@ -3651,12 +3650,12 @@ class Game:
                     self.blazegem =self.blazegem -1 
                 if self.tmr ==8 :
                     dmg =1000 +self.pl_sword [2 ][1 ]*16 
-                    if self.emy_typ ==11:
+                    if self.emy_typ ==111:
                         self.set_message ("　敵は　爆弾を捕食した！")
                         dmg =0 
                     if self.burn_turns >0 :
                         dmg = self.pl_sword [2 ][1 ]*16
-                    if self.emy_typ ==13 :
+                    if self.emy_typ ==113 :
                         dmg =0 
                         self.emy_skip_turn = True
                     if self.boss_mode == "fire":
@@ -3671,21 +3670,21 @@ class Game:
                         self.idx =241 
                         self.tmr =0
                 if self.tmr ==19 :
-                    if self.emy_typ ==18 :
+                    if self.emy_typ ==118 :
                         self.boss_mode = "fire"
-                    if self.emy_typ ==12:
+                    if self.emy_typ ==112:
                         self.burn_turns =4 
                         self.set_message ("　敵は　火傷した！")
                     else:
                         self.tmr =self.tmr +2
                 if self.tmr ==22 :
-                    if self.emy_typ ==14:
+                    if self.emy_typ ==114:
                         self.idx =231 
                         self.tmr =0 
-                    elif self.emy_typ ==16 or self.emy_typ ==21 :
+                    elif self.emy_typ ==116 or self.emy_typ ==121 :
                         self.idx =232 
                         self.tmr =0 
-                    elif self.emy_typ ==17 :
+                    elif self.emy_typ ==117 :
                         self.idx =238
                         self.tmr =0 
                     else :
@@ -3725,10 +3724,10 @@ class Game:
                 if self.tmr ==6 :
                     self.guard =self.guard -1 
                 if self.tmr ==11 :
-                    if self.emy_typ ==16 or self.emy_typ ==21 :
+                    if self.emy_typ ==116 or self.emy_typ ==121 :
                         self.idx =232 
                         self.tmr =0 
-                    elif self.emy_typ ==20 :
+                    elif self.emy_typ ==120 :
                         self.idx =234 
                         self.tmr =0 
                     else :
@@ -3743,7 +3742,7 @@ class Game:
                     self.set_message (f"{self.emy_name}のターン")
                     pro =0 
                     cou =0 
-                    if self.emy_typ ==12 and self.burn_turns >0 :
+                    if self.emy_typ ==112 and self.burn_turns >0 :
                         self.idx =237 
                         self.tmr =0 
                         continue
@@ -3758,35 +3757,35 @@ class Game:
                         self.emy_step =30 
                 if self.tmr ==7 :
                     if self.pl_shield [0 ][0 ]==1 :
-                        if random .random ()>0.7 and self.emy_typ !=20 :
+                        if random .random ()>0.7 and self.emy_typ !=120 :
                             pro =0.3 +0.01 *self.pl_shield [0 ][1 ]
                             self.set_message ("　盾で　防御した！")
                             se [11 ].play ()
                     if self.pl_shield [1 ][0 ]==1 :
                         if random .random ()>0.7 :
                             cou =self.pl_shield [1 ][1 ]
-                    if self.emy_typ ==20 :
+                    if self.emy_typ ==120 :
                         dmg_tmp =dmg 
                     dmg =max (self.emy_str +random .randint (0 ,9 )-defence ,1 )
                     dmg =int (dmg /(1 +pro ))*self.pow_up 
-                    if self.emy_typ ==18 and self.boss_mode == "fire":
+                    if self.emy_typ ==118 and self.boss_mode == "fire":
                         dmg =int (dmg *2 )
                     if self.guard_remain >0 :
-                        if self.emy_typ ==14 or self.emy_typ ==17 :
+                        if self.emy_typ ==114 or self.emy_typ ==117 :
                             self.set_message ("　守護が破壊された！")
                             self.guard_remain =0 
                         else :
                             dmg =int (dmg *(0.35 -self.pl_shield [2 ][1 ]*0.002 ))
-                    if self.emy_typ ==2 or self.emy_typ ==10:
+                    if self.emy_typ ==2 or self.emy_typ ==110:
                         if random .random ()>0.7 :
                             se [0 ].play ()
                             self.set_message ("　会心の一撃！")
-                            dmg =int (dmg *{2:1.5, 10:2, 18:2.5}[self.emy_typ] )
-                    if self.emy_typ ==17 :
+                            dmg =int (dmg *{2:1.5, 110:2, 118:2.5}[self.emy_typ] )
+                    if self.emy_typ ==117 :
                         self.inferno -= 15 + random .randint (0 ,10 )
-                    if self.emy_typ ==20 :
+                    if self.emy_typ ==120 :
                         dmg =dmg_tmp 
-                    if self.emy_typ ==21 :
+                    if self.emy_typ ==121 :
                         dmg = int(dmg * self.emy_lifemax/self.emy_life)
                     self.set_message (f"　{dmg}　ダメージ！")
                     self.dmg_eff =6
@@ -3856,7 +3855,7 @@ class Game:
                 if self.tmr ==9 :
                     if self.madoka <1000 :
                         dmg =0 
-                        charge_magia = int (self.emy_life *{16:0.022, 21:0.025}[self.emy_typ] +100 )
+                        charge_magia = int (self.emy_life *{116:0.022, 121:0.025}[self.emy_typ] +100 )
                         self.set_message ("　マギア +{}".format (charge_magia ))
                         self.madoka =self.madoka +charge_magia
                     elif self.madoka >=1000 :
@@ -3995,19 +3994,19 @@ class Game:
                     self.emy_step =30 
                 if self.tmr ==8 :
                     if self.pl_shield [0 ][0 ]==1 :
-                        if random .random ()>0.7 and self.emy_typ !=20 :
+                        if random .random ()>0.7 and self.emy_typ !=120 :
                             pro =0.3 +0.01 *self.pl_shield [0 ][1 ]
                             self.set_message ("　盾で　防御した！")
                             se [11 ].play ()
                     if self.pl_shield [1 ][0 ]==1 :
                         if random .random ()>0.7 :
                             cou =self.pl_shield [1 ][1 ]
-                    if self.emy_typ ==20 :
+                    if self.emy_typ ==120 :
                         dmg_tmp =dmg 
                     dmg =max (self.emy_str +random .randint (0 ,9 )-defence ,1 )
                     dmg =int (dmg /(1 +pro ))*self.pow_up 
                     if self.guard_remain >0 :
-                        if self.emy_typ ==14 or self.emy_typ ==17 :
+                        if self.emy_typ ==114 or self.emy_typ ==117 :
                             self.set_message ("　守護が　破壊された")
                             self.guard_remain =0 
                         else :
@@ -4052,7 +4051,7 @@ class Game:
                 if self.tmr ==10 :
                     if self.boss ==1 :
                         self.set_message ("　逃走に失敗した！")
-                    elif random .randint (0 ,99 )<60 or self.emy_typ == 22:
+                    elif random .randint (0 ,99 )<60 or self.emy_typ ==10:
                         self.btl_cmd =0
                         self.guard_remain =0 
                         self.poison =0 
@@ -4066,10 +4065,10 @@ class Game:
                     else :
                         self.set_message ("　逃走に失敗した！")
                 if self.tmr ==15 :
-                    if self.emy_typ ==16 or self.emy_typ ==21 :
+                    if self.emy_typ ==116 or self.emy_typ ==121 :
                         self.idx =232 
                         self.tmr =0 
-                    if self.emy_typ ==20 :
+                    if self.emy_typ ==120 :
                         self.idx =235 
                         self.tmr =0 
                     else :
@@ -4088,7 +4087,7 @@ class Game:
                     self.burn_turns =0 
                     self.inferno =0
                     self.boss_mode = "normal"
-                    if self.emy_typ ==20 :
+                    if self.emy_typ ==120 :
                         self.idx =245 
                         self.tmr =0
                 if self.tmr ==2 :
@@ -4099,8 +4098,8 @@ class Game:
                         se [7 ].play ()
                     else :
                         se [5 ].play ()
-                    self.pl_exp =self.pl_exp +int(EMY_EXP [self.emy_typ ]*(1+0.01*self.emy_lev))
-                    self.pl_mag =self.pl_mag +self.emy_typ *2 +self.boss *300 
+                    self.pl_exp =self.pl_exp +int (EMY_EXP [self.emy_typ ]*(1 +0.01 *self.emy_lev ))
+                    self.pl_mag =self.pl_mag +EMY_MAG_GAIN [self.emy_typ ]+self.boss *300 
                     if self.tutorial_enabled and self.tutorial_pending_battle:
                         if self.tutorial_pending_battle =="room3":
                             self.tutorial_progress ["room3_enemy_defeated"]=True
@@ -4108,7 +4107,7 @@ class Game:
                             self.tutorial_progress ["room5_enemy_defeated"]=True
                         self.tutorial_pending_battle =""
                         self.update_tutorial_floor_state ()
-                    if self.emy_typ ==22 :
+                    if self.emy_typ ==10 :
                         self.truth_fragment_drop_battle =False
                         self.idx =246 
                         self.tmr =0 
@@ -4178,7 +4177,7 @@ class Game:
                 self.truth_fragment_drop_battle =False
                 if self.tutorial_enabled and self.tutorial_pending_battle:
                     self.restore_tutorial_cocoon ()
-                if self.emy_typ ==21 :
+                if self.emy_typ ==121 :
                     time .sleep (1 )
                     # self.change =0 
                     self.boss =0 
