@@ -84,6 +84,7 @@ class Game:
         self.imgEffect = images.effects
         self.imgFire = pygame.image.load(self.path + "/image/fire.png")
         self.imgFairy = pygame.image.load(self.path + "/image/fairy.png")
+        self.imgLockedStairs = pygame.image.load(self.path + "/image/locked_stairs.png")
 
         self.floor_variants = load_floor_variants(self.path, 0)
         if not self.floor_variants:
@@ -260,6 +261,7 @@ class Game:
         self.map_seen = None
         self.map_stairs = None
         self.map_bosses = None
+        self.map_item_walls = None
         self.map_grid_surface = None
         self.map_surface = None
         self.map_surface_scale = None
@@ -282,11 +284,31 @@ class Game:
         self.map_seen = [[False for j in range(DUNGEON_W)] for i in range(DUNGEON_H)]
         self.map_stairs = set()
         self.map_bosses = set()
+        self.map_item_walls = set()
         self.map_grid_surface = pygame.Surface((DUNGEON_W, DUNGEON_H), pygame.SRCALPHA)
         self.map_grid_surface.fill((0, 0, 0, 120))
         self.map_surface = None
         self.map_surface_scale = None
         self.map_surface_size = None
+
+    # lock stairs floor の対象か判定する
+    def is_locked_stairs_floor(self, floor=None):
+        check_floor = self.floor if floor is None else floor
+        return check_floor in LOCKED_STAIRS_ITEM_WALL_FLOORS
+
+    # itemWall 未クリアか判定する
+    def is_locked_stairs_uncleared(self, floor=None):
+        check_floor = self.floor if floor is None else floor
+        if not self.is_locked_stairs_floor(check_floor):
+            return False
+        for row in self.dungeon:
+            if 7 in row:
+                return True
+        return False
+
+    # 階段がロックされているか判定する
+    def is_stairs_locked(self):
+        return self.is_locked_stairs_uncleared(self.floor)
 
     # 武具セットを所持しているかどうかの判定
     def has_full_basic_set(self):
@@ -1051,6 +1073,8 @@ class Game:
                             new_seen .append ((dx ,dy ))
                         if tile_id ==3 :
                             self.map_stairs .add ((dx ,dy ))
+                    if not wall_only and tile_id ==7 and self.map_item_walls is not None:
+                        self.map_item_walls.add((dx, dy))
                     if not wall_only and tile_id in (0 ,1 ,2 ,3 ,4 ,5 ,6 ,10 ,TILE_FAIRY ):
                         if tile_id in (0 ,1 ,2 ,4 ,10 ,TILE_FAIRY ):
                             variant =self.floor_var_map [dy ][dx ]
@@ -1064,7 +1088,10 @@ class Game:
                             elif overlay_tile !=0 :
                                 bg .blit (self.imgFloor [overlay_tile ],[X ,Y ])
                         else :
-                            bg .blit (self.imgFloor [tile_id ],[X ,Y ])
+                            if tile_id ==3 and self.is_stairs_locked ():
+                                bg .blit (self.imgLockedStairs ,[X ,Y ])
+                            else:
+                                bg .blit (self.imgFloor [tile_id ],[X ,Y ])
                     if tile_id in (7 ,8 ,9 ):
                         if tile_id ==8 and self.wall_event:
                             bg .blit (self.wall_event ,[X ,Y -40 ])
@@ -1842,6 +1869,16 @@ class Game:
             mx =int (bx *scale )
             my =int (by *scale )
             bg .fill ((255 ,255 ,255 ,200 ),[map_x +mx ,map_y +my ,marker ,marker ])
+        for wx ,wy in self.map_item_walls :
+            if 0 <=wy <len (self.dungeon )and 0 <=wx <len (self.dungeon [wy ])and self.dungeon [wy ][wx ]==7 :
+                mx =int (wx *scale )
+                my =int (wy *scale )
+                bg .fill ((255 ,255 ,0 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
+        if self.fairy_pos :
+            fx ,fy =self.fairy_pos
+            mx =int (fx *scale )
+            my =int (fy *scale )
+            bg .fill ((0 ,192 ,255 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
         px =int (self.pl_x *scale )
         py =int (self.pl_y *scale )
         bg .fill ((255 ,0 ,0 ,200 ),[map_x +px ,map_y +py ,marker ,marker ])
@@ -1866,10 +1903,10 @@ class Game:
         self.emy_name =EMY_NAME [self.emy_typ ]
         tier =(self.floor -1 )//10
         base =max (1 ,int (2.4 *EMY_LIFE [self.emy_typ ]-100 ))
-        floor_mul =1.0 +0.2 *tier
+        floor_mul =1.0 +0.18 *tier
         level_mul =1.0 +0.12 *(self.emy_lev -1 )/99
         level_add =(self.emy_lev -1 )*10
-        self.emy_lifemax =int (base *floor_mul *level_mul +level_add +tier*50 )
+        self.emy_lifemax =int (base *floor_mul *level_mul +level_add +tier*45 )
         self.emy_life =self.emy_lifemax 
         str_base =max (1 ,int (EMY_STR [self.emy_typ ]))
         str_level_add =(self.emy_lev -1 )
@@ -1997,7 +2034,7 @@ class Game:
     # menu command の処理を行う
     def menu_command (self ,bg ,fnt ,key ):
         ent =False 
-        options = ["図鑑を見る", "どうぐをみる", "装備を変える", "タイトルに戻る"]
+        options = ["どうぐをみる", "図鑑を見る", "装備を変える", "タイトルに戻る"]
         if self.menu_cmd >=len (options ):
             self.menu_cmd =len (options )-1 
         if key [K_UP ]and self.menu_cmd >0 :
@@ -2139,18 +2176,23 @@ class Game:
     def draw_equip_description (self ,bg ,fnt ):
         if not (0 <=self.equip_cursor <9 ):
             desc =""
+        elif not self.is_weapon_owned (self.equip_cursor ):
+            desc =""
         else :
             trap_id =self.display_index_to_trap_id (self.equip_cursor )
             desc =WEAPON_INFO .get (trap_id ,"情報が登録されていません。")
         self.draw_bottom_description_window (bg ,fnt ,desc )
 
+    # draw zukan description を描画する
+    def draw_zukan_description(self, bg, fnt):
+        desc = ""
+        if self.zukan_kind == 1 and 0 <= self.zukan_cursor < 3:
+            desc = ITEM_INFO.get(self.zukan_cursor, "情報が登録されていません。")
+        self.draw_bottom_description_window(bg, fnt, desc)
+
     # get tool entries を取得する
     def get_tool_entries (self ):
         tools =[]
-        if self.truth_fragment >0 :
-            tools .append ({"id":"truth_fragment","name":"しんじつのかけら","count":self.truth_fragment ,"usable":False })
-        if self.heirloom_pendant >0 :
-            tools .append ({"id":"heirloom_pendant","name":"形見のペンダント","count":self.heirloom_pendant ,"usable":False })
         if self.tool_food >0 :
             tools .append ({"id":"food","name":TRE_NAME [3 ],"count":self.tool_food ,"usable":True })
         if self.tool_magic_water >0 :
@@ -2180,6 +2222,10 @@ class Game:
                 "count":self.tool_armor_patch ,
                 "usable":len (self.get_weapon_upgrade_targets ("armor_patch"))>0
             })
+        if self.truth_fragment >0 :
+            tools .append ({"id":"truth_fragment","name":"しんじつのかけら","count":self.truth_fragment ,"usable":False })
+        if self.heirloom_pendant >0 :
+            tools .append ({"id":"heirloom_pendant","name":"形見のペンダント","count":self.heirloom_pendant ,"usable":False })
         return tools
 
     # get weapon upgrade targets を取得する
@@ -2370,7 +2416,6 @@ class Game:
                 self.zukan_cursor = nxt
         if key[K_RETURN] or key[K_a]:
             ent = True
-
         cell = 72
         gap = 10
         pad = 20
@@ -2405,7 +2450,40 @@ class Game:
             if i == self.zukan_cursor:
                 pygame.draw.rect(bg, (255, 220, 90), [x, y, cell, cell], 3)
 
+        self.draw_zukan_description(bg, fnt)
         return ent
+
+    # draw zukan detail を描画する
+    def draw_zukan_detail(self, bg, fnt):
+        if not (0 <= self.zukan_detail < len(EMY_ZUKAN_IDS)):
+            return
+        enemy_id = EMY_ZUKAN_IDS[self.zukan_detail]
+        name = EMY_NAME[enemy_id] if 0 <= enemy_id < len(EMY_NAME) and EMY_NAME[enemy_id] else f"Enemy {enemy_id}"
+        info = ENEMY_INFO.get(enemy_id, "情報が登録されていません。")
+        img = self.get_enemy_catalog_image(enemy_id)
+
+        win_w = 760
+        win_h = 430
+        screen_w, screen_h = bg.get_size()
+        win_x = (screen_w - win_w) // 2
+        win_y = (screen_h - win_h) // 2
+        pygame.draw.rect(bg, BLACK, [win_x, win_y, win_w, win_h])
+        pygame.draw.rect(bg, WHITE, [win_x, win_y, win_w, win_h], 2)
+
+        max_w = 260
+        max_h = 260
+        scale = min(max_w / max(1, img.get_width()), max_h / max(1, img.get_height()))
+        draw_img = pygame.transform.scale(img, (max(1, int(img.get_width() * scale)), max(1, int(img.get_height() * scale))))
+        img_x = win_x + 30 + (max_w - draw_img.get_width()) // 2
+        img_y = win_y + 90 + (max_h - draw_img.get_height()) // 2
+        bg.blit(draw_img, [img_x, img_y])
+        pygame.draw.rect(bg, WHITE, [win_x + 30, win_y + 90, max_w, max_h], 1)
+
+        self.draw_text(bg, name, win_x + 320, win_y + 45, self.get_font(22), WHITE)
+        parts = str(info).split("\n")
+        for i, part in enumerate(parts):
+            self.draw_text(bg, part, win_x + 320, win_y + 110 + i * 28, fnt, WHITE)
+        self.draw_text(bg, "[B]/[Back] 戻る", win_x + win_w - 180, win_y + win_h - 36, fnt, WHITE)
 
     # equip grid command の装備処理を行う
     def equip_grid_command(self, bg, fnt, key):
@@ -2467,46 +2545,6 @@ class Game:
         self.draw_text(bg, "[A]/[Enter] 装備  [B]/[Back] 戻る", win_x + 20, win_y + win_h - 28, fnt, WHITE)
         self.draw_equip_description (bg ,fnt )
         return ent
-
-    # draw zukan detail を描画する
-    def draw_zukan_detail(self, bg, fnt):
-        win_w = 760
-        win_h = 430
-        screen_w, screen_h = bg.get_size()
-        win_x = (screen_w - win_w) // 2
-        win_y = (screen_h - win_h) // 2
-        pygame.draw.rect(bg, BLACK, [win_x, win_y, win_w, win_h])
-        pygame.draw.rect(bg, WHITE, [win_x, win_y, win_w, win_h], 2)
-
-        if self.zukan_kind == 0:
-            if 0 <= self.zukan_detail < len(EMY_ZUKAN_IDS):
-                enemy_id = EMY_ZUKAN_IDS[self.zukan_detail]
-            else:
-                enemy_id = self.zukan_detail
-            name = EMY_NAME[enemy_id] if 0 <= enemy_id < len(EMY_NAME) and EMY_NAME[enemy_id] else f"Enemy {enemy_id}"
-            info = ENEMY_INFO.get(enemy_id, "情報が登録されていません。")
-            img = self.get_enemy_catalog_image(enemy_id)
-            max_w = 260
-            max_h = 260
-            scale = min(max_w / max(1, img.get_width()), max_h / max(1, img.get_height()))
-            draw_img = pygame.transform.scale(img, (max(1, int(img.get_width() * scale)), max(1, int(img.get_height() * scale))))
-            img_x = win_x + 30 + (max_w - draw_img.get_width()) // 2
-            img_y = win_y + 90 + (max_h - draw_img.get_height()) // 2
-            bg.blit(draw_img, [img_x, img_y])
-            pygame.draw.rect(bg, WHITE, [win_x + 30, win_y + 90, max_w, max_h], 1)
-        else:
-            item_names = ["傷薬", "爆弾", "守護"]
-            item_id = self.zukan_detail
-            name = item_names[item_id] if 0 <= item_id < len(item_names) else f"Item {item_id}"
-            info = ITEM_INFO.get(item_id, "情報が登録されていません。")
-            pygame.draw.rect(bg, WHITE, [win_x + 30, win_y + 90, 260, 260], 2)
-            self.draw_text(bg, name, win_x + 70, win_y + 210, fnt, WHITE)
-
-        self.draw_text(bg, name, win_x + 320, win_y + 45, self.get_font(22), WHITE)
-        parts = str(info).split("\n")
-        for i, part in enumerate(parts):
-            self.draw_text(bg, part, win_x + 320, win_y + 110 + i * 28, fnt, WHITE)
-        self.draw_text(bg, "[B]/[Back] 戻る", win_x + win_w - 180, win_y + win_h - 36, fnt, WHITE)
 
     # save command を保存用に処理する
     def save_command (self ,bg ,fnt ,key ):
@@ -3011,15 +3049,7 @@ class Game:
                     if self.menu_accept_lock:
                         ent = False
                     if ent == True :
-                        if self.menu_cmd ==0 :#zukan
-                            self.zukan_menu_cmd =0
-                            self.zukan_kind =0
-                            self.zukan_cursor =0
-                            self.zukan_detail =0
-                            self.zukan_accept_lock = True
-                            self.idx =31
-                            self.tmr =0
-                        elif self.menu_cmd ==1 :#tools
+                        if self.menu_cmd ==0 :#tools
                             self.tool_back_lock =True
                             self.tool_accept_lock = True
                             self.tool_confirm_active = False
@@ -3036,6 +3066,14 @@ class Game:
                             self.tool_desc_char_count =0
                             self.tool_desc_last_tick =0
                             self.idx =34
+                            self.tmr =0
+                        if self.menu_cmd ==1 :#図鑑
+                            self.zukan_menu_cmd =0
+                            self.zukan_kind =0
+                            self.zukan_cursor =0
+                            self.zukan_detail =0
+                            self.zukan_accept_lock = True
+                            self.idx =31
                             self.tmr =0
                         elif self.menu_cmd ==2 :#equip
                             self.equip_cursor =0
@@ -3093,15 +3131,16 @@ class Game:
                     if ent:
                         cols ,rows ,count ,_ =self.get_zukan_layout ()
                         if 0 <=self.zukan_cursor <count:
-                            if self.zukan_kind ==0 and not self.is_enemy_encountered_for_zukan (self.zukan_cursor ):
-                                self.zukan_accept_lock = True
-                            else:
-                                self.zukan_detail =self.zukan_cursor
-                                self.zukan_accept_lock = True
-                                self.idx =33
-                                self.tmr =0
+                            if self.zukan_kind ==0 :
+                                if not self.is_enemy_encountered_for_zukan (self.zukan_cursor ):
+                                    self.zukan_accept_lock = True
+                                else:
+                                    self.zukan_detail =self.zukan_cursor
+                                    self.zukan_accept_lock = True
+                                    self.idx =33
+                                    self.tmr =0
 
-            elif self.idx ==33 :# 図鑑詳細
+            elif self.idx ==33 :# 図鑑詳細（敵のみ）
                 self.draw_dungeon (screen ,fontS )
                 self.draw_zukan_detail (screen ,fontS )
                 if self.zukan_back_lock:
@@ -3593,6 +3632,12 @@ class Game:
                 self.draw_text (screen ,menu_label ,menu_x ,view_top +40 ,fontS ,WHITE )
                 if self.dungeon [self.pl_y ][self.pl_x ]!=3 :
                     self.stair_prompted =False 
+                elif self.is_stairs_locked ():
+                    if not self.stair_prompted:
+                        self.stair_prompted =True
+                        self.init_item_event (kind ="locked_stairs",lines =["この階段は　まだ降りることができない"])
+                        self.idx =131
+                        self.tmr =0
                 elif not self.stair_prompted:
                     self.stair_prompted =True 
                     self.stair_choice_cmd =0 
@@ -3971,7 +4016,7 @@ class Game:
                         if self.item_talk_index >=len (self.item_talk_lines ):
                             self.true_episode_heard = True
                             self.init_item_event (kind="item", reward_count=5)
-                elif self.item_event_kind == "blocked":
+                elif self.item_event_kind in ("blocked","locked_stairs"):
                     if self.item_talk_index <len (self.item_talk_lines ):
                         line = self.item_talk_lines [self.item_talk_index ]
                         now =pygame .time .get_ticks ()
@@ -4318,7 +4363,7 @@ class Game:
                         self.boss_mode = "normal"
                     if self.burn_turns >0 :
                         se [0 ].play ()
-                        burn_dmg = 400 +random .randint (-50 ,50 )
+                        burn_dmg = 200 +random .randint (-30 ,30 )
                         self.set_message ("　火傷 -{}".format (burn_dmg ))
                         self.pl_life =self.pl_life -burn_dmg 
                         if self.pl_life <=0 :
@@ -4343,10 +4388,10 @@ class Game:
                         if random .random ()>0.95 -0.003 *active_ice_sword :
                             ice =1
                     dmg_add = 0 if active_ice_sword == 0 else self.pl_sword [1 ]
-                    dmg =self.pl_str *1.5 +random .randint (0 ,9 )-EMY_MPRO [self.emy_typ ]+ dmg_add
+                    dmg =self.pl_str *1.5 +random .randint (0 ,9 )+ dmg_add
                     if self.guard_remain >0 and self.emy_typ ==119 :
                         dmg =dmg *self.get_guard_damage_multiplier ()
-                    dmg =max (1 ,int(dmg) )
+                    dmg =max (1 ,int(EMY_MPRO [self.emy_typ ] *dmg) )
                     if self.boss_mode == "ice":
                         dmg =0 
                 blit_time =8
