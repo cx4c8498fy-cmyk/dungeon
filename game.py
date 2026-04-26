@@ -509,12 +509,12 @@ class Game:
         armor_lv = self.get_weapon_level("armor", self.eq_armor)
         return shield_lv + armor_lv
 
-    # resolve enemy poison tick の処理を行う
+    # 敵の毒ダメージ処理
     def resolve_enemy_poison_tick(self):
         if self.emy_poison <= 0:
             return 0
         dmg = self.emy_poison * 40
-        self.set_message (f"　敵毒 {dmg}ダメージ！")
+        self.set_message (f"　毒 {dmg}ダメージ！")
         self.emy_life =self.emy_life -dmg
         self.emy_blink =2
         self.emy_poison =max (self.emy_poison -1 ,0)
@@ -1128,21 +1128,23 @@ class Game:
         self.boss_area = set()
         self.event_wall_pos = None
         self.fairy_pos = None
-        if self.fixed_floor_data and self.floor == 1:
+        if self.fixed_floor_data and self.floor == 1: # チュートリアルフロアの配置
             self.setup_tutorial_floor()
-            if self.fixed_floor_data.get("pl_start"):
-                self.pl_x, self.pl_y = self.fixed_floor_data["pl_start"]
+            # if self.fixed_floor_data.get("pl_start"):
+            #     self.pl_x, self.pl_y = self.fixed_floor_data["pl_start"]
+            self.pl_x, self.pl_y = self.fixed_floor_data["pl_start"]
             self.pl_d =1
             self.pl_a =5
             self.stair_prompted =False
             return
         is_boss_floor =self.floor %10 ==0
-        if self.fixed_floor_data and self.floor == 100:
+        if self.fixed_floor_data and self.floor == 100: # 最終フロアの配置
+            self.pl_x, self.pl_y = self.fixed_floor_data["pl_start"]
             boss_pos = self.fixed_floor_data.get("boss_pos")
-            if boss_pos:
-                bx, by = boss_pos
-                self.boss_pos = (bx, by)
-                self.boss_area = {(bx, by)}
+            # if boss_pos:
+            bx, by = boss_pos
+            self.boss_pos = (bx, by)
+            self.boss_area = {(bx, by)}
         if is_boss_floor :
             if not self.boss_pos:
                 self.place_boss()
@@ -1153,7 +1155,6 @@ class Game:
                 if (self.dungeon [y ][x ]==0 ):
                     self.dungeon [y ][x ]=3 
                     break 
-        # 宝箱と繭と武器の配置
         floor_cells =[
             (x ,y )
             for y in range (3 ,DUNGEON_H -3 )
@@ -1161,46 +1162,44 @@ class Game:
             if self.dungeon [y ][x ]==0 and not (x ,y )in self.boss_area
         ]
         random .shuffle (floor_cells )
-        # take cells の処理を行う
         def take_cells (count ):
             taken =floor_cells [:count ]
             del floor_cells [:count ]
             return taken
-        if not is_boss_floor :
-            for x ,y in take_cells (4 ): # 宝箱の配置
-                self.dungeon [y ][x ]=1
-        if is_boss_floor :
-            for x ,y in take_cells (7 ): # 宝箱の配置
-                self.dungeon [y ][x ]=1
+        t_box_num = 7 if is_boss_floor else 4
+        for x, y in take_cells(t_box_num): # 宝箱の配置
+            self.dungeon[y][x] = 1
         if self.floor >10 :
             for x ,y in take_cells (4 ): # 強化素材箱の配置
                 self.dungeon [y ][x ]=4
-        cocoon_target =35 if is_boss_floor else 20
+        cocoon_target =33 if is_boss_floor else 19
         cocoon_cells =take_cells (cocoon_target )
-        for x ,y in cocoon_cells:
+        for x ,y in cocoon_cells: # 繭の配置
             self.dungeon [y ][x ]=2
-        if cocoon_cells:
+        if cocoon_cells: # 真実の繭の配置
             sx ,sy =random .choice (cocoon_cells )
             self.dungeon [sy ][sx ]=10
         # ダメージ、回復床の配置
-        if self.floor >500 :
-            for i in range ((7 +int (self.floor //90 )*(self.floor -83 ))*10 ):
-                x =random .randint (3 ,DUNGEON_W -4 )
-                y =random .randint (3 ,DUNGEON_H -4 )
-                if (self.dungeon [y ][x ]==0 )and not (x ,y )in self.boss_area:
-                    if random .random ()>0.5 :
-                        self.dungeon [y ][x ]=5 
-                    else :
-                        self.dungeon [y ][x ]=6 
+        # if self.floor >500 :
+        #     for i in range ((7 +int (self.floor //90 )*(self.floor -83 ))*10 ):
+        #         x =random .randint (3 ,DUNGEON_W -4 )
+        #         y =random .randint (3 ,DUNGEON_H -4 )
+        #         if (self.dungeon [y ][x ]==0 )and not (x ,y )in self.boss_area:
+        #             if random .random ()>0.5 :
+        #                 self.dungeon [y ][x ]=5 
+        #             else :
+        #                 self.dungeon [y ][x ]=6 
         # プレイヤーの初期位置
-        if self.fixed_floor_data and self.floor == 100 and self.fixed_floor_data.get("pl_start"):
-            self.pl_x, self.pl_y = self.fixed_floor_data["pl_start"]
-        else:
-            while True :
-                self.pl_x =random .randint (3 ,DUNGEON_W -4 )
-                self.pl_y =random .randint (3 ,DUNGEON_H -4 )
-                if (self.dungeon [self.pl_y ][self.pl_x ]==0 )and not (self.pl_x ,self.pl_y )in self.boss_area:
-                    break 
+        # if self.fixed_floor_data and self.floor == 100 and self.fixed_floor_data.get("pl_start"):
+        #     self.pl_x, self.pl_y = self.fixed_floor_data["pl_start"]
+        # else:
+        if not self.floor in {1, 100}:
+            self.pl_y, self.pl_x = take_cells(1)[0] # プレイヤーの初期位置
+            # while True :
+            #     self.pl_x =random .randint (3 ,DUNGEON_W -4 )
+            #     self.pl_y =random .randint (3 ,DUNGEON_H -4 )
+            #     if (self.dungeon [self.pl_y ][self.pl_x ]==0 )and not (self.pl_x ,self.pl_y )in self.boss_area:
+            #         break 
         self.pl_d =1 
         self.pl_a =5 
         self.place_fairy_for_floor ()
@@ -1209,7 +1208,7 @@ class Game:
             self.floor %10 in (5 ,7 )or
             self.floor in ITEM_WALL_WEAPON_SET
         )
-        if place_item_wall:
+        if place_item_wall: # アイテム壁を配置
             wall_cells =[
                 (x ,y )
                 for y in range (DUNGEON_H -1 )
@@ -1219,7 +1218,7 @@ class Game:
             if wall_cells:
                 wx ,wy =random .choice (wall_cells )
                 self.dungeon [wy ][wx ]=7
-        if self.floor %10 ==4 and self.wall_event:
+        if self.floor %10 ==4 and self.wall_event: # 壁イベントを配置
             wall_cells = [
                 (x, y)
                 for y in range(DUNGEON_H - 1)
@@ -1232,7 +1231,7 @@ class Game:
 
     # player の移動・更新を行う
     def move_player (self ,key ):
-        if self.dungeon [self.pl_y ][self.pl_x ]==TILE_FAIRY :
+        if self.dungeon [self.pl_y ][self.pl_x ]==TILE_FAIRY : # 妖精に載った
             self.start_fairy_upgrade_event ()
             return
         if self.dungeon [self.pl_y ][self.pl_x ]==1 :# 宝箱に載った
@@ -1255,36 +1254,37 @@ class Game:
             self.dungeon [self.pl_y ][self.pl_x ]=0 
             self.item_reward_count =1
             self.treasure =random .choice ([7 ,8 ,9 ])
+            add_num = 2 if self.floor > 60 else 1
             if self.treasure ==7 :
-                self.tool_sword_polish +=1
+                self.tool_sword_polish +=add_num
             elif self.treasure ==8 :
-                self.tool_shield_harden +=1
+                self.tool_shield_harden +=add_num
             else :
-                self.tool_armor_patch +=1
+                self.tool_armor_patch +=add_num
             self.idx =120 
             self.tmr =0 
             return 
-        if self.dungeon [self.pl_y ][self.pl_x ]==5 :# ダメージ床
-            self.dungeon [self.pl_y ][self.pl_x ]=0 
-            self.trap =0 
-            pygame .mixer .Sound (self.path +"/sound/ohd_se_attack.wav").play ()
-            self.pl_life =self.pl_life -10 *((self.floor -1 )//10 )+30 
-            self.idx =121 
-            self.tmr =0 
-            if self.pl_life <=0 :
-                self.pl_life =0 
-                pygame .mixer .music .stop ()
-                self.idx =70 
-                self.tmr =0 
-            return 
-        if self.dungeon [self.pl_y ][self.pl_x ]==6 :# 回復床
-            self.dungeon [self.pl_y ][self.pl_x ]=0 
-            self.trap =1 
-            pygame .mixer .Sound (self.path +"/sound/ohd_se_potion.wav").play ()
-            self.pl_life =min (self.pl_life -20 +10 *((self.floor -1 )//10 ),self.pl_lifemax )
-            self.idx =121 
-            self.tmr =0 
-            return 
+        # if self.dungeon [self.pl_y ][self.pl_x ]==5 :# ダメージ床
+        #     self.dungeon [self.pl_y ][self.pl_x ]=0 
+        #     self.trap =0 
+        #     pygame .mixer .Sound (self.path +"/sound/ohd_se_attack.wav").play ()
+        #     self.pl_life =self.pl_life -10 *((self.floor -1 )//10 )+30 
+        #     self.idx =121 
+        #     self.tmr =0 
+        #     if self.pl_life <=0 :
+        #         self.pl_life =0 
+        #         pygame .mixer .music .stop ()
+        #         self.idx =70 
+        #         self.tmr =0 
+        #     return 
+        # if self.dungeon [self.pl_y ][self.pl_x ]==6 :# 回復床
+        #     self.dungeon [self.pl_y ][self.pl_x ]=0 
+        #     self.trap =1 
+        #     pygame .mixer .Sound (self.path +"/sound/ohd_se_potion.wav").play ()
+        #     self.pl_life =min (self.pl_life -20 +10 *((self.floor -1 )//10 ),self.pl_lifemax )
+        #     self.idx =121 
+        #     self.tmr =0 
+        #     return 
         if self.dungeon [self.pl_y ][self.pl_x ]==2 :# 繭に載った
             pos =(self.pl_x ,self.pl_y )
             if self.tutorial_enabled and self.floor ==1 and pos ==self.tutorial_room4_item_pos:
@@ -1581,7 +1581,7 @@ class Game:
                 self.idx =110
                 self.tmr =6
 
-    # make current save data を生成する
+    # save data を生成する
     def make_current_save_data(self):
         return {
             "floor": self.floor,
@@ -1787,7 +1787,7 @@ class Game:
                 return True
         return False
 
-    # font を取得する
+    # フォントを取得する
     def get_font (self ,size ):
         font_path =os .path .join (self.path ,"fonts","PixelMplus12-Regular.ttf")
         return pygame .font .Font (font_path ,size )
@@ -1824,7 +1824,7 @@ class Game:
         self.draw_text (bg ,self.get_equipped_weapon_text ("armor","鎧"),X +175 ,Y +65 ,fnt ,WHITE )
         self.draw_text (bg ,self.get_equipped_weapon_text ("sword","剣"),X +175 ,Y +90 ,fnt ,WHITE )
 
-    # minimap grid を更新する
+    # ミニマップを更新する
     def update_minimap_grid (self ,new_seen ):
         if self.map_grid_surface is None or self.map_grid_surface.get_size ()!=(DUNGEON_W ,DUNGEON_H ):
             self.map_grid_surface = pygame.Surface((DUNGEON_W, DUNGEON_H), pygame.SRCALPHA)
@@ -1838,17 +1838,17 @@ class Game:
             for x ,y in new_seen :
                 self.map_grid_surface.set_at((x, y), (140, 140, 140, 160))
 
-    # minimap を描画する
+    # ミニマップを描画する
     def draw_minimap (self ,bg ,view_rect ,new_seen ):
         view_left ,view_top ,view_w ,view_h =view_rect
         margin =20
         max_w =int (view_w *0.3 )
         max_h =int (view_h *0.3 )
-        if max_w <=0 or max_h <=0 :
-            return
+        # if max_w <=0 or max_h <=0 :
+        #     return
         scale =min (max_w /DUNGEON_W ,max_h /DUNGEON_H )
-        if scale <=0 :
-            return
+        # if scale <=0 :
+        #     return
         map_w =max (1 ,int (DUNGEON_W *scale ))
         map_h =max (1 ,int (DUNGEON_H *scale ))
         self.update_minimap_grid (new_seen )
@@ -1884,16 +1884,16 @@ class Game:
         bg .fill ((255 ,0 ,0 ,200 ),[map_x +px ,map_y +py ,marker ,marker ])
 
 
-    # 通常battle を初期化する
+    # 通常の戦闘を初期化する
     def init_battle (self ):
         self.emy_skip_turn = False
         self.enemy_poison_fail_count = 0
         self.emy_poison =0
-        max_emy_typ =EMY_APPEAR [self.floor -1 ]
-        self.emy_typ =random .randint (0 ,max_emy_typ )
-        if self.truth_fragment_drop_battle and max_emy_typ >=6 :
+        # max_emy_typ =EMY_APPEAR [self.floor -1 ]
+        self.emy_typ =random .randint (0 ,EMY_APPEAR [self.floor -1 ] )
+        if self.truth_fragment_drop_battle and self.emy_typ ==6 :
             while self.emy_typ ==6 :
-                self.emy_typ =random .randint (0 ,max_emy_typ )
+                self.emy_typ =random .randint (0 ,EMY_APPEAR [self.floor -1 ] )
         self.encountered_enemies.add(self.emy_typ)
         self.emy_lev =random .randint (1 ,self.floor )
         self.imgEnemy =pygame .image .load (self.path +"/image/enemy/enemy"+str (self.emy_typ )+"_"+str ((self.floor -1 )//30 )+".png")
@@ -1903,14 +1903,14 @@ class Game:
         self.emy_name =EMY_NAME [self.emy_typ ]
         tier =(self.floor -1 )//10
         base =max (1 ,int (2.4 *EMY_LIFE [self.emy_typ ]-100 ))
-        floor_mul =1.0 +0.18 *tier
+        floor_mul =1.0 +0.16 *tier
         level_mul =1.0 +0.12 *(self.emy_lev -1 )/99
         level_add =(self.emy_lev -1 )*10
         self.emy_lifemax =int (base *floor_mul *level_mul +level_add +tier*45 )
         self.emy_life =self.emy_lifemax 
         str_base =max (1 ,int (EMY_STR [self.emy_typ ]))
         str_level_add =(self.emy_lev -1 )
-        self.emy_str =int (str_base *floor_mul *level_mul +str_level_add +tier*13)
+        self.emy_str =int (str_base *floor_mul *level_mul +str_level_add +tier*15)
         screen =pygame .display .get_surface ()
         screen_w ,screen_h =screen .get_size ()
         self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
@@ -1922,20 +1922,19 @@ class Game:
         self.emy_skip_turn = False
         self.enemy_poison_fail_count = 0
         self.emy_poison =0
-        base_typ =9 +int (self.floor //10 )
         self.emy_lev =1
-        self.emy_typ =100 +base_typ +self.change
+        self.emy_typ =109 +int (self.floor //10 ) +self.change
         self.encountered_enemies.add(self.emy_typ)
-        boss_src_typ =self.emy_typ -100
-        geta =((self.floor -1 )//90 )*(19 -boss_src_typ )*30
+        # boss_src_typ =self.emy_typ -100
+        # geta =((self.floor -1 )//90 )*(19 -boss_src_typ )*30
         self.imgEnemy =pygame .image .load (self.path +"/image/boss/boss_"+str (self.emy_typ -110 )+".png")
         new_w =int (self.imgEnemy .get_width ()*1.1 )
         new_h =int (self.imgEnemy .get_height ()*1.1 )
         self.imgEnemy =pygame .transform .scale (self.imgEnemy ,(new_w ,new_h ))
         self.emy_name =EMY_NAME [self.emy_typ ]
-        self.emy_lifemax =EMY_LIFE [self.emy_typ ]+geta *20 
+        self.emy_lifemax =EMY_LIFE [self.emy_typ ]
         self.emy_life =self.emy_lifemax 
-        self.emy_str =EMY_STR [self.emy_typ ]+geta 
+        self.emy_str =EMY_STR [self.emy_typ ]
         screen =pygame .display .get_surface ()
         screen_w ,screen_h =screen .get_size ()
         self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
@@ -2057,7 +2056,7 @@ class Game:
             self.draw_text (bg ,label ,win_x +50 ,y ,fnt ,WHITE )
         return ent 
 
-    # draw tool inventory を描画する
+    # どうぐ一覧の描画系処理
     def draw_tool_inventory (self ,bg ,fnt ):
         tools =self.get_tool_entries ()
         win_w =520
@@ -2110,7 +2109,7 @@ class Game:
             box_y =win_y +win_h -box_h -46
             pygame .draw .rect (bg ,BLACK ,[box_x ,box_y ,box_w ,box_h ])
             pygame .draw .rect (bg ,WHITE ,[box_x ,box_y ,box_w ,box_h ],2 )
-            self.draw_text (bg ,"どちらを強化？",box_x +16 ,box_y +10 ,fnt ,WHITE )
+            self.draw_text (bg ,"強化対象を選んでください",box_x +16 ,box_y +10 ,fnt ,WHITE )
             for i ,label in enumerate (options ):
                 y =box_y +44 +i *28
                 if self.tool_growth_choice_cmd ==i :
@@ -2190,7 +2189,7 @@ class Game:
             desc = ITEM_INFO.get(self.zukan_cursor, "情報が登録されていません。")
         self.draw_bottom_description_window(bg, fnt, desc)
 
-    # get tool entries を取得する
+    # どうぐ一覧に表示するためのどうぐリストを取得
     def get_tool_entries (self ):
         tools =[]
         if self.tool_food >0 :
@@ -2206,21 +2205,21 @@ class Game:
                 "id":"sword_polish",
                 "name":TRE_NAME [7 ],
                 "count":self.tool_sword_polish ,
-                "usable":len (self.get_weapon_upgrade_targets ("sword_polish"))>0
+                "usable":any (target .get ("can_upgrade",True )for target in self.get_weapon_upgrade_targets ("sword_polish"))
             })
         if self.tool_shield_harden >0 :
             tools .append ({
                 "id":"shield_harden",
                 "name":TRE_NAME [8 ],
                 "count":self.tool_shield_harden ,
-                "usable":len (self.get_weapon_upgrade_targets ("shield_harden"))>0
+                "usable":any (target .get ("can_upgrade",True )for target in self.get_weapon_upgrade_targets ("shield_harden"))
             })
         if self.tool_armor_patch >0 :
             tools .append ({
                 "id":"armor_patch",
                 "name":TRE_NAME [9 ],
                 "count":self.tool_armor_patch ,
-                "usable":len (self.get_weapon_upgrade_targets ("armor_patch"))>0
+                "usable":any (target .get ("can_upgrade",True )for target in self.get_weapon_upgrade_targets ("armor_patch"))
             })
         if self.truth_fragment >0 :
             tools .append ({"id":"truth_fragment","name":"しんじつのかけら","count":self.truth_fragment ,"usable":False })
@@ -2228,7 +2227,7 @@ class Game:
             tools .append ({"id":"heirloom_pendant","name":"形見のペンダント","count":self.heirloom_pendant ,"usable":False })
         return tools
 
-    # get weapon upgrade targets を取得する
+    # 強化対象となる武器のリストを適切な順番で取得
     def get_weapon_upgrade_targets (self ,tool_id ):
         targets =[]
         if tool_id =="sword_polish":
@@ -2245,6 +2244,7 @@ class Game:
             group ="armor"
         else :
             return targets
+        equipped_slot =self.get_equipped_slot_by_group (group )
         for slot ,trap_id in mapping:
             if weapon_list [slot ]>0 :
                 targets .append ({
@@ -2255,21 +2255,49 @@ class Game:
                     "level":weapon_list [slot ],
                     "can_upgrade":weapon_list [slot ]<99 ,
                 })
+        targets .sort (
+            key =lambda target :(
+                0 if target ["can_upgrade"] else 1 ,
+                0 if (target ["can_upgrade"] and target ["slot"]==equipped_slot )else 1 ,
+                target ["slot"]
+            )
+        )
         return targets
+
+    # find first upgradable target index を取得する
+    def find_first_upgradable_target_index (self ,targets ):
+        for i ,target in enumerate (targets ):
+            if target .get ("can_upgrade",True ):
+                return i
+        return -1
+
+    # move weapon choice cursor の移動処理を行う
+    def move_weapon_choice_cursor (self ,step ):
+        if not self.tool_weapon_choice_targets :
+            return
+        idx =self.tool_weapon_choice_cmd +step
+        while 0 <=idx <len (self.tool_weapon_choice_targets ):
+            if self.tool_weapon_choice_targets [idx ].get ("can_upgrade",True ):
+                self.tool_weapon_choice_cmd =idx
+                return
+            idx +=step
 
     # start weapon upgrade choice を開始する
     def start_weapon_upgrade_choice (self ,tool_id ):
         targets =self.get_weapon_upgrade_targets (tool_id )
         if len (targets )==0 :
             return False
+        first_upgradable =self.find_first_upgradable_target_index (targets )
+        if first_upgradable <0 :
+            return False
         self.tool_weapon_choice_active =True
-        self.tool_weapon_choice_cmd =0
+        self.tool_weapon_choice_cmd =first_upgradable
         self.tool_weapon_choice_targets =targets
         self.tool_weapon_choice_tool_id =tool_id
         self.tool_weapon_choice_prompt ="どの武器に使用しますか？"
         return True
 
-    # apply weapon upgrade を適用する
+    # 強化対象に選ばれた武器のレベルを上げる
     def apply_weapon_upgrade (self ):
         if not self.tool_weapon_choice_active:
             return False
@@ -2294,7 +2322,7 @@ class Game:
             return True
         return False
 
-    # 道具を使用した時の効果処理
+    # 食料系の道具を使用した時の効果処理
     def use_selected_tool (self ,tool_id ):
         if tool_id =="food" and self.tool_food >0 :
             self.tool_food -=1 
@@ -2585,7 +2613,7 @@ class Game:
             self.draw_text (bg ,label ,win_x +50 ,y ,fnt ,WHITE )
         return ent 
 
-    # stair choice command の処理を行う
+    # 階段の選択コマンドの処理
     def stair_choice_command (self ,bg ,fnt ,key ,enable_input =True ):
         ent =False 
         options =[
@@ -2763,7 +2791,7 @@ class Game:
             self.message [i ]=self.message [i +1 ]
         self.message [9 ]=msg 
 
-    # apply armor effects を適用する
+    # 鎧系の処理
     def apply_armor_effects (self ):
         armor_heal =self.get_active_weapon_level ("armor",0 )
         armor_mag =self.get_active_weapon_level ("armor",1 )
@@ -2806,8 +2834,7 @@ class Game:
                 self.tmr =0 
             action =False 
         if self.emy_typ ==7 or self.boss_mode == "ice":
-            cure = self.emy_lifemax //10 +random.randint (0, self.emy_lifemax//500) +random.randint (0, 10)
-            cure += {7:0, 118:-4000}[self.emy_typ]
+            cure = self.emy_lifemax //{7:10, 118:100}[self.emy_typ] +random.randint (0, 10)
             self.set_message ("　敵の回復 +{}".format (int (min (cure ,self.emy_lifemax -self.emy_life ))))
             pygame .mixer .Sound (self.path +"/sound/ohd_se_potion.wav").play ()
             self.emy_life =min (self.emy_life +cure ,self.emy_lifemax )
@@ -3166,10 +3193,16 @@ class Game:
                 elif self.tool_cmd >=len (tool_entries ):
                     self.tool_cmd =len (tool_entries )-1
                 if self.tool_weapon_choice_active:
-                    if key [K_UP ]and self.tool_weapon_choice_cmd >0 :
-                        self.tool_weapon_choice_cmd -=1
-                    if key [K_DOWN ]and self.tool_weapon_choice_cmd <len (self.tool_weapon_choice_targets )-1 :
-                        self.tool_weapon_choice_cmd +=1
+                    if self.tool_weapon_choice_targets:
+                        self.tool_weapon_choice_cmd =max (0 ,min (self.tool_weapon_choice_cmd ,len (self.tool_weapon_choice_targets )-1 ))
+                        if not self.tool_weapon_choice_targets [self.tool_weapon_choice_cmd ].get ("can_upgrade",True ):
+                            first_upgradable =self.find_first_upgradable_target_index (self.tool_weapon_choice_targets )
+                            if first_upgradable >=0 :
+                                self.tool_weapon_choice_cmd =first_upgradable
+                    if key [K_UP ]:
+                        self.move_weapon_choice_cursor (-1 )
+                    if key [K_DOWN ]:
+                        self.move_weapon_choice_cursor (1 )
                     if (key [K_b ]or key [K_BACKSPACE ]) and not self.tool_back_lock:
                         self.tool_back_lock = True
                         self.tool_weapon_choice_active = False
@@ -4420,7 +4453,7 @@ class Game:
                         self.set_message ("　敵は　凍りついた！")
                     else :
                         self.tmr =self.tmr +3
-                if self.tmr ==18 :
+                if self.tmr ==18 : # プレイヤーの毒処理
                     self.poison =max (self.poison -1 ,0 )
                     if ice*self.poison >0 :
                         self.set_message (f"　毒 {self.poison *40}ダメージ！")
@@ -4588,12 +4621,7 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 defence =self.get_equipped_defence ()
                 if self.tmr ==1 :
-                    poison_result =self.resolve_enemy_poison_tick ()
-                    if poison_result ==2 :
-                        continue
                     self.set_message (f"{self.emy_name}のターン")
-                    pro =0 
-                    cou =0 
                     if self.emy_typ ==112 and self.burn_turns >0 :
                         self.idx =237 
                         self.tmr =0 
@@ -4608,6 +4636,8 @@ class Game:
                         se [0 ].play ()
                         self.emy_step =30 
                 if self.tmr ==7 :
+                    pro =0 
+                    cou =0 
                     active_defence_shield =self.get_active_weapon_level ("shield",0 )
                     active_counter_shield =self.get_active_weapon_level ("shield",1 )
                     if active_defence_shield >0 :
@@ -4620,31 +4650,33 @@ class Game:
                             cou =active_counter_shield
                     if self.emy_typ ==119 :
                         dmg_tmp =dmg 
-                    dmg =max (self.emy_str +random .randint (0 ,9 )-defence ,1 )
-                    dmg =int (dmg /(1 +pro ))*self.emy_powup 
+                    dmg =self.emy_str +random .randint (0 ,9 )-defence
                     if self.emy_typ ==118 and self.boss_mode == "fire":
-                        dmg =int (dmg *2 )
-                    if self.guard_remain >0 :
+                        dmg =dmg *2
+                    if self.guard_remain >0 : # 守護の効果処理
                         if self.emy_typ ==114 or self.emy_typ ==117 :
                             self.set_message ("　守護が破壊された！")
                             self.guard_remain =0 
                         else :
-                            dmg =int (dmg *self.get_guard_damage_multiplier ())
+                            dmg =dmg *self.get_guard_damage_multiplier ()
                     if self.emy_typ ==2 or self.emy_typ ==110:
                         if random .random ()>0.7 :
                             se [0 ].play ()
                             self.set_message ("　会心の一撃！")
-                            dmg =int (dmg *{2:1.5, 110:2, 118:2.5}[self.emy_typ] )
-                    if self.emy_typ ==117 :
+                            dmg =dmg *{2:1.5, 110:2, 118:2.5}[self.emy_typ]
+                    if self.emy_typ ==117 : #インフェルノの火力が低下
                         self.inferno -= 15 + random .randint (0 ,10 )
-                    if self.emy_typ ==119 :
+                    if self.emy_typ ==119 : #ゆうしゃ１はプレイヤーからの攻撃を模倣
                         dmg =dmg_tmp 
-                    if self.emy_typ ==120 :
+                    if self.emy_typ ==120 : #ゆうしゃ２は生命が減るほど攻撃が強くなる
                         dmg = int(dmg * self.emy_lifemax/(1.3*self.emy_life))
+                    dmg =max(int (dmg /(1 +pro ) /(2 *self.emy_poison +1 ))*self.emy_powup ,1 )
                     self.set_message (f"　{dmg}　ダメージ！")
                     self.dmg_eff =6
                     self.emy_step =0 
                 if self.tmr ==12 :
+                    # if poison_result ==2 :
+                    #     continue
                     self.pl_life =self.pl_life -dmg 
                     if self.pl_life <=0 :
                         self.pl_life =0 
@@ -4652,7 +4684,7 @@ class Game:
                         self.tmr =0 
                     if cou >0 :
                         self.emy_blink =2 
-                        dmg =int (self.pl_str //10 +self.pl_str *cou *0.003 +random .randint (0 ,cou //5 ))
+                        dmg =int (self.pl_str //20 +self.pl_str *cou *0.005 +random .randint (0 ,cou //5 ))
                         self.set_message (f"　{dmg}　カウンター！")
                         self.emy_life =self.emy_life -dmg 
                         if self.emy_life <=0 :
@@ -4663,6 +4695,7 @@ class Game:
                     if self.emy_action (screen ):
                         self.tmr =self.tmr +3 
                 if self.tmr ==18 :
+                    self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
                     if self.emy_typ ==6 and self.idx ==236 :
                         self.tmr =0 
@@ -4673,10 +4706,10 @@ class Game:
 
             elif self.idx ==231 :#destroy
                 self.draw_battle (screen ,fontS )
-                if self.tmr ==1 :
-                    poison_result =self.resolve_enemy_poison_tick ()
-                    if poison_result ==2 :
-                        continue
+                # if self.tmr ==1 :
+                #     poison_result =self.resolve_enemy_poison_tick ()
+                #     if poison_result ==2 :
+                #         continue
                 if self.tmr ==5 :
                     self.set_message (self.emy_name +"の デストロイ!")
                     se [1 ].play ()
@@ -4702,9 +4735,9 @@ class Game:
             elif self.idx ==232 :#Magia
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    poison_result =self.resolve_enemy_poison_tick ()
-                    if poison_result ==2 :
-                        continue
+                    # poison_result =self.resolve_enemy_poison_tick ()
+                    # if poison_result ==2 :
+                    #     continue
                     self.set_message (f"{self.emy_name}のターン")
                 if self.tmr ==5 :
                     if self.madoka <1000 :
@@ -4733,6 +4766,7 @@ class Game:
                     if self.emy_action (screen ):
                         self.tmr =self.tmr +3 
                 if self.tmr ==24 :
+                    self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
                 if self.tmr ==27 :
                     self.idx =210 
@@ -4742,15 +4776,16 @@ class Game:
             elif self.idx ==233 :#敵のポーション
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    poison_result =self.resolve_enemy_poison_tick ()
-                    if poison_result ==2 :
-                        continue
+                    # poison_result =self.resolve_enemy_poison_tick ()
+                    # if poison_result ==2 :
+                    #     continue
                     cure =min (cure ,self.emy_lifemax -self.emy_life )
                     self.set_message ("　敵の生命 +{}".format (cure ))
                     se [2 ].play ()
                 if self.tmr ==6 :
                     self.emy_life =min (self.emy_lifemax ,self.emy_life +cure )
                 if self.tmr ==11 :
+                    self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
                 if self.tmr ==14 :
                     self.idx =210 
@@ -4759,12 +4794,13 @@ class Game:
             elif self.idx ==234 :#敵のガード
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    poison_result =self.resolve_enemy_poison_tick ()
-                    if poison_result ==2 :
-                        continue
+                    # poison_result =self.resolve_enemy_poison_tick ()
+                    # if poison_result ==2 :
+                    #     continue
                     self.set_message ("　敵は　{}ターンの守護を得た".format (self.guard_remain ))
                     se [8 ].play ()
                 if self.tmr ==6 :
+                    self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
                 if self.tmr ==11 :
                     self.idx =210 
@@ -4773,10 +4809,11 @@ class Game:
             elif self.idx ==235 :#逃亡？
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    poison_result =self.resolve_enemy_poison_tick ()
-                    if poison_result ==2 :
-                        continue
+                    # poison_result =self.resolve_enemy_poison_tick ()
+                    # if poison_result ==2 :
+                    #     continue
                     self.set_message ("　敵は　こちらを見つめている")
+                    self.resolve_enemy_poison_tick ()
                 if self.tmr ==6 :
                     self.idx =210 
                     self.tmr =0 
@@ -4794,9 +4831,9 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 defence =self.get_equipped_defence ()
                 if self.tmr ==1 :
-                    poison_result =self.resolve_enemy_poison_tick ()
-                    if poison_result ==2 :
-                        continue
+                    # poison_result =self.resolve_enemy_poison_tick ()
+                    # if poison_result ==2 :
+                    #     continue
                 if self.tmr ==5 :
                     self.set_message (f"　{self.emy_name}の　攻撃！")
                     se [0 ].play ()
@@ -4824,6 +4861,7 @@ class Game:
                         self.idx =241 
                         self.tmr =0
                 if self.tmr ==16 :
+                    self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
                 if self.tmr ==19 :
                     self.idx =210 
@@ -4831,10 +4869,10 @@ class Game:
 
             elif self.idx ==238 :# 豪炎
                 self.draw_battle (screen ,fontS )
-                if self.tmr ==1 :
-                    poison_result =self.resolve_enemy_poison_tick ()
-                    if poison_result ==2 :
-                        continue
+                # if self.tmr ==1 :
+                #     poison_result =self.resolve_enemy_poison_tick ()
+                #     if poison_result ==2 :
+                #         continue
                 if self.tmr ==5 :
                     self.set_message (f"　{self.emy_name}の　インフェルノ！")
                     se [1 ].play ()
@@ -4852,6 +4890,7 @@ class Game:
                         self.idx =242 
                         self.tmr =0 
                 if self.tmr ==16 :
+                    self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
                 if self.tmr ==19 :
                     self.idx =210 
@@ -4861,9 +4900,9 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 defence =self.get_equipped_defence ()
                 if self.tmr ==1 :
-                    poison_result =self.resolve_enemy_poison_tick ()
-                    if poison_result ==2 :
-                        continue
+                    # poison_result =self.resolve_enemy_poison_tick ()
+                    # if poison_result ==2 :
+                    #     continue
                     self.set_message (self.emy_name +"のターン")
                     pro =0 
                     cou =0 
@@ -4915,6 +4954,7 @@ class Game:
                         self.idx =242 
                         self.tmr =0 
                 if self.tmr ==18 :
+                    self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
                 if self.tmr ==21 :
                     self.idx =210 
