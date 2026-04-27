@@ -180,6 +180,9 @@ class Game:
         self.equip_cursor = 0
         self.equip_back_lock = False
         self.equip_accept_lock = False
+        self.settings_cmd = 0
+        self.settings_back_lock = False
+        self.settings_accept_lock = False
         self.save_cmd = 0
         self.save_from_stair = False
         self.save_from_boss = False
@@ -201,6 +204,15 @@ class Game:
         self.boss_mode = "normal"
         self.guard_remain = 0
         self.change = 0
+        self.auto_equip_attack_sword = False
+        self.auto_equip_magic_staff = False
+        self.auto_equip_bomb_cannon = False
+        self.auto_equip_guard_shield = False
+        self.auto_equip_potion_armor = False
+        self.battle_restore_eq_shield = 0
+        self.battle_restore_eq_armor = 0
+        self.battle_restore_eq_sword = 0
+        self.battle_auto_equip_used = False
         self.wall_item = None
         self.fairy_pos = None
         self.fixed_floor_offset = (0, 0)  # Track offset for padded fixed floors
@@ -494,20 +506,63 @@ class Game:
         self.set_equipped_slot_by_group(group, slot)
         return True
 
-    # get equipped weapon text を取得する
+    # パラメータウィンドウ表示用の装備中武器のテキストを取得
     def get_equipped_weapon_text(self, group, fallback_label):
         slot = self.get_equipped_slot_by_group(group)
         level = self.get_weapon_level(group, slot)
         trap_id = {"shield": [2, 5, 8], "armor": [3, 6, 9], "sword": [4, 7, 10]}[group][slot]
         if level <= 0:
-            return f"{fallback_label}　ー"
+            return f"{fallback_label}　-"
         return f"{TRAP_NAME[trap_id]} Lv.{level}"
 
-    # get equipped defence を取得する
+    # 装備中の武器の防御力を取得する
     def get_equipped_defence(self):
         shield_lv = self.get_weapon_level("shield", self.eq_shield)
         armor_lv = self.get_weapon_level("armor", self.eq_armor)
         return shield_lv + armor_lv
+
+    # 戦闘開始時の装備状態を保存する
+    def start_battle_equip_session(self):
+        self.battle_restore_eq_shield = self.eq_shield
+        self.battle_restore_eq_armor = self.eq_armor
+        self.battle_restore_eq_sword = self.eq_sword
+        self.battle_auto_equip_used = False
+
+    # 戦闘終了時に装備状態を復元する
+    def restore_battle_equip_session(self):
+        if not self.battle_auto_equip_used:
+            return
+        self.normalize_equipped_state(
+            self.battle_restore_eq_shield,
+            self.battle_restore_eq_armor,
+            self.battle_restore_eq_sword,
+        )
+        self.update_player_images()
+        self.battle_auto_equip_used = False
+
+    # 自動装備で武器スロットを切り替える
+    def try_auto_equip_slot(self, group, slot):
+        if self.get_weapon_level(group, slot) <= 0:
+            return False
+        if self.get_equipped_slot_by_group(group) == slot:
+            return False
+        self.set_equipped_slot_by_group(group, slot)
+        self.update_player_images()
+        self.battle_auto_equip_used = True
+        return True
+
+    # 戦闘コマンドに応じた自動装備を適用する
+    def apply_auto_equip_for_battle_command(self, cmd):
+        if cmd == 0 and self.auto_equip_attack_sword:
+            self.try_auto_equip_slot("sword", 0)
+        elif cmd == 1 and self.auto_equip_magic_staff:
+            self.try_auto_equip_slot("sword", 1)
+        elif cmd == 2 and self.auto_equip_potion_armor:
+            self.try_auto_equip_slot("armor", 2)
+        elif cmd == 3 and self.auto_equip_bomb_cannon:
+            self.try_auto_equip_slot("sword", 2)
+        elif cmd == 4 and self.auto_equip_guard_shield:
+            self.try_auto_equip_slot("shield", 2)
 
     # 敵の毒ダメージ処理
     def resolve_enemy_poison_tick(self):
@@ -1194,7 +1249,7 @@ class Game:
         #     self.pl_x, self.pl_y = self.fixed_floor_data["pl_start"]
         # else:
         if not self.floor in {1, 100}:
-            self.pl_y, self.pl_x = take_cells(1)[0] # プレイヤーの初期位置
+            self.pl_x, self.pl_y = take_cells(1)[0] # プレイヤーの初期位置
             # while True :
             #     self.pl_x =random .randint (3 ,DUNGEON_W -4 )
             #     self.pl_y =random .randint (3 ,DUNGEON_H -4 )
@@ -1203,11 +1258,13 @@ class Game:
         self.pl_d =1 
         self.pl_a =5 
         self.place_fairy_for_floor ()
-        place_item_wall =(
-            self.floor >=91 or
-            self.floor %10 in (5 ,7 )or
-            self.floor in ITEM_WALL_WEAPON_SET
-        )
+        place_item_wall =self.floor in {7 ,17 ,27 ,37 ,47 ,57 ,67 ,77 ,87, 
+                                        15, 25, 35, 45, 55, 65, 75, 85, 
+                                        91, 92, 93, 94, 95, 96, 97, 98, 99, 100} or self.floor in ITEM_WALL_WEAPON_SET
+        #     self.floor >=91 or
+        #     self.floor %10 in (5 ,7 )or
+        #     self.floor in ITEM_WALL_WEAPON_SET
+        # )
         if place_item_wall: # アイテム壁を配置
             wall_cells =[
                 (x ,y )
@@ -1415,11 +1472,11 @@ class Game:
         self.pl_exp =0 
         self.pl_level =1 
         self.refresh_pl_magmax ()
-        self.potion =0 
+        self.potion =2 
         self.potion_lv =0
-        self.blazegem =0 
+        self.blazegem =2 
         self.blazegem_lv =0
-        self.guard =0 
+        self.guard =2 
         self.guard_lv =0
         self.truth_fragment =0
         self.truth_fragment_floors = set()
@@ -1456,6 +1513,12 @@ class Game:
         self.emy_poison =0
         self.emy_powup =1
         self.poison =0
+        self.auto_equip_attack_sword =False
+        self.auto_equip_magic_staff =False
+        self.auto_equip_bomb_cannon =False
+        self.auto_equip_guard_shield =False
+        self.auto_equip_potion_armor =False
+        self.battle_auto_equip_used =False
         self.fairy_pos =None
         self.idx =100 
         self.tmr =0 
@@ -1501,9 +1564,15 @@ class Game:
                 self.tool_sword_polish =loaddata .get ("tool_sword_polish",0 )
                 self.tool_shield_harden =loaddata .get ("tool_shield_harden",0 )
                 self.tool_armor_patch =loaddata .get ("tool_armor_patch",0 )
+                self.auto_equip_attack_sword =bool (loaddata .get ("auto_equip_attack_sword",False ))
+                self.auto_equip_magic_staff =bool (loaddata .get ("auto_equip_magic_staff",False ))
+                self.auto_equip_bomb_cannon =bool (loaddata .get ("auto_equip_bomb_cannon",False ))
+                self.auto_equip_guard_shield =bool (loaddata .get ("auto_equip_guard_shield",False ))
+                self.auto_equip_potion_armor =bool (loaddata .get ("auto_equip_potion_armor",False ))
                 self.item_popup_text =""
                 self.truth_fragment_drop_battle =False
                 self.growth_essence_drop_battle =False
+                self.battle_auto_equip_used =False
                 self.powup =1
                 self.emy_poison =0
                 self.emy_powup =1
@@ -1608,6 +1677,11 @@ class Game:
             "tool_sword_polish": self.tool_sword_polish,
             "tool_shield_harden": self.tool_shield_harden,
             "tool_armor_patch": self.tool_armor_patch,
+            "auto_equip_attack_sword": self.auto_equip_attack_sword,
+            "auto_equip_magic_staff": self.auto_equip_magic_staff,
+            "auto_equip_bomb_cannon": self.auto_equip_bomb_cannon,
+            "auto_equip_guard_shield": self.auto_equip_guard_shield,
+            "auto_equip_potion_armor": self.auto_equip_potion_armor,
             "shield": self.pl_shield,
             "armor": self.pl_armor,
             "sword": self.pl_sword,
@@ -2033,7 +2107,7 @@ class Game:
     # menu command の処理を行う
     def menu_command (self ,bg ,fnt ,key ):
         ent =False 
-        options = ["どうぐをみる", "図鑑を見る", "装備を変える", "タイトルに戻る"]
+        options = ["どうぐをみる", "図鑑を見る", "装備を変える", "設定を変える", "タイトルに戻る"]
         if self.menu_cmd >=len (options ):
             self.menu_cmd =len (options )-1 
         if key [K_UP ]and self.menu_cmd >0 :
@@ -2055,6 +2129,72 @@ class Game:
                 self.draw_text (bg ,"▶",win_x +20 ,y ,fnt ,WHITE )
             self.draw_text (bg ,label ,win_x +50 ,y ,fnt ,WHITE )
         return ent 
+
+    # 自動装備設定の項目を取得する
+    def get_auto_equip_settings(self):
+        return [
+            {"attr": "auto_equip_attack_sword", "label": "通常攻撃時に自動的に会心の剣を装備する"},
+            {"attr": "auto_equip_magic_staff", "label": "魔法使用時に自動的に凍てつく杖を装備する"},
+            {"attr": "auto_equip_bomb_cannon", "label": "爆弾使用時に自動的に爆弾砲を装備する"},
+            {"attr": "auto_equip_guard_shield", "label": "守護使用時に自動的に守護の盾を装備する"},
+            {"attr": "auto_equip_potion_armor", "label": "傷薬使用時に自動的に薬効の鎧を装備する"},
+        ]
+
+    # 設定画面の描画とコマンド処理
+    def settings_command(self, bg, fnt, key):
+        ent = False
+        options = self.get_auto_equip_settings()
+        if self.settings_cmd >= len(options):
+            self.settings_cmd = len(options) - 1
+        if key[K_UP] and self.settings_cmd > 0:
+            self.settings_cmd -= 1
+        if key[K_DOWN] and self.settings_cmd < len(options) - 1:
+            self.settings_cmd += 1
+        if key[K_RETURN] or key[K_a]:
+            ent = True
+
+        win_w = 860
+        line_h = 32
+        win_h = line_h * len(options) + 54
+        screen_w, screen_h = bg.get_size()
+        win_x = (screen_w - win_w) // 2
+        win_y = (screen_h - win_h) // 2
+        pygame.draw.rect(bg, BLACK, [win_x, win_y, win_w, win_h])
+        pygame.draw.rect(bg, WHITE, [win_x, win_y, win_w, win_h], 2)
+        self.draw_text(bg, "設定を変える", win_x + 20, win_y + 10, fnt, WHITE)
+        for i, option in enumerate(options):
+            y = win_y + 46 + i * line_h
+            if self.settings_cmd == i:
+                self.draw_text(bg, "▶", win_x + 20, y, fnt, WHITE)
+            self.draw_text(bg, option["label"], win_x + 52, y, fnt, WHITE)
+            state = "ON" if getattr(self, option["attr"], False) else "OFF"
+            state_col = GREEN if state == "ON" else GRAY
+            self.draw_text(bg, state, win_x + win_w - 70, y, fnt, state_col)
+        self.draw_text(bg, "[A]/[Enter] ON/OFF  [B]/[Back] 戻る", win_x + 20, win_y + win_h - 30, fnt, WHITE)
+        return ent
+
+    # 装備変更画面の入力処理を共通化する
+    def handle_equip_screen_input(self, bg, fnt, key, back_idx, back_tmr=0, set_menu_back=False):
+        if self.equip_back_lock:
+            if not (key[K_b] or key[K_BACKSPACE]):
+                self.equip_back_lock = False
+        if self.equip_accept_lock:
+            if not (key[K_RETURN] or key[K_a]):
+                self.equip_accept_lock = False
+        if (key[K_b] or key[K_BACKSPACE]) and not self.equip_back_lock:
+            self.equip_back_lock = True
+            if set_menu_back:
+                self.menu_back_lock = True
+            self.idx = back_idx
+            self.tmr = back_tmr
+            return
+        ent = self.equip_grid_command(bg, fnt, key)
+        if self.equip_accept_lock:
+            ent = False
+        if ent:
+            if self.equip_weapon_index(self.equip_cursor):
+                self.update_player_images()
+            self.equip_accept_lock = True
 
     # どうぐ一覧の描画系処理
     def draw_tool_inventory (self ,bg ,fnt ):
@@ -2186,7 +2326,10 @@ class Game:
     def draw_zukan_description(self, bg, fnt):
         desc = ""
         if self.zukan_kind == 1 and 0 <= self.zukan_cursor < 3:
-            desc = ITEM_INFO.get(self.zukan_cursor, "情報が登録されていません。")
+            item_name = TRE_NAME[self.zukan_cursor]
+            item_level = [self.potion_lv, self.blazegem_lv, self.guard_lv][self.zukan_cursor]
+            base_desc = ITEM_INFO.get(self.zukan_cursor, "情報が登録されていません。")
+            desc = f"{item_name}　レベル{item_level}\n{base_desc}"
         self.draw_bottom_description_window(bg, fnt, desc)
 
     # どうぐ一覧に表示するためのどうぐリストを取得
@@ -2693,10 +2836,10 @@ class Game:
     # battle command の戦闘用処理を行う
     def battle_command (self ,bg ,fnt ,key ):
         ent =False 
-        labels = ["攻撃", "魔法", "傷薬", "爆弾", "守護", "逃走", "情報"]
+        labels = ["攻撃", "魔法", "傷薬", "爆弾", "守護", "逃走", "情報", "装備"]
         grid = [
             [0, 1, 5, 6],
-            [2, 3, 4, None],
+            [2, 3, 4, 7],
         ]
         if key [K_m ]:
             self.btl_cmd =1 
@@ -2710,6 +2853,8 @@ class Game:
             self.btl_cmd =5 
         if key [K_i ]:
             self.btl_cmd =6 
+        if key [K_e ]:
+            self.btl_cmd =7
         row =0 
         col =0 
         for r, row_items in enumerate (grid ):
@@ -3006,9 +3151,15 @@ class Game:
                             self.tool_sword_polish =loaddata .get ("tool_sword_polish",0 )
                             self.tool_shield_harden =loaddata .get ("tool_shield_harden",0 )
                             self.tool_armor_patch =loaddata .get ("tool_armor_patch",0 )
+                            self.auto_equip_attack_sword =bool (loaddata .get ("auto_equip_attack_sword",False ))
+                            self.auto_equip_magic_staff =bool (loaddata .get ("auto_equip_magic_staff",False ))
+                            self.auto_equip_bomb_cannon =bool (loaddata .get ("auto_equip_bomb_cannon",False ))
+                            self.auto_equip_guard_shield =bool (loaddata .get ("auto_equip_guard_shield",False ))
+                            self.auto_equip_potion_armor =bool (loaddata .get ("auto_equip_potion_armor",False ))
                             self.item_popup_text =""
                             self.truth_fragment_drop_battle =False
                             self.growth_essence_drop_battle =False
+                            self.battle_auto_equip_used =False
                             self.powup =1
                             self.emy_poison =0
                             self.emy_powup =1
@@ -3094,7 +3245,7 @@ class Game:
                             self.tool_desc_last_tick =0
                             self.idx =34
                             self.tmr =0
-                        if self.menu_cmd ==1 :#図鑑
+                        elif self.menu_cmd ==1 :#図鑑
                             self.zukan_menu_cmd =0
                             self.zukan_kind =0
                             self.zukan_cursor =0
@@ -3108,7 +3259,13 @@ class Game:
                             self.equip_accept_lock =True
                             self.idx =35
                             self.tmr =0
-                        elif self.menu_cmd ==3 :#go_title
+                        elif self.menu_cmd ==3 :#settings
+                            self.settings_cmd =0
+                            self.settings_back_lock =True
+                            self.settings_accept_lock =True
+                            self.idx =36
+                            self.tmr =0
+                        elif self.menu_cmd ==4 :#go_title
                             self.confirm_cmd =0 
                             self.title_confirm_lock = True
                             self.idx =60 
@@ -3295,25 +3452,30 @@ class Game:
 
             elif self.idx ==35 :# 装備変更
                 self.draw_dungeon (screen ,fontS )
-                if self.equip_back_lock:
+                self.handle_equip_screen_input (screen ,fontS ,key ,back_idx =30 ,back_tmr =0 ,set_menu_back =True )
+
+            elif self.idx ==36 :# 設定変更
+                self.draw_dungeon (screen ,fontS )
+                if self.settings_back_lock:
                     if not (key [K_b ]or key [K_BACKSPACE ]):
-                        self.equip_back_lock = False
-                if self.equip_accept_lock:
+                        self.settings_back_lock = False
+                if self.settings_accept_lock:
                     if not (key [K_RETURN ]or key [K_a ]):
-                        self.equip_accept_lock = False
-                if (key [K_b ]or key [K_BACKSPACE ]) and not self.equip_back_lock:
-                    self.equip_back_lock = True
+                        self.settings_accept_lock = False
+                if (key [K_b ]or key [K_BACKSPACE ]) and not self.settings_back_lock:
+                    self.settings_back_lock = True
                     self.menu_back_lock = True
                     self.idx =30
                     self.tmr =0
                 else:
-                    ent =self.equip_grid_command (screen ,fontS ,key )
-                    if self.equip_accept_lock:
+                    ent =self.settings_command (screen ,fontS ,key )
+                    if self.settings_accept_lock:
                         ent =False
-                    if ent:
-                        if self.equip_weapon_index (self.equip_cursor ):
-                            self.update_player_images ()
-                        self.equip_accept_lock = True
+                    if ent and len (self.get_auto_equip_settings ())>0 :
+                        setting =self.get_auto_equip_settings ()[self.settings_cmd ]
+                        attr =setting ["attr"]
+                        setattr (self ,attr ,not getattr (self ,attr ,False ))
+                        self.settings_accept_lock =True
 
             elif self.idx ==40 :#セーブデータ選択
                 if self.save_from_boss:
@@ -3370,6 +3532,11 @@ class Game:
                 "tool_sword_polish":self.tool_sword_polish ,
                 "tool_shield_harden":self.tool_shield_harden ,
                 "tool_armor_patch":self.tool_armor_patch ,
+                "auto_equip_attack_sword":self.auto_equip_attack_sword ,
+                "auto_equip_magic_staff":self.auto_equip_magic_staff ,
+                "auto_equip_bomb_cannon":self.auto_equip_bomb_cannon ,
+                "auto_equip_guard_shield":self.auto_equip_guard_shield ,
+                "auto_equip_potion_armor":self.auto_equip_potion_armor ,
                 "shield":self.pl_shield ,
                 "armor":self.pl_armor ,
                 "sword":self.pl_sword ,
@@ -3824,6 +3991,11 @@ class Game:
                         "tool_sword_polish":self.tool_sword_polish ,
                         "tool_shield_harden":self.tool_shield_harden ,
                         "tool_armor_patch":self.tool_armor_patch ,
+                        "auto_equip_attack_sword":self.auto_equip_attack_sword ,
+                        "auto_equip_magic_staff":self.auto_equip_magic_staff ,
+                        "auto_equip_bomb_cannon":self.auto_equip_bomb_cannon ,
+                        "auto_equip_guard_shield":self.auto_equip_guard_shield ,
+                        "auto_equip_potion_armor":self.auto_equip_potion_armor ,
                         "shield":self.pl_shield ,
                         "armor":self.pl_armor ,
                         "sword":self.pl_sword ,
@@ -4282,6 +4454,7 @@ class Game:
 
             elif self.idx ==200 :# 戦闘開始
                 if self.tmr ==1 :
+                    self.start_battle_equip_session ()
                     self.growth_essence_drop_battle =False
                     self.powup =1
                     self.emy_poison =0
@@ -4329,18 +4502,23 @@ class Game:
                     if self.btl_cmd in (1 ,2 ,3 ,4 ,5 ) and self.powup >1 :
                         self.powup =1
                     if self.btl_cmd ==0 :#Attack
+                        self.apply_auto_equip_for_battle_command (0 )
                         self.idx =220 
                         self.tmr =0 
                     if self.btl_cmd ==1 and self.pl_mag >99 :#Magic
+                        self.apply_auto_equip_for_battle_command (1 )
                         self.idx =221 
                         self.tmr =0 
                     if self.btl_cmd ==2 and self.potion >0 :#Potion
+                        self.apply_auto_equip_for_battle_command (2 )
                         self.idx =222 
                         self.tmr =0 
                     if self.btl_cmd ==3 and self.blazegem >0 :#Blaze gem
+                        self.apply_auto_equip_for_battle_command (3 )
                         self.idx =223 
                         self.tmr =0 
                     if self.btl_cmd ==4 and self.guard >0 :#Guard
+                        self.apply_auto_equip_for_battle_command (4 )
                         self.idx =224 
                         self.tmr =0 
                     if self.btl_cmd ==5 :#Run
@@ -4349,6 +4527,11 @@ class Game:
                     if self.btl_cmd ==6 :#Info
                         self.idx =225 
                         self.tmr =0 
+                    if self.btl_cmd ==7 :#Equip
+                        self.equip_back_lock =True
+                        self.equip_accept_lock =True
+                        self.idx =226
+                        self.tmr =0
 
             elif self.idx ==220 :# プレイヤーの攻撃
                 self.draw_battle (screen ,fontS )
@@ -4596,6 +4779,11 @@ class Game:
                         self.idx =210 
                         self.tmr =1 
 
+            elif self.idx ==226 :# 戦闘中の装備変更
+                self.draw_battle (screen ,fontS )
+                self.dungeon_view_rect =None
+                self.handle_equip_screen_input (screen ,fontS ,key ,back_idx =210 ,back_tmr =2 ,set_menu_back =False )
+
             elif self.idx ==224 :#guard
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
@@ -4830,7 +5018,7 @@ class Game:
             elif self.idx ==237 :# 火炎攻撃
                 self.draw_battle (screen ,fontS )
                 defence =self.get_equipped_defence ()
-                if self.tmr ==1 :
+                # if self.tmr ==1 :
                     # poison_result =self.resolve_enemy_poison_tick ()
                     # if poison_result ==2 :
                     #     continue
@@ -4854,7 +5042,7 @@ class Game:
                         self.tmr =0 
                     recoil =2000 +random .randint (-100 ,100 )
                     self.emy_life =max (0 ,self.emy_life -recoil )
-                    self.set_message ("　反動 -{}".format (recoil ))
+                    self.set_message (f"　敵の火傷 {recoil}　ダメージ！")
                     self.burn_turns -=1 
                     if self.emy_life <=0 :
                         self.emy_life =0 
@@ -5045,6 +5233,7 @@ class Game:
             elif self.idx ==242 :# 敗北
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
+                    self.restore_battle_equip_session ()
                     pygame .mixer .music .stop ()
                     self.boss =0 
                     self.btl_cmd =0
@@ -5101,6 +5290,7 @@ class Game:
                             self.idx =244 
 
             elif self.idx ==244 :# 戦闘終了
+                self.restore_battle_equip_session ()
                 self.truth_fragment_drop_battle =False
                 self.growth_essence_drop_battle =False
                 if self.tutorial_enabled and self.tutorial_pending_battle:
