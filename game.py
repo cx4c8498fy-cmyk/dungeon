@@ -1309,9 +1309,9 @@ class Game:
             return 
         if self.dungeon [self.pl_y ][self.pl_x ]==4 :# 強化素材箱に載った
             self.dungeon [self.pl_y ][self.pl_x ]=0 
-            self.item_reward_count =1
             self.treasure =random .choice ([7 ,8 ,9 ])
             add_num = 2 if self.floor > 60 else 1
+            self.item_reward_count =add_num
             if self.treasure ==7 :
                 self.tool_sword_polish +=add_num
             elif self.treasure ==8 :
@@ -2155,7 +2155,9 @@ class Game:
 
         win_w = 860
         line_h = 32
-        win_h = line_h * len(options) + 54
+        title_h = 46
+        footer_h = 54
+        win_h = title_h + line_h * len(options) + footer_h
         screen_w, screen_h = bg.get_size()
         win_x = (screen_w - win_w) // 2
         win_y = (screen_h - win_h) // 2
@@ -2163,7 +2165,7 @@ class Game:
         pygame.draw.rect(bg, WHITE, [win_x, win_y, win_w, win_h], 2)
         self.draw_text(bg, "設定を変える", win_x + 20, win_y + 10, fnt, WHITE)
         for i, option in enumerate(options):
-            y = win_y + 46 + i * line_h
+            y = win_y + title_h + i * line_h
             if self.settings_cmd == i:
                 self.draw_text(bg, "▶", win_x + 20, y, fnt, WHITE)
             self.draw_text(bg, option["label"], win_x + 52, y, fnt, WHITE)
@@ -2942,9 +2944,9 @@ class Game:
         armor_mag =self.get_active_weapon_level ("armor",1 )
         if armor_heal >0 :
             if random .random ()>0.7 :
-                cure =armor_heal *2 -random .randint (0 ,armor_heal //3 )
+                cure =int(armor_heal *1.2 -random .randint (0 ,armor_heal //3 ))
                 self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
-                self.set_message ("　鎧の癒し 生命+{}" .format (cure ))
+                self.set_message ("　鎧の癒し 生命 +{}" .format (cure ))
                 self.se [2 ].play ()
             else :
                 self.tmr =self.tmr +1 
@@ -2952,7 +2954,7 @@ class Game:
             if random .random ()>0.7 :
                 mgup =int (10 +armor_mag *0.7 +random .randint (0 ,armor_mag //5 ))
                 self.add_pl_mag (mgup )
-                self.set_message ("　鎧の魔力 魔力+{}" .format (mgup ))
+                self.set_message ("　鎧の魔力 魔力 +{}" .format (mgup ))
                 self.se [9 ].play ()
             else :
                 self.tmr =self.tmr +1 
@@ -2963,7 +2965,7 @@ class Game:
         if self.emy_typ ==4 or self.emy_typ ==115 :
             self.emy_powup =1 
             if random .random ()>0.7 :
-                self.emy_powup ={4:2 ,115:10 }[self.emy_typ ]
+                self.emy_powup ={4:2 ,115:15 }[self.emy_typ ]
                 self.set_message ("　敵は　力をためた!")
             action =False 
         if self.emy_typ ==5 or self.emy_typ ==112:
@@ -3669,7 +3671,6 @@ class Game:
                     self.draw_dungeon (screen ,fontS )
                 elif self.tmr ==31 :
                     se [3 ].play ()
-                    self.draw_text (screen ,"君は　死んでしまった。",340 ,240 ,font ,RED )
                 elif self.tmr ==100 :
                     self.idx =0 
                     self.tmr =0 
@@ -4710,16 +4711,11 @@ class Game:
                     active_gem_sword =self.get_active_weapon_level ("sword", 2 )
                     dmg_add = 0 if active_gem_sword == 0 else self.pl_sword [2 ]*15
                     dmg =1000 +dmg_add +25 *self.blazegem_lv
-                    if self.emy_typ ==111:
-                        self.set_message ("　敵は　爆弾を捕食した！")
-                        dmg =0 
-                    if self.burn_turns >0 :
-                        dmg = self.pl_sword [2 ]*16
-                    if self.emy_typ ==113 :
-                        dmg =0 
+                    dmg =max (1 ,int(EMY_BPRO [self.emy_typ ] *dmg) )
+                    if self.burn_turns >0 or self.boss_mode == "fire":
+                        dmg =0
+                    if self.emy_typ ==113:
                         self.emy_skip_turn = True
-                    if self.boss_mode == "fire":
-                        dmg =0 
                 if self.tmr ==11 :
                     self.emy_blink =5 
                     self.set_message (f"　{dmg}　ダメージ！")
@@ -4741,7 +4737,7 @@ class Game:
                             self.emy_poison =1
                             if random .random ()<0.01 *active_bomb_sword :
                                 self.emy_poison =2
-                            self.set_message ("　敵は　毒状態になった！")
+                            self.set_message ("　敵は　毒をくらった！")
                         self.tmr =self.tmr +2
                 if self.tmr ==22 :
                     if self.emy_typ ==114:
@@ -4781,7 +4777,7 @@ class Game:
 
             elif self.idx ==226 :# 戦闘中の装備変更
                 self.draw_battle (screen ,fontS )
-                self.dungeon_view_rect =None
+                self.dungeon_view_rect =self.btl_bg_rect if getattr (self ,"btl_bg_rect",None )else None
                 self.handle_equip_screen_input (screen ,fontS ,key ,back_idx =210 ,back_tmr =2 ,set_menu_back =False )
 
             elif self.idx ==224 :#guard
@@ -4937,7 +4933,8 @@ class Game:
                 if self.tmr ==9 :
                     if self.madoka <1000 :
                         dmg =0 
-                        charge_magia = int (self.emy_life *{116:0.022, 120:0.025}[self.emy_typ] +100 )
+                        life_rate = self.emy_life /self.emy_lifemax
+                        charge_magia = int (life_rate *{116:1000, 120:1800}[self.emy_typ] +100 )
                         self.set_message ("　マギア +{}".format (charge_magia ))
                         self.madoka =self.madoka +charge_magia
                     elif self.madoka >=1000 :
