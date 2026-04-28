@@ -270,6 +270,7 @@ class Game:
         self.wall_event = None
         self.truth_fragment_drop_battle = False
         self.growth_essence_drop_battle = False
+        self.iron_upgrade_drop_battle = False
         self.map_seen = None
         self.map_stairs = None
         self.map_bosses = None
@@ -521,14 +522,14 @@ class Game:
         armor_lv = self.get_weapon_level("armor", self.eq_armor)
         return shield_lv + armor_lv
 
-    # 戦闘開始時の装備状態を保存する
+    # 戦闘中の自動装備復元情報を初期化する
     def start_battle_equip_session(self):
         self.battle_restore_eq_shield = self.eq_shield
         self.battle_restore_eq_armor = self.eq_armor
         self.battle_restore_eq_sword = self.eq_sword
         self.battle_auto_equip_used = False
 
-    # 戦闘終了時に装備状態を復元する
+    # 自動装備前の装備状態に復元する
     def restore_battle_equip_session(self):
         if not self.battle_auto_equip_used:
             return
@@ -546,6 +547,9 @@ class Game:
             return False
         if self.get_equipped_slot_by_group(group) == slot:
             return False
+        self.battle_restore_eq_shield = self.eq_shield
+        self.battle_restore_eq_armor = self.eq_armor
+        self.battle_restore_eq_sword = self.eq_sword
         self.set_equipped_slot_by_group(group, slot)
         self.update_player_images()
         self.battle_auto_equip_used = True
@@ -1224,9 +1228,9 @@ class Game:
         t_box_num = 7 if is_boss_floor else 4
         for x, y in take_cells(t_box_num): # 宝箱の配置
             self.dungeon[y][x] = 1
-        if self.floor >10 :
-            for x ,y in take_cells (4 ): # 強化素材箱の配置
-                self.dungeon [y ][x ]=4
+        w_box_num = 0 if self.floor < 11 else 7 if is_boss_floor else 4 if self.floor < 91 else 5
+        for x ,y in take_cells (w_box_num ): # 強化素材箱の配置
+            self.dungeon [y ][x ]=4
         cocoon_target =33 if is_boss_floor else 19
         cocoon_cells =take_cells (cocoon_target )
         for x ,y in cocoon_cells: # 繭の配置
@@ -1491,6 +1495,7 @@ class Game:
         self.item_popup_text =""
         self.truth_fragment_drop_battle =False
         self.growth_essence_drop_battle =False
+        self.iron_upgrade_drop_battle =False
         self.save_from_stair = False
         self.save_from_boss = False
         self.stair_save_slot = 0
@@ -1572,6 +1577,7 @@ class Game:
                 self.item_popup_text =""
                 self.truth_fragment_drop_battle =False
                 self.growth_essence_drop_battle =False
+                self.iron_upgrade_drop_battle =False
                 self.battle_auto_equip_used =False
                 self.powup =1
                 self.emy_poison =0
@@ -2944,7 +2950,7 @@ class Game:
         armor_mag =self.get_active_weapon_level ("armor",1 )
         if armor_heal >0 :
             if random .random ()>0.7 :
-                cure =int(armor_heal *1.2 -random .randint (0 ,armor_heal //3 ))
+                cure =int(armor_heal +random .randint (0 ,10))
                 self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
                 self.set_message ("　鎧の癒し 生命 +{}" .format (cure ))
                 self.se [2 ].play ()
@@ -2952,7 +2958,7 @@ class Game:
                 self.tmr =self.tmr +1 
         if armor_mag >0 :
             if random .random ()>0.7 :
-                mgup =int (10 +armor_mag *0.7 +random .randint (0 ,armor_mag //5 ))
+                mgup =int (10 +armor_mag +random .randint (0 ,armor_mag //5 ))
                 self.add_pl_mag (mgup )
                 self.set_message ("　鎧の魔力 魔力 +{}" .format (mgup ))
                 self.se [9 ].play ()
@@ -3046,6 +3052,7 @@ class Game:
                     self.item_popup_text =""
                     self.truth_fragment_drop_battle =False
                     self.growth_essence_drop_battle =False
+                    self.iron_upgrade_drop_battle =False
                     self.tool_weapon_choice_active =False
                     self.tool_weapon_choice_cmd =0
                     self.tool_weapon_choice_targets =[]
@@ -3161,6 +3168,7 @@ class Game:
                             self.item_popup_text =""
                             self.truth_fragment_drop_battle =False
                             self.growth_essence_drop_battle =False
+                            self.iron_upgrade_drop_battle =False
                             self.battle_auto_equip_used =False
                             self.powup =1
                             self.emy_poison =0
@@ -3872,10 +3880,10 @@ class Game:
                                 self.idx =131
                                 self.tmr =0
                             else:
-                                if self.floor %10 ==5:
-                                    self.init_item_event (kind="item_upgrade")
-                                elif 91 <= self.floor <= 99:
+                                if 91 <= self.floor <= 99:
                                     self.init_item_event (kind="item", reward_count=5)
+                                elif self.floor %10 ==5:
+                                    self.init_item_event (kind="item_upgrade")
                                 elif self.floor == 100 and self.truth_fragment >= 100 and not self.true_episode_heard:
                                     self.init_item_event (kind="true_episode", lines=TRUE_EPISODE_TALK)
                                 else:
@@ -4457,6 +4465,7 @@ class Game:
                 if self.tmr ==1 :
                     self.start_battle_equip_session ()
                     self.growth_essence_drop_battle =False
+                    self.iron_upgrade_drop_battle =False
                     self.powup =1
                     self.emy_poison =0
                     if self.move_bgm_path :
@@ -4496,6 +4505,7 @@ class Game:
             elif self.idx ==210 :# プレイヤーのターン（入力待ち）
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
+                    self.restore_battle_equip_session ()
                     self.btl_cmd =0 
                     self.set_message ("プレイヤーのターン")
                     self.guard_remain =max (self.guard_remain -1 ,0 )
@@ -4830,7 +4840,7 @@ class Game:
                             self.set_message ("　盾で　防御した！")
                             se [11 ].play ()
                     if active_counter_shield >0 :
-                        if random .random ()>0.7 :
+                        if random .random ()>0.65 :
                             cou =active_counter_shield
                     if self.emy_typ ==119 :
                         dmg_tmp =dmg 
@@ -4850,11 +4860,11 @@ class Game:
                             dmg =dmg *{2:1.5, 110:2, 118:2.5}[self.emy_typ]
                     if self.emy_typ ==117 : #インフェルノの火力が低下
                         self.inferno -= 15 + random .randint (0 ,10 )
-                    if self.emy_typ ==119 : #ゆうしゃ１はプレイヤーからの攻撃を模倣
-                        dmg =dmg_tmp 
                     if self.emy_typ ==120 : #ゆうしゃ２は生命が減るほど攻撃が強くなる
                         dmg = int(dmg * self.emy_lifemax/(1.3*self.emy_life))
                     dmg =max(int (dmg /(1 +pro ) /(2 *self.emy_poison +1 ))*self.emy_powup ,1 )
+                    if self.emy_typ ==119 : #ゆうしゃ１はプレイヤーからの攻撃を模倣
+                        dmg =dmg_tmp 
                     self.set_message (f"　{dmg}　ダメージ！")
                     self.dmg_eff =6
                     self.emy_step =0 
@@ -4934,7 +4944,7 @@ class Game:
                     if self.madoka <1000 :
                         dmg =0 
                         life_rate = self.emy_life /self.emy_lifemax
-                        charge_magia = int (life_rate *{116:1000, 120:1800}[self.emy_typ] +100 )
+                        charge_magia = int (life_rate *{116:1000, 120:1500}[self.emy_typ] +100 )
                         self.set_message ("　マギア +{}".format (charge_magia ))
                         self.madoka =self.madoka +charge_magia
                     elif self.madoka >=1000 :
@@ -5104,7 +5114,7 @@ class Game:
                             self.set_message ("　盾で　防御した！")
                             se [11 ].play ()
                     if active_counter_shield >0 :
-                        if random .random ()>0.7 :
+                        if random .random ()>0.65 :
                             cou =active_counter_shield
                     dmg =max (self.emy_str +random .randint (0 ,9 )-defence ,1 )
                     dmg =int (dmg /(1 +pro ))* self.emy_powup
@@ -5197,6 +5207,7 @@ class Game:
                 if self.tmr ==2 :
                     self.change = 0
                     self.set_message ("{}を　たおした！".format (self.emy_name ))
+                    self.iron_upgrade_drop_battle =(self.boss ==0 and self.emy_typ ==10 )
                     self.growth_essence_drop_battle =(self.boss ==0 and random .random ()<0.05 )
                     pygame .mixer .music .stop ()
                     if self.boss ==1 :
@@ -5218,6 +5229,9 @@ class Game:
                     if self.pl_exp >=(self.pl_lifemax -250 )*20 :
                         self.idx =243 
                         self.tmr =0 
+                    elif self.iron_upgrade_drop_battle:
+                        self.idx =246
+                        self.tmr =0
                     elif self.growth_essence_drop_battle:
                         self.idx =248
                         self.tmr =0
@@ -5245,6 +5259,7 @@ class Game:
                     self.boss_mode = "normal"
                     self.truth_fragment_drop_battle =False
                     self.growth_essence_drop_battle =False
+                    self.iron_upgrade_drop_battle =False
                     self.tutorial_pending_battle =""
                     self.change = 0
                     self.set_message ("負けてしまった")
@@ -5277,7 +5292,10 @@ class Game:
                         self.idx =243 
                         self.tmr =0 
                     else :
-                        if self.growth_essence_drop_battle:
+                        if self.iron_upgrade_drop_battle:
+                            self.idx =246
+                            self.tmr =0 
+                        elif self.growth_essence_drop_battle:
                             self.idx =248
                             self.tmr =0 
                         elif self.truth_fragment_drop_battle:
@@ -5290,6 +5308,7 @@ class Game:
                 self.restore_battle_equip_session ()
                 self.truth_fragment_drop_battle =False
                 self.growth_essence_drop_battle =False
+                self.iron_upgrade_drop_battle =False
                 if self.tutorial_enabled and self.tutorial_pending_battle:
                     self.restore_tutorial_cocoon ()
                 if self.emy_typ ==120 :
@@ -5341,6 +5360,28 @@ class Game:
                 if self.tmr ==10 :
                     self.idx =210 
                     self.tmr =0 
+
+            elif self.idx ==246 :# 強化素材ドロップ（アイアンドウブ）
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    self.treasure =random .choice ([7 ,8 ,9 ])
+                    self.set_message (f"{TRE_NAME [self.treasure ]}を　落とした")
+                    self.se [9 ].play ()
+                if self.tmr ==18 :
+                    if self.treasure ==7 :
+                        self.tool_sword_polish +=1
+                    elif self.treasure ==8 :
+                        self.tool_shield_harden +=1
+                    else :
+                        self.tool_armor_patch +=1
+                    self.iron_upgrade_drop_battle =False
+                    if self.growth_essence_drop_battle:
+                        self.idx =248
+                    elif self.truth_fragment_drop_battle:
+                        self.idx =247
+                    else:
+                        self.idx =244
+                    self.tmr =0
 
             elif self.idx ==247 :#しんじつのかけらドロップ
                 self.draw_battle (screen ,fontS )
