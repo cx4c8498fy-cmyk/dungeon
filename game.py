@@ -46,6 +46,8 @@ BATTLE_UI_LAYOUT = {
 }
 
 FAIRY_FLOOR_MODS = {3, 9}
+WEAPON_LEVEL_ATTRS = {"shield": "pl_shield", "armor": "pl_armor", "sword": "pl_sword"}
+EQUIP_SLOT_ATTRS = {"shield": "eq_shield", "armor": "eq_armor", "sword": "eq_sword"}
 
 
 # すべてのセーブデータから現在のfloorを読み込む
@@ -402,16 +404,10 @@ class Game:
                 self.fairy_pos = (nx, ny)
                 return
 
-    # normalize equipped slot を正規化する
-    def normalize_equipped_slot(self, slot_data, levels):
-        # 装備スロット値を 0..2 に丸め、未所持スロットなら
-        # そのカテゴリで最初に所持しているスロットへフォールバックする。
-        slot = 0
-        try:
-            slot = int(slot_data)
-        except (TypeError, ValueError):
-            slot = 0
-        slot = max(0, min(2, slot))
+    # セーブ値と所持状態に応じて装備スロットを確定する
+    def resolve_equipped_slot(self, group, slot_data):
+        slot = int(slot_data)
+        levels = getattr(self, WEAPON_LEVEL_ATTRS[group])
         if levels[slot] > 0:
             return slot
         for i, level in enumerate(levels):
@@ -419,36 +415,11 @@ class Game:
                 return i
         return 0
 
-    # normalize equipped state を正規化する
-    def normalize_equipped_state(self, shield_slot=0, armor_slot=0, sword_slot=0):
-        self.eq_shield = self.normalize_equipped_slot(shield_slot, self.pl_shield)
-        self.eq_armor = self.normalize_equipped_slot(armor_slot, self.pl_armor)
-        self.eq_sword = self.normalize_equipped_slot(sword_slot, self.pl_sword)
-
-    # その武器タイプのレベルリストを取得する
-    def get_weapon_levels_by_group(self, group):
-        if group == "shield":
-            return self.pl_shield
-        if group == "armor":
-            return self.pl_armor
-        return self.pl_sword
-
-    # get equipped slot by group を取得する
-    def get_equipped_slot_by_group(self, group):
-        if group == "shield":
-            return self.eq_shield
-        if group == "armor":
-            return self.eq_armor
-        return self.eq_sword
-
-    # set equipped slot by group を設定する
-    def set_equipped_slot_by_group(self, group, slot):
-        if group == "shield":
-            self.eq_shield = slot
-        elif group == "armor":
-            self.eq_armor = slot
-        else:
-            self.eq_sword = slot
+    # 3カテゴリの装備スロットをまとめて適用する
+    def apply_equipped_slots(self, shield_slot=0, armor_slot=0, sword_slot=0):
+        self.eq_shield = self.resolve_equipped_slot("shield", shield_slot)
+        self.eq_armor = self.resolve_equipped_slot("armor", armor_slot)
+        self.eq_sword = self.resolve_equipped_slot("sword", sword_slot)
 
     # weapon index to group slot の処理を行う
     def weapon_index_to_group_slot(self, weapon_index):
@@ -462,33 +433,33 @@ class Game:
 
     # get weapon level を取得する
     def get_weapon_level(self, group, slot):
-        levels = self.get_weapon_levels_by_group(group)
-        if not (0 <= slot < len(levels)):
+        if not (0 <= slot < 3):
             return 0
+        levels = getattr(self, WEAPON_LEVEL_ATTRS[group])
         return levels[slot]
 
     # get active weapon level を取得する
     def get_active_weapon_level(self, group, slot):
-        if self.get_equipped_slot_by_group(group) != slot:
+        if getattr(self, EQUIP_SLOT_ATTRS[group]) != slot:
             return 0
         return self.get_weapon_level(group, slot)
 
     # is weapon equipped index を判定する
     def is_weapon_equipped_index(self, weapon_index):
         group, slot = self.weapon_index_to_group_slot(weapon_index)
-        return self.get_equipped_slot_by_group(group) == slot
+        return getattr(self, EQUIP_SLOT_ATTRS[group]) == slot
 
     # equip weapon index の装備処理を行う
     def equip_weapon_index(self, weapon_index):
         group, slot = self.weapon_index_to_group_slot(weapon_index)
         if self.get_weapon_level(group, slot) <= 0:
             return False
-        self.set_equipped_slot_by_group(group, slot)
+        setattr(self, EQUIP_SLOT_ATTRS[group], slot)
         return True
 
     # パラメータウィンドウ表示用の装備中武器のテキストを取得
     def get_equipped_weapon_text(self, group, fallback_label):
-        slot = self.get_equipped_slot_by_group(group)
+        slot = getattr(self, EQUIP_SLOT_ATTRS[group])
         level = self.get_weapon_level(group, slot)
         trap_id = {"shield": [2, 5, 8], "armor": [3, 6, 9], "sword": [4, 7, 10]}[group][slot]
         if level <= 0:
@@ -512,7 +483,7 @@ class Game:
     def restore_battle_equip_session(self):
         if not self.battle_auto_equip_used:
             return
-        self.normalize_equipped_state(
+        self.apply_equipped_slots(
             self.battle_restore_eq_shield,
             self.battle_restore_eq_armor,
             self.battle_restore_eq_sword,
@@ -524,12 +495,12 @@ class Game:
     def try_auto_equip_slot(self, group, slot):
         if self.get_weapon_level(group, slot) <= 0:
             return False
-        if self.get_equipped_slot_by_group(group) == slot:
+        if getattr(self, EQUIP_SLOT_ATTRS[group]) == slot:
             return False
         self.battle_restore_eq_shield = self.eq_shield
         self.battle_restore_eq_armor = self.eq_armor
         self.battle_restore_eq_sword = self.eq_sword
-        self.set_equipped_slot_by_group(group, slot)
+        setattr(self, EQUIP_SLOT_ATTRS[group], slot)
         self.update_player_images()
         self.battle_auto_equip_used = True
         return True
@@ -677,7 +648,6 @@ class Game:
         with open(floor_path, "r") as f:
             data = json.load(f)
         dungeon = data.get("dungeon")
-        legacy_boss_pos = self.parse_pos(data.get("boss_pos"))
         # For floor 1 and 100, accept any valid dungeon size (not restricted to DUNGEON_H/W)
         if isinstance(dungeon, list) and len(dungeon) > 0 and all(isinstance(row, list) and len(row) > 0 for row in dungeon):
             # Pad the dungeon to standard size if needed
@@ -692,9 +662,6 @@ class Game:
                 # Adjust pl_start
                 if "pl_start" in data:
                     data["pl_start"] = (data["pl_start"][0] + offset_x, data["pl_start"][1] + offset_y)
-                
-                if legacy_boss_pos:
-                    legacy_boss_pos = (legacy_boss_pos[0] + offset_x, legacy_boss_pos[1] + offset_y)
                 
                 # Adjust fixed item wall position if it exists
                 if "item_wall_pos" in data:
@@ -732,12 +699,6 @@ class Game:
                     
                     if "room5_enemy_cocoon" in tutorial and tutorial["room5_enemy_cocoon"]:
                         tutorial["room5_enemy_cocoon"] = [tutorial["room5_enemy_cocoon"][0] + offset_x, tutorial["room5_enemy_cocoon"][1] + offset_y]
-            if legacy_boss_pos:
-                bx, by = legacy_boss_pos
-                if 0 <= bx < DUNGEON_W and 0 <= by < DUNGEON_H and data["dungeon"][by][bx] == 0:
-                    data["dungeon"][by][bx] = 12
-            data.pop("boss_pos", None)
-            
             return data
         return None
 
@@ -894,21 +855,6 @@ class Game:
             if 0 <= x < DUNGEON_W and 0 <= y < DUNGEON_H and self.dungeon[y][x] == 0:
                 self.dungeon[y][x] = tile
         self.tutorial_pending_battle = ""
-
-    # ダンジョン内にボスタイルが存在するか判定する
-    def has_boss_tile(self):
-        return any(12 in row for row in self.dungeon)
-
-    # ボスを配置する
-    def place_boss(self):
-        candidates = []
-        for y in range(3, DUNGEON_H - 3):
-            for x in range(3, DUNGEON_W - 3):
-                if self.dungeon[y][x] == 0:
-                    candidates.append((x, y))
-        if candidates:
-            x, y = random.choice(candidates)
-            self.dungeon[y][x] = 12
 
     # ボスとの会話内容を初期化
     def init_boss_talk(self, mode="init"):
@@ -1170,8 +1116,6 @@ class Game:
         fixed_item_wall_front =None
         if self.fixed_floor_data and self.floor == 1: # チュートリアルフロアの配置
             self.setup_tutorial_floor()
-            # if self.fixed_floor_data.get("pl_start"):
-            #     self.pl_x, self.pl_y = self.fixed_floor_data["pl_start"]
             self.pl_x, self.pl_y = self.fixed_floor_data["pl_start"]
             self.pl_d =1
             self.pl_a =5
@@ -1188,15 +1132,6 @@ class Game:
                     self.dungeon [wy ][wx ]=7
                     fixed_item_wall_placed =True
                     fixed_item_wall_front =(wx ,wy +1 )
-        if is_boss_floor and not self.has_boss_tile():
-            self.place_boss()
-        if not self.has_boss_tile():
-            while True :
-                x =random .randint (3 ,DUNGEON_W -4 )
-                y =random .randint (3 ,DUNGEON_H -4 )
-                if (self.dungeon [y ][x ]==0 ):
-                    self.dungeon [y ][x ]=3 
-                    break 
         floor_cells =[
             (x ,y )
             for y in range (3 ,DUNGEON_H -3 )
@@ -1208,6 +1143,18 @@ class Game:
             taken =floor_cells [:count ]
             del floor_cells [:count ]
             return taken
+        has_boss_tile =any (12 in row for row in self.dungeon )
+        if is_boss_floor and not has_boss_tile:
+            boss_cells =take_cells (1 )
+            if boss_cells:
+                bx ,by =boss_cells [0 ]
+                self.dungeon [by ][bx ]=12
+                has_boss_tile =True
+        if not has_boss_tile:
+            stairs_cells =take_cells (1 )
+            if stairs_cells:
+                sx ,sy =stairs_cells [0 ]
+                self.dungeon [sy ][sx ]=3
         t_box_num = 7 if is_boss_floor else 4
         for x, y in take_cells(t_box_num): # 宝箱の配置
             self.dungeon[y][x] = 1
@@ -1221,37 +1168,14 @@ class Game:
         if cocoon_cells: # 真実の繭の配置
             sx ,sy =random .choice (cocoon_cells )
             self.dungeon [sy ][sx ]=10
-        # ダメージ、回復床の配置
-        # if self.floor >500 :
-        #     for i in range ((7 +int (self.floor //90 )*(self.floor -83 ))*10 ):
-        #         x =random .randint (3 ,DUNGEON_W -4 )
-        #         y =random .randint (3 ,DUNGEON_H -4 )
-        #         if self.dungeon [y ][x ]==0:
-        #             if random .random ()>0.5 :
-        #                 self.dungeon [y ][x ]=5 
-        #             else :
-        #                 self.dungeon [y ][x ]=6 
-        # プレイヤーの初期位置
-        # if self.fixed_floor_data and self.floor == 100 and self.fixed_floor_data.get("pl_start"):
-        #     self.pl_x, self.pl_y = self.fixed_floor_data["pl_start"]
-        # else:
         if not self.floor in {1, 100}:
             self.pl_x, self.pl_y = take_cells(1)[0] # プレイヤーの初期位置
-            # while True :
-            #     self.pl_x =random .randint (3 ,DUNGEON_W -4 )
-            #     self.pl_y =random .randint (3 ,DUNGEON_H -4 )
-            #     if self.dungeon [self.pl_y ][self.pl_x ]==0:
-            #         break 
         self.pl_d =1 
         self.pl_a =5 
         self.place_fairy_for_floor ()
         place_item_wall =self.floor in {7 ,17 ,27 ,37 ,47 ,57 ,67 ,77 ,87, 
                                         15, 25, 35, 45, 55, 65, 75, 85, 
                                         91, 92, 93, 94, 95, 96, 97, 98, 99, 100} or self.floor in ITEM_WALL_WEAPON_SET
-        #     self.floor >=91 or
-        #     self.floor %10 in (5 ,7 )or
-        #     self.floor in ITEM_WALL_WEAPON_SET
-        # )
         if place_item_wall: # アイテム壁を配置
             if not (self.floor ==100 and fixed_item_wall_placed):
                 wall_cells =[
@@ -1309,27 +1233,6 @@ class Game:
             self.idx =120 
             self.tmr =0 
             return 
-        # if self.dungeon [self.pl_y ][self.pl_x ]==5 :# ダメージ床
-        #     self.dungeon [self.pl_y ][self.pl_x ]=0 
-        #     self.trap =0 
-        #     pygame .mixer .Sound (self.path +"/sound/ohd_se_attack.wav").play ()
-        #     self.pl_life =self.pl_life -10 *((self.floor -1 )//10 )+30 
-        #     self.idx =121 
-        #     self.tmr =0 
-        #     if self.pl_life <=0 :
-        #         self.pl_life =0 
-        #         pygame .mixer .music .stop ()
-        #         self.idx =70 
-        #         self.tmr =0 
-        #     return 
-        # if self.dungeon [self.pl_y ][self.pl_x ]==6 :# 回復床
-        #     self.dungeon [self.pl_y ][self.pl_x ]=0 
-        #     self.trap =1 
-        #     pygame .mixer .Sound (self.path +"/sound/ohd_se_potion.wav").play ()
-        #     self.pl_life =min (self.pl_life -20 +10 *((self.floor -1 )//10 ),self.pl_lifemax )
-        #     self.idx =121 
-        #     self.tmr =0 
-        #     return 
         if self.dungeon [self.pl_y ][self.pl_x ]==2 :# 繭に載った
             pos =(self.pl_x ,self.pl_y )
             if self.tutorial_enabled and self.floor ==1 and pos ==self.tutorial_room4_item_pos:
@@ -1513,7 +1416,7 @@ class Game:
         self.pl_shield =[0 ,0 ,0 ]
         self.pl_armor =[0 ,0 ,0 ]
         self.pl_sword =[0 ,0 ,0 ]
-        self.normalize_equipped_state ()
+        self.apply_equipped_slots()
         self.update_player_images ()
         self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
         self.move_bgm_pos_ms =0 
@@ -1584,18 +1487,13 @@ class Game:
                 self.pl_shield =self.read_weapon_levels_from_save (loaddata ,"shield")
                 self.pl_armor =self.read_weapon_levels_from_save (loaddata ,"armor")
                 self.pl_sword =self.read_weapon_levels_from_save (loaddata ,"sword")
-                self.normalize_equipped_state (
+                self.apply_equipped_slots(
                     loaddata .get ("equip_shield",0 ),
                     loaddata .get ("equip_armor",0 ),
                     loaddata .get ("equip_sword",0 ),
                 )
                 self.refresh_pl_magmax ()
                 self.update_player_images ()
-                legacy_boss_pos =self.parse_pos (loaddata .get ("boss_pos"))
-                if legacy_boss_pos:
-                    bx ,by =legacy_boss_pos
-                    if 0 <=bx <DUNGEON_W and 0 <=by <DUNGEON_H and self.dungeon [by ][bx ]==0:
-                        self.dungeon [by ][bx ]=12
                 self.true_episode_heard = bool(loaddata.get("true_episode_heard", False))
                 self.encountered_enemies = set(loaddata.get("encountered_enemies", []))
                 self.item_event_phase = 0
@@ -1860,11 +1758,7 @@ class Game:
         margin =20
         max_w =int (view_w *0.3 )
         max_h =int (view_h *0.3 )
-        # if max_w <=0 or max_h <=0 :
-        #     return
         scale =min (max_w /DUNGEON_W ,max_h /DUNGEON_H )
-        # if scale <=0 :
-        #     return
         map_w =max (1 ,int (DUNGEON_W *scale ))
         map_h =max (1 ,int (DUNGEON_H *scale ))
         self.update_minimap_grid (new_seen )
@@ -2324,7 +2218,7 @@ class Game:
             group ="armor"
         else :
             return targets
-        equipped_slot =self.get_equipped_slot_by_group (group )
+        equipped_slot =getattr (self ,EQUIP_SLOT_ATTRS [group ])
         for slot ,trap_id in mapping:
             if weapon_list [slot ]>0 :
                 targets .append ({
@@ -3106,18 +3000,13 @@ class Game:
                             self.pl_shield =self.read_weapon_levels_from_save (loaddata ,"shield")
                             self.pl_armor =self.read_weapon_levels_from_save (loaddata ,"armor")
                             self.pl_sword =self.read_weapon_levels_from_save (loaddata ,"sword")
-                            self.normalize_equipped_state (
+                            self.apply_equipped_slots(
                                 loaddata .get ("equip_shield",0 ),
                                 loaddata .get ("equip_armor",0 ),
                                 loaddata .get ("equip_sword",0 ),
                             )
                             self.refresh_pl_magmax ()
                             self.update_player_images ()
-                            legacy_boss_pos =self.parse_pos (loaddata .get ("boss_pos"))
-                            if legacy_boss_pos:
-                                bx ,by =legacy_boss_pos
-                                if 0 <=bx <DUNGEON_W and 0 <=by <DUNGEON_H and self.dungeon [by ][bx ]==0:
-                                    self.dungeon [by ][bx ]=12
                             self.true_episode_heard = bool(loaddata.get("true_episode_heard", False))
                             self.item_event_phase = 0
                             self.item_choice = 0
@@ -3566,52 +3455,6 @@ class Game:
                     self.idx =0 
                     self.tmr =0 
 
-
-            elif self.idx ==80 :#ゲームクリア画面１
-                if self.tmr ==1 :
-                    pygame .mixer .music .load (self.path +"/sound/bgm_last.wav")
-                    pygame .mixer .music .play (-1 )
-                screen .fill (BLACK )
-                if self.tmr >=40 :
-                    self.draw_text (screen ,"Congratulations!",320 ,630 ,font ,WHITE )
-                    self.imgEnemy =pygame .image .load (self.path +"/image/enemy/enemy"+str (int (0.1 *(self.tmr -40 )%10 ))+"_0"+".png")
-                    screen_w ,screen_h =screen .get_size ()
-                    self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
-                    self.emy_y =screen_h //2 -self.imgEnemy .get_height ()//2 
-                    screen .blit (self.imgEnemy ,[self.emy_x ,self.emy_y ])
-                if self.tmr >=80 :
-                    self.draw_text (screen ,"Press space key",320 ,580 ,font ,BLINK [self.tmr %6 ])
-                    if key [K_SPACE ]==1 :
-                        self.idx =81 
-                        self.tmr =0 
-                        time .sleep (1 )
-
-            elif self.idx ==81 :#ゲームクリア画面２
-                screen .fill (BLACK )
-                if self.tmr >=10 :
-                    self.draw_text (screen ,"Thank you for playing!",260 ,100 ,font ,WHITE )
-                if self.tmr >=30 :
-                    self.draw_text (screen ,"This is my first game.",260 ,150 ,font ,WHITE )
-                if self.tmr >=50 :
-                    self.draw_text (screen ,"Making game was one of my dream,",260 ,200 ,font ,WHITE )
-                if self.tmr >=70 :
-                    self.draw_text (screen ,"so I'm very happy.",260 ,250 ,font ,WHITE )
-                if self.tmr >=90 :
-                    self.draw_text (screen ,"If I make another game",260 ,300 ,font ,WHITE )
-                if self.tmr >=110 :
-                    self.draw_text (screen ,"in the future,",260 ,350 ,font ,WHITE )
-                if self.tmr >=130 :
-                    self.draw_text (screen ,"please play it.",260 ,400 ,font ,WHITE )
-                if self.tmr >=150 :
-                    self.draw_text (screen ,"See you again.",260 ,450 ,font ,WHITE )
-                if self.tmr >=170 :
-                    self.draw_text (screen ,"Koyo",520 ,500 ,font ,WHITE )
-                if self.tmr >=200 :
-                    self.draw_text (screen ,"Press space key",320 ,560 ,font ,BLINK [self.tmr %6 ])
-                    if key [K_SPACE ]==1 :
-                        self.idx =0 
-                        self.tmr =0 
-                        time .sleep (1 )
 
             elif self.idx ==82 :# エピローグ
                 if self.draw_epilogue (screen ,fontS ,key ):
