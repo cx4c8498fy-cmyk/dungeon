@@ -1314,7 +1314,7 @@ class Game:
         if self.dungeon [self.pl_y ][self.pl_x ]==4 :# 強化素材箱に載った
             self.dungeon [self.pl_y ][self.pl_x ]=0 
             self.treasure =random .choice ([7 ,8 ,9 ])
-            add_num = 2 if self.floor > 60 else 1
+            add_num = 3 if self.floor > 90 else 2 if self.floor > 60 else 1
             self.item_reward_count =add_num
             if self.treasure ==7 :
                 self.tool_sword_polish +=add_num
@@ -5140,7 +5140,7 @@ class Game:
                             self.tmr =0 
                 if self.tmr ==14 :
                     self.poison =max (self.poison -1 ,0 )
-                    self.poison = 4
+                    self.poison = 3
                     self.set_message ("　毒を くらった！")
                     self.set_message (f"　毒 {self.poison *40}ダメージ！")
                     self.pl_life =self.pl_life -self.poison *40 
