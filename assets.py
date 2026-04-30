@@ -10,11 +10,9 @@ class ImageAssets:
     title: object
     wallAs: list
     wallBs: list
-    # dark: object
     para: object
     btl_bg: object
     enemy: object
-    # items: list
     floors: list
     players: list
     effects: list
@@ -27,20 +25,8 @@ def load_images(base_path: str) -> ImageAssets:
     if not wall_as:
         wall_as = [pygame.image.load(base_path + "/image/wall/wallA0_0.png")]
     wall_bs = [make_wall_top(img) for img in wall_as]
-    # img_dark = pygame.image.load(base_path + "/image/dark.png")
     img_btl_bg = pygame.image.load(base_path + "/image/btlbg/btlbg0.png")
     img_enemy = pygame.image.load(base_path + "/image/enemy/enemy0_0.png")
-
-    # img_items = [
-    #     pygame.image.load(base_path + "/image/potion.png"),
-    #     pygame.image.load(base_path + "/image/blaze_gem.png"),
-    #     pygame.image.load(base_path + "/image/guard.png"),
-    #     pygame.image.load(base_path + "/image/apple.png"),
-    #     pygame.image.load(base_path + "/image/magic_apple.png"),
-    #     pygame.image.load(base_path + "/image/mag_pot.png"),
-    # ]
-
-
 
     floor_variants = load_floor_variants(base_path, 0)
     base_floor = floor_variants[0] if floor_variants else pygame.image.load(base_path + "/image/floor/floor0.png")
@@ -72,11 +58,9 @@ def load_images(base_path: str) -> ImageAssets:
         title=img_title,
         wallAs=wall_as,
         wallBs=wall_bs,
-        # dark=img_dark,
         para=None,
         btl_bg=img_btl_bg,
         enemy=img_enemy,
-        # items=img_items,
         floors=img_floors,
         players=img_players,
         effects=img_effects,
