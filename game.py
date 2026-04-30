@@ -45,7 +45,6 @@ BATTLE_UI_LAYOUT = {
     },
 }
 
-FAIRY_FLOOR_MODS = {3, 8}
 WEAPON_LEVEL_ATTRS = {"shield": "pl_shield", "armor": "pl_armor", "sword": "pl_sword"}
 EQUIP_SLOT_ATTRS = {"shield": "eq_shield", "armor": "eq_armor", "sword": "eq_sword"}
 
@@ -178,6 +177,8 @@ class Game:
         self.tool_weapon_choice_targets = []
         self.tool_weapon_choice_tool_id = ""
         self.tool_weapon_choice_prompt = ""
+        self.tool_notice_text = ""
+        self.tool_notice_timer = 0
         self.equip_cursor = 0
         self.equip_back_lock = False
         self.equip_accept_lock = False
@@ -194,6 +195,7 @@ class Game:
         self.boss_save_cmd = 0
         self.boss_save_input_lock = False
         self.boss_transition_mode = False
+        self.floor_transition_delta = 1
         self.btl_cmd = 0
         self.powup = 1
         self.emy_powup = 1
@@ -531,9 +533,23 @@ class Game:
         self.enemy_poison_fail_count =0
         self.emy_poison =0
 
+    # プレイヤー側の戦闘中一時パラメータを初期化する
+    def reset_player_battle_params(self):
+        self.btl_cmd =0
+        self.guard_remain =0
+        self.poison =0
+        self.powup =1
+        self.madoka =0
+        self.emy_powup =1
+        self.burn_turns =0
+        self.inferno =0
+        self.boss_mode = "normal"
+        self.change =0
+
     # 敵の毒ダメージ処理
     def resolve_enemy_poison_tick(self):
         if self.emy_poison <= 0:
+            self.tmr =self.tmr +1 
             return 0
         dmg = self.emy_poison * 40
         self.set_message (f"　毒 {dmg}ダメージ！")
@@ -613,7 +629,7 @@ class Game:
     def all_cocoons_cleared(self):
         return all((2 not in row) and (10 not in row) for row in self.dungeon)
 
-    # default tutorial progress の処理を行う
+    # チュートリアルの進行状態を初期化
     def default_tutorial_progress(self):
         return {
             "talked": [False, False, False, False, False, False, False],
@@ -866,8 +882,6 @@ class Game:
     # ボスとの会話内容を初期化
     def init_boss_talk(self, mode="init"):
         boss_id = 9 + int(self.floor // 10)
-        # if 90 < self.floor < 100:
-        #     boss_id = 9 + int(self.floor % 10)
         boss_map_id = boss_id - 10
         self.boss_talk_kind = mode
         if mode == "end":
@@ -1437,6 +1451,7 @@ class Game:
         self.boss_save_cmd = 0
         self.boss_save_input_lock = False
         self.boss_transition_mode = False
+        self.floor_transition_delta = 1
         self.tool_growth_choice_active = False
         self.tool_growth_choice_cmd = 0
         self.tool_weapon_choice_active = False
@@ -1444,6 +1459,8 @@ class Game:
         self.tool_weapon_choice_targets = []
         self.tool_weapon_choice_tool_id = ""
         self.tool_weapon_choice_prompt = ""
+        self.tool_notice_text = ""
+        self.tool_notice_timer = 0
         self.true_episode_heard = False
         self.encountered_enemies = set()
         self.powup =1
@@ -1526,6 +1543,7 @@ class Game:
                 self.boss_save_cmd = 0
                 self.boss_save_input_lock = False
                 self.boss_transition_mode = False
+                self.floor_transition_delta = 1
                 self.tool_growth_choice_active = False
                 self.tool_growth_choice_cmd = 0
                 self.tool_weapon_choice_active = False
@@ -1533,6 +1551,8 @@ class Game:
                 self.tool_weapon_choice_targets = []
                 self.tool_weapon_choice_tool_id = ""
                 self.tool_weapon_choice_prompt = ""
+                self.tool_notice_text = ""
+                self.tool_notice_timer = 0
                 self.pl_shield =self.read_weapon_levels_from_save (loaddata ,"shield")
                 self.pl_armor =self.read_weapon_levels_from_save (loaddata ,"armor")
                 self.pl_sword =self.read_weapon_levels_from_save (loaddata ,"sword")
@@ -2184,6 +2204,11 @@ class Game:
         else :
             tool_id =tool ["id"]
             desc =TOOL_INFO .get (tool_id ,"情報が登録されていません。")
+        if self.tool_notice_timer >0 and self.tool_notice_text:
+            desc =self.tool_notice_text
+            self.tool_notice_timer -=1
+            if self.tool_notice_timer <=0:
+                self.tool_notice_text =""
         if tool_id !=self.tool_desc_tool_id :
             self.tool_desc_tool_id =tool_id
         self.draw_bottom_description_window (bg ,fnt ,desc )
@@ -2267,7 +2292,7 @@ class Game:
                 "usable":any (target .get ("can_upgrade",True )for target in self.get_weapon_upgrade_targets ("armor_patch"))
             })
         if self.truth_fragment >0 :
-            tools .append ({"id":"truth_fragment","name":"しんじつのかけら","count":self.truth_fragment ,"usable":False })
+            tools .append ({"id":"truth_fragment","name":"しんじつのかけら","count":self.truth_fragment ,"usable":True })
         if self.heirloom_pendant >0 :
             tools .append ({"id":"heirloom_pendant","name":"形見のペンダント","count":self.heirloom_pendant ,"usable":False })
         return tools
@@ -2382,6 +2407,31 @@ class Game:
             if self.tutorial_enabled and self.floor ==1 :
                 self.tutorial_progress ["room4_item_used"]=True
                 self.update_tutorial_floor_state ()
+        elif tool_id =="truth_fragment":
+            self.use_truth_fragment_item ()
+
+    # どうぐ一覧で使用不可メッセージを表示する
+    def show_tool_notice (self ,text ,duration =90 ):
+        self.tool_notice_text =text
+        self.tool_notice_timer =duration
+
+    # しんじつのかけら使用時に1階戻る処理を実行する
+    def use_truth_fragment_item (self ):
+        if self.floor %10 ==1 :
+            self.show_tool_notice ("この階では　使用できません")
+            return False
+        consume =2 if self.floor in self.truth_fragment_floors else 1
+        if self.truth_fragment <consume :
+            self.show_tool_notice ("しんじつのかけらが足りない")
+            return False
+        self.truth_fragment -=consume
+        self.save_from_stair =False
+        self.save_from_boss =False
+        self.boss_transition_mode =False
+        self.floor_transition_delta =-1
+        self.idx =110
+        self.tmr =0
+        return True
 
     # 成長エキス使用時の効果処理
     def use_growth_essence (self ,target ):
@@ -3143,6 +3193,8 @@ class Game:
                             self.tool_weapon_choice_targets = []
                             self.tool_weapon_choice_tool_id = ""
                             self.tool_weapon_choice_prompt = ""
+                            self.tool_notice_text = ""
+                            self.tool_notice_timer = 0
                             self.tool_cmd = 0
                             self.tool_desc_tool_id =""
                             self.tool_desc_char_count =0
@@ -3751,6 +3803,7 @@ class Game:
 
             elif self.idx ==110 :# 画面切り替え
                 transition_black =self.boss_transition_mode
+                transition_delta =self.floor_transition_delta if self.floor_transition_delta in (-1 ,1 )else 1
                 if transition_black and self.tmr <=9 :
                     screen .fill (BLACK )
                 else:
@@ -3760,7 +3813,7 @@ class Game:
                     x ,y =self.floor_title_pos
                 else:
                     if self.tmr <=5 :
-                        disp_floor =self.floor +1
+                        disp_floor =self.floor +transition_delta
                     else:
                         disp_floor =self.floor
                     title_text =f"地下 {disp_floor}階"
@@ -3773,7 +3826,7 @@ class Game:
                     fade .fill ((0 ,0 ,0 ,alpha ))
                     screen .blit (fade ,[0 ,0 ])
                 if self.tmr ==5 :
-                    self.floor =self.floor +1 
+                    self.floor =max (1 ,self.floor +transition_delta )
                     if self.floor %10 ==1 :
                         self.set_floor_assets_for_transition (self.floor )
                         self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
@@ -3806,6 +3859,7 @@ class Game:
                     self.floor_title_active = False
                     self.floor_title_pos = None
                     self.boss_transition_mode = False
+                    self.floor_transition_delta =1
                     self.idx =100 
 
             elif self.idx ==120 :# アイテム入手もしくはトラップ
@@ -4801,8 +4855,6 @@ class Game:
                     self.dmg_eff =6
                     self.emy_step =0 
                 if self.tmr ==12 :
-                    # if poison_result ==2 :
-                    #     continue
                     self.pl_life =self.pl_life -dmg 
                     if self.pl_life <=0 :
                         self.pl_life =0 
@@ -4812,6 +4864,7 @@ class Game:
                         self.emy_blink =2 
                         dmg =int (self.pl_str //20 +self.pl_str *cou *0.005 +random .randint (0 ,cou //5 ))
                         self.set_message (f"　{dmg}　カウンター！")
+                        se [11 ].play ()
                         self.emy_life =self.emy_life -dmg 
                         if self.emy_life <=0 :
                             self.emy_life =0 
@@ -4825,17 +4878,13 @@ class Game:
                     self.apply_armor_effects ()
                     if self.emy_typ ==6 and self.idx ==236 :
                         self.tmr =0 
-                if self.tmr ==21 :
+                if self.tmr ==22 :
                     self.idx =210 
                     self.tmr =0 
 
 
             elif self.idx ==231 :#destroy
                 self.draw_battle (screen ,fontS )
-                # if self.tmr ==1 :
-                #     poison_result =self.resolve_enemy_poison_tick ()
-                #     if poison_result ==2 :
-                #         continue
                 if self.tmr ==5 :
                     self.set_message (self.emy_name +"の デストロイ!")
                     se [1 ].play ()
@@ -4861,9 +4910,6 @@ class Game:
             elif self.idx ==232 :#Magia
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    # poison_result =self.resolve_enemy_poison_tick ()
-                    # if poison_result ==2 :
-                    #     continue
                     self.set_message (f"{self.emy_name}のターン")
                 if self.tmr ==5 :
                     if self.madoka <1000 :
@@ -4895,7 +4941,7 @@ class Game:
                 if self.tmr ==24 :
                     self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
-                if self.tmr ==27 :
+                if self.tmr ==28 :
                     self.idx =210 
                     self.tmr =0 
 
@@ -4903,9 +4949,6 @@ class Game:
             elif self.idx ==233 :#敵のポーション
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    # poison_result =self.resolve_enemy_poison_tick ()
-                    # if poison_result ==2 :
-                    #     continue
                     cure =min (cure ,self.emy_lifemax -self.emy_life )
                     self.set_message ("　敵の生命 +{}".format (cure ))
                     se [2 ].play ()
@@ -4914,33 +4957,26 @@ class Game:
                 if self.tmr ==11 :
                     self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
-                if self.tmr ==14 :
+                if self.tmr ==15 :
                     self.idx =210 
                     self.tmr =0 
 
             elif self.idx ==234 :#敵のガード
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    # poison_result =self.resolve_enemy_poison_tick ()
-                    # if poison_result ==2 :
-                    #     continue
                     self.set_message ("　敵は　{}ターンの守護を得た".format (self.guard_remain ))
                     se [8 ].play ()
                 if self.tmr ==6 :
                     self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
-                if self.tmr ==11 :
+                if self.tmr ==10 :
                     self.idx =210 
                     self.tmr =0 
 
             elif self.idx ==235 :#逃亡？
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    # poison_result =self.resolve_enemy_poison_tick ()
-                    # if poison_result ==2 :
-                    #     continue
                     self.set_message ("　敵は　こちらを見つめている")
-                    self.resolve_enemy_poison_tick ()
                 if self.tmr ==6 :
                     self.idx =210 
                     self.tmr =0 
@@ -4950,7 +4986,6 @@ class Game:
                 if self.tmr ==1 :
                     self.set_message ("　敵は逃げていった")
                 if self.tmr ==10 :
-                    self.guard_remain =0 
                     self.floor99_trial_battle_active =False
                     self.floor99_trial_post_pending =False
                     self.floor99_trial_missing =0
@@ -4961,10 +4996,6 @@ class Game:
             elif self.idx ==237 :# 火炎攻撃
                 self.draw_battle (screen ,fontS )
                 defence =self.get_equipped_defence ()
-                # if self.tmr ==1 :
-                    # poison_result =self.resolve_enemy_poison_tick ()
-                    # if poison_result ==2 :
-                    #     continue
                 if self.tmr ==5 :
                     self.set_message (f"　{self.emy_name}の　攻撃！")
                     se [0 ].play ()
@@ -4994,16 +5025,12 @@ class Game:
                 if self.tmr ==16 :
                     self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
-                if self.tmr ==19 :
+                if self.tmr ==20 :
                     self.idx =210 
                     self.tmr =0 
 
             elif self.idx ==238 :# 豪炎
                 self.draw_battle (screen ,fontS )
-                # if self.tmr ==1 :
-                #     poison_result =self.resolve_enemy_poison_tick ()
-                #     if poison_result ==2 :
-                #         continue
                 if self.tmr ==5 :
                     self.set_message (f"　{self.emy_name}の　インフェルノ！")
                     se [1 ].play ()
@@ -5023,7 +5050,7 @@ class Game:
                 if self.tmr ==16 :
                     self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
-                if self.tmr ==19 :
+                if self.tmr ==20 :
                     self.idx =210 
                     self.tmr =0 
 
@@ -5031,9 +5058,6 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 defence =self.get_equipped_defence ()
                 if self.tmr ==1 :
-                    # poison_result =self.resolve_enemy_poison_tick ()
-                    # if poison_result ==2 :
-                    #     continue
                     self.set_message (self.emy_name +"のターン")
                     pro =0 
                     cou =0 
@@ -5069,6 +5093,7 @@ class Game:
                         self.emy_blink =2 
                         dmg =int (self.pl_str //10 +self.pl_str *cou *0.003 +random .randint (0 ,cou //5 ))
                         self.set_message (f"　{dmg}　のカウンター！")
+                        se [11 ].play ()
                         self.emy_life =self.emy_life -dmg 
                         if self.emy_life <=0 :
                             self.emy_life =0 
@@ -5087,7 +5112,7 @@ class Game:
                 if self.tmr ==18 :
                     self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
-                if self.tmr ==21 :
+                if self.tmr ==22 :
                     self.idx =210 
                     self.tmr =0 
 
@@ -5098,17 +5123,6 @@ class Game:
                     if self.boss ==1 :
                         self.set_message ("　逃走に失敗した！")
                     elif random .randint (0 ,99 )<60 or self.emy_typ ==10:
-                        self.btl_cmd =0
-                        self.guard_remain =0 
-                        self.poison =0 
-                        self.powup =1
-                        self.madoka =0 
-                        self.emy_powup =1 
-                        self.reset_enemy_battle_params ()
-                        self.burn_turns =0 
-                        self.inferno =0
-                        self.boss_mode = "normal"
-                        self.change = 0
                         self.floor99_trial_battle_active =False
                         self.floor99_trial_post_pending =False
                         self.floor99_trial_missing =0
@@ -5131,21 +5145,12 @@ class Game:
             elif self.idx ==241 :# 勝利
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
-                    self.btl_cmd =0
-                    self.guard_remain =0 
-                    self.poison =0 
-                    self.powup =1
-                    self.madoka =0 
-                    self.emy_powup =1 
-                    self.reset_enemy_battle_params ()
-                    self.burn_turns =0 
-                    self.inferno =0
-                    self.boss_mode = "normal"
                     if self.emy_typ ==119 :
+                        self.reset_player_battle_params ()
+                        self.reset_enemy_battle_params ()
                         self.idx =245 
                         self.tmr =0
                 if self.tmr ==2 :
-                    self.change = 0
                     self.set_message ("{}を　たおした！".format (self.emy_name ))
                     self.growth_essence_drop_battle =(self.boss ==0 and random .random ()<0.05 )
                     if self.floor99_trial_battle_active:
@@ -5192,16 +5197,8 @@ class Game:
                     self.restore_battle_equip_session ()
                     pygame .mixer .music .stop ()
                     self.boss =0 
-                    self.btl_cmd =0
-                    self.guard_remain =0 
-                    self.poison =0 
-                    self.powup =1
-                    self.madoka =0 
-                    self.emy_powup =1 
+                    self.reset_player_battle_params ()
                     self.reset_enemy_battle_params ()
-                    self.burn_turns =0 
-                    self.inferno =0
-                    self.boss_mode = "normal"
                     self.truth_fragment_drop_battle =False
                     self.growth_essence_drop_battle =False
                     self.floor99_trial_battle_active =False
@@ -5209,7 +5206,6 @@ class Game:
                     self.floor99_trial_missing =0
                     self.floor99_trial_total =0
                     self.tutorial_pending_battle =""
-                    self.change = 0
                     self.set_message ("負けてしまった")
                 if self.tmr ==11 :
                     self.idx =70 
@@ -5258,6 +5254,7 @@ class Game:
 
             elif self.idx ==244 :# 戦闘終了
                 self.restore_battle_equip_session ()
+                self.reset_player_battle_params ()
                 self.truth_fragment_drop_battle =False
                 self.growth_essence_drop_battle =False
                 self.reset_enemy_battle_params ()
