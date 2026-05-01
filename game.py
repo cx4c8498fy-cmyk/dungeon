@@ -350,8 +350,11 @@ class Game:
         self.pl_mag = max(0, min(self.pl_mag + amount, self.pl_magmax))
 
     # guardの効果を計算する
-    def get_guard_damage_multiplier(self):
-        return max(0.01, 0.35 - self.get_active_weapon_level("shield", 2) * 0.0018 - self.guard_lv * 0.005)
+    def get_guard_damage_multiplier(self, target="player"):
+        if target == "player":
+            return max(0.01, 0.35 - self.get_active_weapon_level("shield", 2) * 0.0018 - self.guard_lv * 0.005)
+        else:
+            return max(0.01, 0.35 - self.guard_lv * 0.005)
 
     # 妖精の座標を返す
     def find_fairy_position(self):
@@ -689,6 +692,8 @@ class Game:
                 # Adjust fixed item wall position if it exists
                 if "item_wall_pos" in data:
                     data["item_wall_pos"] = (data["item_wall_pos"][0] + offset_x, data["item_wall_pos"][1] + offset_y)
+                if "event_wall_pos" in data:
+                    data["event_wall_pos"] = (data["event_wall_pos"][0] + offset_x, data["event_wall_pos"][1] + offset_y)
                 
                 # Adjust all tutorial coordinates
                 if "tutorial" in data and isinstance(data["tutorial"], dict):
@@ -1166,6 +1171,7 @@ class Game:
         self.fairy_pos = None
         fixed_item_wall_placed =False
         fixed_item_wall_front =None
+        fixed_event_wall_front =None
         fixed_player_start =None
         if self.fixed_floor_data and self.floor == 1: # チュートリアルフロアの配置
             self.setup_tutorial_floor()
@@ -1186,11 +1192,22 @@ class Game:
                     self.dungeon [wy ][wx ]=7
                     fixed_item_wall_placed =True
                     fixed_item_wall_front =(wx ,wy +1 )
+            event_wall_pos =self.parse_pos (self.fixed_floor_data.get ("event_wall_pos"))
+            if event_wall_pos:
+                wx ,wy =event_wall_pos
+                if (0 <=wx <DUNGEON_W and 0 <=wy <DUNGEON_H -1 and
+                    self.dungeon [wy ][wx ]==9 and self.dungeon [wy +1 ][wx ]==0 ):
+                    self.dungeon [wy ][wx ]=8
+                    self.event_wall_pos =(wx ,wy )
+                    fixed_event_wall_front =(wx ,wy +1 )
         floor_cells =[
             (x ,y )
             for y in range (3 ,DUNGEON_H -3 )
             for x in range (3 ,DUNGEON_W -3 )
-            if self.dungeon [y ][x ]==0 and (x ,y )!=fixed_item_wall_front and (x ,y )!=fixed_player_start
+            if (self.dungeon [y ][x ]==0 and
+                (x ,y )!=fixed_item_wall_front and
+                (x ,y )!=fixed_event_wall_front and
+                (x ,y )!=fixed_player_start)
         ]
         random .shuffle (floor_cells )
         def take_cells (count ):
@@ -3719,6 +3736,13 @@ class Game:
                             self.init_floor99_item_event ()
                             self.idx =131
                             self.tmr =0
+                        elif self.floor ==100:
+                            if self.true_episode_heard:
+                                self.init_item_event (kind="true_episode_event_replay", lines=TRUE_EPISODE_TALK)
+                            else:
+                                self.init_item_event (kind="true_episode_event", lines=FLOOR100_EVENT_UNREADABLE_TALK)
+                            self.idx =131
+                            self.tmr =0
                         else:
                             self.init_event_talk ()
                             self.idx =132
@@ -3741,12 +3765,10 @@ class Game:
                             self.idx =131
                             self.tmr =0
                         else:
-                            if 91 <= self.floor <= 99:
+                            if 91 <= self.floor <= 100:
                                 self.init_item_event (kind="item", reward_count=5)
                             elif self.floor %10 ==5:
                                 self.init_item_event (kind="item_upgrade")
-                            elif self.floor == 100 and self.truth_fragment >= 100 and not self.true_episode_heard:
-                                self.init_item_event (kind="true_episode", lines=TRUE_EPISODE_TALK)
                             else:
                                 self.init_item_event ()
                             self.idx =131
@@ -4193,7 +4215,85 @@ class Game:
                             self.item_talk_last_tick =pygame .time .get_ticks ()
                             self.item_event_phase =4
 
-                elif self.item_event_kind == "true_episode":
+                elif self.item_event_kind == "true_episode_event":
+                    if self.item_event_phase in (0, 2):
+                        if self.item_talk_index <len (self.item_talk_lines ):
+                            line = self.item_talk_lines [self.item_talk_index ]
+                            now = pygame.time.get_ticks()
+                            if self.item_talk_char_count < len(line) and now - self.item_talk_last_tick >= 100:
+                                self.item_talk_char_count += 1
+                                self.item_talk_last_tick = now
+                            visible = line [:self.item_talk_char_count ]
+                            parts = visible.split("\n")
+                            for i, part in enumerate(parts):
+                                self.draw_text (screen ,part ,text_x ,text_y + i *line_h ,fontS ,WHITE )
+                        self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
+                        if accept:
+                            if self.item_talk_index <len (self.item_talk_lines ):
+                                line = self.item_talk_lines [self.item_talk_index ]
+                                if self.item_talk_char_count < len(line):
+                                    self.item_talk_char_count = len(line)
+                                else:
+                                    self.item_talk_index +=1
+                                    self.item_talk_char_count = 0
+                                    self.item_talk_last_tick = pygame.time.get_ticks()
+                            if self.item_talk_index >=len (self.item_talk_lines ):
+                                if self.item_event_phase == 0:
+                                    if self.truth_fragment >=100:
+                                        self.item_talk_lines =FLOOR100_EVENT_USE_FRAGMENT_PROMPT
+                                        self.item_talk_index =0
+                                        self.item_talk_char_count =0
+                                        self.item_talk_last_tick =pygame.time.get_ticks()
+                                        self.item_choice =0
+                                        self.item_event_phase =1
+                                    else:
+                                        self.idx =100
+                                        self.tmr =0
+                                else:
+                                    self.true_episode_heard =True
+                                    self.idx =100
+                                    self.tmr =0
+                    elif self.item_event_phase == 1:
+                        if self.item_talk_index <len (self.item_talk_lines ):
+                            line = self.item_talk_lines [self.item_talk_index ]
+                            now = pygame.time.get_ticks()
+                            if self.item_talk_char_count < len(line) and now - self.item_talk_last_tick >= 100:
+                                self.item_talk_char_count += 1
+                                self.item_talk_last_tick = now
+                            visible = line [:self.item_talk_char_count ]
+                            parts = visible.split("\n")
+                            for i, part in enumerate(parts):
+                                self.draw_text (screen ,part ,text_x ,text_y + i *line_h ,fontS ,WHITE )
+                        options =["はい","いいえ"]
+                        sel_line_h =max (1 ,int (25 *scale_y ))
+                        box_h =max (1 ,int (15 *scale_y ))+sel_line_h *len (options )
+                        box_w =max (1 ,int (280 *scale_x ))
+                        box_x =view_left +int (520 *scale_x )
+                        box_y =view_top +int (420 *scale_y )
+                        arrow_x =view_left +int (540 *scale_x )
+                        text_sel_x =view_left +int (560 *scale_x )
+                        arrow_y =view_top +int (435 *scale_y )
+                        pygame .draw .rect (screen ,BLACK ,[box_x ,box_y ,box_w ,box_h ])
+                        pygame .draw .rect (screen ,WHITE ,[box_x ,box_y ,box_w ,box_h ],2 )
+                        for i, option in enumerate(options):
+                            if i == self.item_choice:
+                                self.draw_text (screen ,"▶",arrow_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
+                            self.draw_text (screen ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
+                        if key [K_UP ]and self.item_choice >0 :
+                            self.item_choice -=1
+                        if key [K_DOWN ]and self.item_choice <1 :
+                            self.item_choice +=1
+                        if accept:
+                            if self.item_choice ==0 :
+                                self.item_talk_lines =TRUE_EPISODE_TALK
+                                self.item_talk_index =0
+                                self.item_talk_char_count =0
+                                self.item_talk_last_tick =pygame.time.get_ticks()
+                                self.item_event_phase =2
+                            else:
+                                self.idx =100
+                                self.tmr =0
+                elif self.item_event_kind in ("true_episode_event_replay","true_episode"):
                     if self.item_talk_index <len (self.item_talk_lines ):
                         line = self.item_talk_lines [self.item_talk_index ]
                         now = pygame.time.get_ticks()
@@ -4211,12 +4311,13 @@ class Game:
                             if self.item_talk_char_count < len(line):
                                 self.item_talk_char_count = len(line)
                             else:
-                                self.item_talk_index +=1 
+                                self.item_talk_index +=1
                                 self.item_talk_char_count = 0
                                 self.item_talk_last_tick = pygame.time.get_ticks()
                         if self.item_talk_index >=len (self.item_talk_lines ):
                             self.true_episode_heard = True
-                            self.init_item_event (kind="item", reward_count=5)
+                            self.idx =100
+                            self.tmr =0
                 elif self.item_event_kind in ("blocked","locked_stairs","floor99_need"):
                     if self.item_talk_index <len (self.item_talk_lines ):
                         line = self.item_talk_lines [self.item_talk_index ]
@@ -4561,7 +4662,7 @@ class Game:
                             se [11 ].play ()
                             dmg = dmg /2
                     if self.guard_remain >0 and self.emy_typ ==119 :
-                        dmg =dmg *self.get_guard_damage_multiplier ()
+                        dmg =dmg *self.get_guard_damage_multiplier ("enemy")
                     dmg =max (1 +cri ,int (EMY_APRO [self.emy_typ ] * dmg /(2 *self.poison +1 )))
                     self.emy_blink =5 
                     self.set_message (f"　{dmg}　ダメージ！")
@@ -4603,7 +4704,7 @@ class Game:
                     dmg_add = 0 if active_ice_sword == 0 else self.pl_sword [1 ]
                     dmg =self.pl_str *1.5 +random .randint (0 ,9 )+ dmg_add
                     if self.guard_remain >0 and self.emy_typ ==119 :
-                        dmg =dmg *self.get_guard_damage_multiplier ()
+                        dmg =dmg *self.get_guard_damage_multiplier ("enemy")
                     dmg =max (1 ,int(EMY_MPRO [self.emy_typ ] *dmg) )
                     if self.boss_mode == "ice":
                         dmg =0 
