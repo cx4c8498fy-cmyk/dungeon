@@ -85,6 +85,7 @@ class Game:
         self.imgFire = pygame.image.load(self.path + "/image/fire.png")
         self.imgFairy = pygame.image.load(self.path + "/image/fairy.png")
         self.imgLockedStairs = pygame.image.load(self.path + "/image/locked_stairs.png")
+        self.imgWallInfo = pygame.image.load(self.path + "/image/wall_info.png")
 
         self.floor_variants = load_floor_variants(self.path, 0)
         if not self.floor_variants:
@@ -135,8 +136,6 @@ class Game:
         self.tool_shield_harden = 0
         self.tool_armor_patch = 0
         self.treasure = 0
-        self.trap = 0
-        self.wpn_lev = 0
 
         self.emy_name = ""
         self.emy_lev = 0
@@ -277,6 +276,7 @@ class Game:
         self.map_bosses = None
         self.map_item_walls = None
         self.map_event_walls = None
+        self.map_info_walls = None
         self.map_grid_surface = None
         self.map_surface = None
         self.map_surface_scale = None
@@ -305,6 +305,7 @@ class Game:
         self.map_bosses = set()
         self.map_item_walls = set()
         self.map_event_walls = set()
+        self.map_info_walls = set()
         self.map_grid_surface = pygame.Surface((DUNGEON_W, DUNGEON_H), pygame.SRCALPHA)
         self.map_grid_surface.fill((0, 0, 0, 120))
         self.map_surface = None
@@ -456,6 +457,20 @@ class Game:
             return 0
         return self.get_weapon_level(group, slot)
 
+    # 武器カテゴリとスロットから武器IDを取得する
+    def get_weapon_id(self, group, slot):
+        if group not in ("shield", "armor", "sword") or not (0 <= slot < 3):
+            return -1
+        group_offset = {"shield": 0, "armor": 1, "sword": 2}[group]
+        return slot * 3 + group_offset
+
+    # 武器カテゴリとスロットから武器名を取得する
+    def get_weapon_name(self, group, slot):
+        weapon_id = self.get_weapon_id(group, slot)
+        if 0 <= weapon_id < len(WPN_NAME):
+            return WPN_NAME[weapon_id]
+        return "？"
+
     # is weapon equipped index を判定する
     def is_weapon_equipped_index(self, weapon_index):
         group, slot = self.weapon_index_to_group_slot(weapon_index)
@@ -473,10 +488,9 @@ class Game:
     def get_equipped_weapon_text(self, group, fallback_label):
         slot = getattr(self, EQUIP_SLOT_ATTRS[group])
         level = self.get_weapon_level(group, slot)
-        trap_id = {"shield": [2, 5, 8], "armor": [3, 6, 9], "sword": [4, 7, 10]}[group][slot]
         if level <= 0:
             return f"{fallback_label}　-"
-        return f"{TRAP_NAME[trap_id]} Lv.{level}"
+        return f"{self.get_weapon_name(group, slot)} Lv.{level}"
 
     # 装備中の武器の防御力を取得する
     def get_equipped_defence(self):
@@ -570,10 +584,10 @@ class Game:
     def should_drop_iron_upgrade(self):
         return self.boss ==0 and self.emy_typ ==10 and not self.floor99_trial_battle_active
 
-    # display index to trap id を表示用に変換する
-    def display_index_to_trap_id(self, weapon_index):
+    # display index to weapon id を表示用に変換する
+    def display_index_to_weapon_id(self, weapon_index):
         group, slot = self.weapon_index_to_group_slot(weapon_index)
-        return {"shield": [2, 5, 8], "armor": [3, 6, 9], "sword": [4, 7, 10]}[group][slot]
+        return self.get_weapon_id(group, slot)
 
     # プレイヤーの画像を更新する
     def update_player_images(self):
@@ -770,6 +784,10 @@ class Game:
             pos = self.parse_pos(entry.get("pos"))
             if isinstance(stage, int) and pos:
                 self.tutorial_wall_stage[pos] = stage
+                wx, wy = pos
+                if 0 <= wx < DUNGEON_W and 0 <= wy < DUNGEON_H:
+                    if self.dungeon[wy][wx] in (7, 9, 13):
+                        self.dungeon[wy][wx] = 13
         for entry in tutorial.get("gates", []):
             if not isinstance(entry, dict):
                 continue
@@ -985,6 +1003,20 @@ class Game:
         self.event_talk_char_count = 0
         self.event_talk_last_tick = pygame.time.get_ticks()
 
+    # infoWall用の会話を初期化する
+    def init_info_talk(self):
+        self.tutorial_active_stage = 0
+        talk = INFO_TALK.get(self.floor, "古い壁画だ。文字がかすれていて読み取れない。")
+        if isinstance(talk, str):
+            self.event_talk_lines = [talk]
+        elif isinstance(talk, list):
+            self.event_talk_lines = [str(line) for line in talk]
+        else:
+            self.event_talk_lines = [str(talk)]
+        self.event_talk_index = 0
+        self.event_talk_char_count = 0
+        self.event_talk_last_tick = pygame.time.get_ticks()
+
     # get boss map image を取得する
     def get_boss_map_image(self):
         cache_key = "boss_map"
@@ -1108,7 +1140,7 @@ class Game:
                 wall_only =(y >=start_y +rows )
                 if 0 <=dx <DUNGEON_W and 0 <=dy <DUNGEON_H :
                     tile_id =self.dungeon [dy ][dx ]
-                    if not wall_only and tile_id not in (7 ,8 ,9 ):
+                    if not wall_only and tile_id not in (7 ,8 ,9 ,13 ):
                         if not self.map_seen [dy ][dx ]:
                             self.map_seen [dy ][dx ]=True
                             new_seen .append ((dx ,dy ))
@@ -1118,6 +1150,8 @@ class Game:
                         self.map_item_walls.add((dx, dy))
                     if not wall_only and tile_id ==8 and self.map_event_walls is not None:
                         self.map_event_walls.add((dx, dy))
+                    if not wall_only and tile_id ==13 and self.map_info_walls is not None:
+                        self.map_info_walls.add((dx, dy))
                     if not wall_only and tile_id in (0 ,1 ,2 ,3 ,4 ,5 ,6 ,10 ,11 ,12 ):
                         if tile_id in (0 ,1 ,2 ,4 ,10 ,11 ,12 ):
                             variant =self.floor_var_map [dy ][dx ]
@@ -1140,14 +1174,16 @@ class Game:
                                 bg .blit (self.imgLockedStairs ,[X ,Y ])
                             else:
                                 bg .blit (self.imgFloor [tile_id ],[X ,Y ])
-                    if tile_id in (7 ,8 ,9 ):
+                    if tile_id in (7 ,8 ,9 ,13 ):
                         if tile_id ==8 and self.wall_event:
                             bg .blit (self.wall_event ,[X ,Y -40 ])
                         else :
                             bg .blit (self.imgWall ,[X ,Y -40 ])
                         if tile_id ==7 :
-                            bg .blit (self.imgFloor [7 ],[X ,Y ])
-                        if dy >=1 and self.dungeon [dy -1 ][dx ] in (7 ,8 ,9 ):
+                            bg .blit (self.imgFloor [-1 ],[X ,Y ])
+                        if tile_id ==13 :
+                            bg .blit (self.imgWallInfo ,[X ,Y ])
+                        if dy >=1 and self.dungeon [dy -1 ][dx ] in (7 ,8 ,9 ,13 ):
                             bg .blit (self.imgWall2 ,[X ,Y -80 ])
                 if not wall_only and x ==0 and y ==0 :# 主人公キャラの表示
                     bg .blit (self.imgPlayer [self.pl_a ],[X ,Y -40 ])
@@ -1269,6 +1305,17 @@ class Game:
             if wall_cells:
                 wx, wy = random.choice(wall_cells)
                 self.dungeon[wy][wx] = 8
+        place_info_wall = (self.floor %10 ==2 )
+        if place_info_wall: # 情報壁を配置
+            wall_cells =[
+                (x ,y )
+                for y in range (DUNGEON_H -1 )
+                for x in range (DUNGEON_W )
+                if self.dungeon [y ][x ]==9 and self.dungeon [y +1 ][x ]==0
+            ]
+            if wall_cells:
+                wx ,wy =random .choice (wall_cells )
+                self.dungeon [wy ][wx ]=13
 
     # player の移動・更新を行う
     def move_player (self ,key ):
@@ -1358,19 +1405,19 @@ class Game:
         y =self.pl_y 
         if key [K_UP ]==1 :
             self.pl_d =0 
-            if self.dungeon [self.pl_y -1 ][self.pl_x ] not in (7 ,8 ,9 ,12 ):
+            if self.dungeon [self.pl_y -1 ][self.pl_x ] not in (7 ,8 ,9 ,12 ,13 ):
                 self.pl_y =self.pl_y -1 
         if key [K_DOWN ]==1 :
             self.pl_d =1 
-            if self.dungeon [self.pl_y +1 ][self.pl_x ] not in (7 ,8 ,9 ,12 ):
+            if self.dungeon [self.pl_y +1 ][self.pl_x ] not in (7 ,8 ,9 ,12 ,13 ):
                 self.pl_y =self.pl_y +1 
         if key [K_LEFT ]==1 :
             self.pl_d =2 
-            if self.dungeon [self.pl_y ][self.pl_x -1 ] not in (7 ,8 ,9 ,12 ):
+            if self.dungeon [self.pl_y ][self.pl_x -1 ] not in (7 ,8 ,9 ,12 ,13 ):
                 self.pl_x =self.pl_x -1 
         if key [K_RIGHT ]==1 :
             self.pl_d =3 
-            if self.dungeon [self.pl_y ][self.pl_x +1 ] not in (7 ,8 ,9 ,12 ):
+            if self.dungeon [self.pl_y ][self.pl_x +1 ] not in (7 ,8 ,9 ,12 ,13 ):
                 self.pl_x =self.pl_x +1 
         self.pl_a =self.pl_d *3 +2 
         if self.pl_x !=x or self.pl_y !=y :
@@ -1832,7 +1879,7 @@ class Game:
             for y in range (DUNGEON_H ):
                 row =self.map_seen [y ]
                 for x in range (DUNGEON_W ):
-                    if row [x ]and self.dungeon [y ][x ] not in (7 ,8 ,9 ) :
+                    if row [x ]and self.dungeon [y ][x ] not in (7 ,8 ,9 ,13 ) :
                         self.map_grid_surface.set_at((x, y), (140, 140, 140, 160))
         if new_seen :
             for x ,y in new_seen :
@@ -1875,6 +1922,11 @@ class Game:
                 mx =int (wx *scale )
                 my =int (wy *scale )
                 bg .fill ((80 ,255 ,80 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
+        for wx ,wy in self.map_info_walls :
+            if 0 <=wy <len (self.dungeon )and 0 <=wx <len (self.dungeon [wy ])and self.dungeon [wy ][wx ]==13 :
+                mx =int (wx *scale )
+                my =int (wy *scale )
+                bg .fill ((205 ,120 ,255 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
         if self.fairy_pos :
             fx ,fy =self.fairy_pos
             mx =int (fx *scale )
@@ -1956,12 +2008,13 @@ class Game:
     def grant_weapon_set_for_floor (self ,floor ):
         level ,trap_ids =ITEM_WALL_WEAPON_SET [floor ]
         for trap_id in trap_ids :
-            if trap_id %3 ==2 :
-                self.pl_shield [trap_id //3 ]=level
-            elif trap_id %3 ==0 :
-                self.pl_armor [trap_id //3 -1 ]=level
+            slot =trap_id //3
+            if trap_id %3 ==0 :
+                self.pl_shield [slot ]=level
+            elif trap_id %3 ==1 :
+                self.pl_armor [slot ]=level
             else :
-                self.pl_sword [trap_id //3 -1 ]=level
+                self.pl_sword [slot ]=level
         self.update_player_images ()
 
     # 敵の体力バーを描画する
@@ -2069,13 +2122,23 @@ class Game:
 
     # 自動装備設定の項目を取得する
     def get_auto_equip_settings(self):
-        return [
-            {"attr": "auto_equip_attack_sword", "label": "通常攻撃時に自動的に会心の剣を装備する"},
-            {"attr": "auto_equip_magic_staff", "label": "魔法使用時に自動的に凍てつく杖を装備する"},
-            {"attr": "auto_equip_bomb_cannon", "label": "爆弾使用時に自動的に爆弾砲を装備する"},
-            {"attr": "auto_equip_guard_shield", "label": "守護使用時に自動的に守護の盾を装備する"},
-            {"attr": "auto_equip_potion_armor", "label": "傷薬使用時に自動的に薬効の鎧を装備する"},
+        rules = [
+            {"attr": "auto_equip_attack_sword", "action": "通常攻撃時", "group": "sword", "slot": 0},
+            {"attr": "auto_equip_magic_staff", "action": "魔法使用時", "group": "sword", "slot": 1},
+            {"attr": "auto_equip_bomb_cannon", "action": "爆弾使用時", "group": "sword", "slot": 2},
+            {"attr": "auto_equip_guard_shield", "action": "守護使用時", "group": "shield", "slot": 2},
+            {"attr": "auto_equip_potion_armor", "action": "傷薬使用時", "group": "armor", "slot": 2},
         ]
+        options = []
+        for rule in rules:
+            weapon_name = self.get_weapon_name(rule["group"], rule["slot"])
+            options.append({
+                "attr": rule["attr"],
+                "label": f'{rule["action"]}に自動的に{weapon_name}を装備する',
+                "group": rule["group"],
+                "slot": rule["slot"],
+            })
+        return options
 
     # 設定画面の描画とコマンド処理
     def settings_command(self, bg, fnt, key):
@@ -2230,8 +2293,8 @@ class Game:
             self.tool_desc_tool_id =tool_id
         self.draw_bottom_description_window (bg ,fnt ,desc )
 
-    # draw bottom description window を描画する
-    def draw_bottom_description_window (self ,bg ,fnt ,desc ):
+    # 共通のセリフウィンドウレイアウト情報を取得する
+    def get_dialog_window_layout(self, bg, dlg_y_ratio=525 / 720):
         view_rect =getattr (self ,"dungeon_view_rect",None )
         if view_rect :
             view_left ,view_top ,view_w ,view_h =view_rect
@@ -2242,18 +2305,98 @@ class Game:
         scale_x =view_w /880
         scale_y =view_h /720
         dlg_x =view_left +int (40 *scale_x )
-        dlg_y =view_top +int (525 *scale_y )
+        dlg_y =view_top +int (dlg_y_ratio *view_h )
         dlg_w =max (1 ,int (800 *scale_x ))
         dlg_h =max (1 ,int (160 *scale_y ))
         text_x =view_left +int (60 *scale_x )
         text_y =view_top +int (560 *scale_y )
         line_h =max (1 ,int (28 *scale_y ))
-        pygame .draw .rect (bg ,BLACK ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ])
-        pygame .draw .rect (bg ,WHITE ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ],2 )
-        if len (desc )>0 :
-            parts =desc .split ("\n")
-            for i ,part in enumerate (parts ):
-                self.draw_text (bg ,part ,text_x ,text_y +i *line_h ,fnt ,WHITE )
+        prompt_x =view_left +int (700 *scale_x )
+        prompt_y =view_top +int (640 *scale_y )
+        return {
+            "view_left": view_left,
+            "view_top": view_top,
+            "view_w": view_w,
+            "view_h": view_h,
+            "scale_x": scale_x,
+            "scale_y": scale_y,
+            "dlg_x": dlg_x,
+            "dlg_y": dlg_y,
+            "dlg_w": dlg_w,
+            "dlg_h": dlg_h,
+            "text_x": text_x,
+            "text_y": text_y,
+            "line_h": line_h,
+            "prompt_x": prompt_x,
+            "prompt_y": prompt_y,
+        }
+
+    # 共通のセリフウィンドウを描画する
+    def draw_dialog_window(self, bg, layout, alpha=255):
+        dialog = pygame.Surface((layout["dlg_w"], layout["dlg_h"]), pygame.SRCALPHA)
+        dialog.fill((0, 0, 0, alpha))
+        bg.blit(dialog, [layout["dlg_x"], layout["dlg_y"]])
+        pygame.draw.rect(bg, WHITE, [layout["dlg_x"], layout["dlg_y"], layout["dlg_w"], layout["dlg_h"]], 2)
+
+    # 共通のセリフ本文を描画する
+    def draw_dialog_text(self, bg, fnt, layout, text):
+        if len(text) <= 0:
+            return
+        parts = text.split("\n")
+        for i, part in enumerate(parts):
+            self.draw_text(bg, part, layout["text_x"], layout["text_y"] + i * layout["line_h"], fnt, WHITE)
+
+    # 共通の文字送り処理を進行して可視テキストを返す
+    def step_talk_text(self, lines, talk_index, talk_char_count, talk_last_tick, interval_ms=100):
+        visible = ""
+        if talk_index < len(lines):
+            line = lines[talk_index]
+            now = pygame.time.get_ticks()
+            if talk_char_count < len(line) and now - talk_last_tick >= interval_ms:
+                talk_char_count += 1
+                talk_last_tick = now
+            visible = line[:talk_char_count]
+        return visible, talk_index, talk_char_count, talk_last_tick
+
+    # 共通のA/Enter入力でセリフ送りを進める
+    def advance_talk_text(self, lines, talk_index, talk_char_count, talk_last_tick):
+        if talk_index < len(lines):
+            line = lines[talk_index]
+            if talk_char_count < len(line):
+                talk_char_count = len(line)
+            else:
+                talk_index += 1
+                talk_char_count = 0
+                talk_last_tick = pygame.time.get_ticks()
+        finished = talk_index >= len(lines)
+        return talk_index, talk_char_count, talk_last_tick, finished
+
+    # itemイベント用の共通セリフ描画と進行処理
+    def step_item_event_talk(self, bg, fnt, layout, accept, show_prompt=True):
+        visible ,self.item_talk_index ,self.item_talk_char_count ,self.item_talk_last_tick =self.step_talk_text (
+            self.item_talk_lines ,
+            self.item_talk_index ,
+            self.item_talk_char_count ,
+            self.item_talk_last_tick
+        )
+        self.draw_dialog_text (bg ,fnt ,layout ,visible )
+        if show_prompt:
+            self.draw_text (bg ,"[A]/[Enter]",layout ["prompt_x"],layout ["prompt_y"],fnt ,WHITE )
+        finished =False
+        if accept:
+            self.item_talk_index ,self.item_talk_char_count ,self.item_talk_last_tick ,finished =self.advance_talk_text (
+                self.item_talk_lines ,
+                self.item_talk_index ,
+                self.item_talk_char_count ,
+                self.item_talk_last_tick
+            )
+        return finished
+
+    # draw bottom description window を描画する
+    def draw_bottom_description_window (self ,bg ,fnt ,desc ):
+        layout =self.get_dialog_window_layout (bg ,dlg_y_ratio =525 /720 )
+        self.draw_dialog_window (bg ,layout ,alpha =255 )
+        self.draw_dialog_text (bg ,fnt ,layout ,desc )
 
     # draw equip description を描画する
     def draw_equip_description (self ,bg ,fnt ):
@@ -2262,7 +2405,7 @@ class Game:
         elif not self.is_weapon_owned (self.equip_cursor ):
             desc =""
         else :
-            trap_id =self.display_index_to_trap_id (self.equip_cursor )
+            trap_id =self.display_index_to_weapon_id (self.equip_cursor )
             desc =WEAPON_INFO .get (trap_id ,"情報が登録されていません。")
         self.draw_bottom_description_window (bg ,fnt ,desc )
 
@@ -2319,15 +2462,15 @@ class Game:
         targets =[]
         if tool_id =="sword_polish":
             weapon_list =self.pl_sword
-            mapping =[(0 ,4 ),(1 ,7 ),(2 ,10 )]
+            mapping =[(0 ,2 ),(1 ,5 ),(2 ,8 )]
             group ="sword"
         elif tool_id =="shield_harden":
             weapon_list =self.pl_shield
-            mapping =[(0 ,2 ),(1 ,5 ),(2 ,8 )]
+            mapping =[(0 ,0 ),(1 ,3 ),(2 ,6 )]
             group ="shield"
         elif tool_id =="armor_patch":
             weapon_list =self.pl_armor
-            mapping =[(0 ,3 ),(1 ,6 ),(2 ,9 )]
+            mapping =[(0 ,1 ),(1 ,4 ),(2 ,7 )]
             group ="armor"
         else :
             return targets
@@ -2338,7 +2481,7 @@ class Game:
                     "group":group ,
                     "slot":slot ,
                     "trap_id":trap_id ,
-                    "name":TRAP_NAME [trap_id ],
+                    "name":WPN_NAME [trap_id ],
                     "level":weapon_list [slot ],
                     "can_upgrade":weapon_list [slot ]<99 ,
                 })
@@ -2674,8 +2817,8 @@ class Game:
             y = start_y + r * (cell_h + gap_y)
             pygame.draw.rect(bg, WHITE, [x, y, cell_w, cell_h], 1)
             owned = self.is_weapon_owned(i)
-            trap_id = self.display_index_to_trap_id(i)
-            label = TRAP_NAME[trap_id] if owned else "？"
+            trap_id = self.display_index_to_weapon_id(i)
+            label = WPN_NAME[trap_id] if owned else "？"
             self.draw_text(bg, label, x + 8, y + cell_h // 2 - 10, fnt, WHITE)
             if self.is_weapon_equipped_index(i):
                 pygame.draw.rect(bg, GREEN, [x + 2, y + 2, cell_w - 4, cell_h - 4], 2)
@@ -3747,6 +3890,20 @@ class Game:
                             self.init_event_talk ()
                             self.idx =132
                             self.tmr =0
+                    elif front_tile ==13:
+                        if self.tutorial_enabled and self.floor ==1:
+                            stage =self.tutorial_stage_for_wall ((tx ,ty ))
+                            if stage >0 and self.init_tutorial_talk (stage ):
+                                self.idx =132
+                                self.tmr =0
+                            else:
+                                self.init_info_talk()
+                                self.idx =132
+                                self.tmr =0
+                        else:
+                            self.init_info_talk()
+                            self.idx =132
+                            self.tmr =0
                     elif front_tile ==7:
                         if self.tutorial_enabled and self.floor ==1:
                             stage =self.tutorial_stage_for_wall ((tx ,ty ))
@@ -3900,63 +4057,30 @@ class Game:
                     self.item_popup_text =""
                     self.idx =100 
 
-            elif self.idx ==121 :# 武器入手もしくはダメージ床
-                self.draw_dungeon (screen ,fontS )
-                if self.tmr ==1 :
-                    x = win_x + win_w//2 - 42
-                    y = title_top +int (title_h *0.4 )
-                dialog = pygame.Surface((400, 100), pygame.SRCALPHA)
-                dialog.fill((0, 0, 0, 100))
-                screen.blit(dialog, [x-100, y-40])
-                if self.trap ==0 :
-                    self.draw_text (screen ,TRAP_NAME [self.trap ]+" {}".format (30 -10 *((self.floor -1 )//10 )),x ,y ,font ,WHITE )
-                elif self.trap ==1 :
-                    self.draw_text (screen ,TRAP_NAME [self.trap ]+" +{}".format (-20 +10 *((self.floor -1 )//10 )),x ,y ,font ,WHITE )
-                else :
-                    self.draw_text (screen ,TRAP_NAME [self.trap ]+" Lv. "+str (self.wpn_lev ),x ,y ,font ,WHITE )
-                if self.tmr ==10 :
-                    self.idx =100 
-
             elif self.idx ==130 :# ボス会話
                 self.draw_dungeon (screen ,fontS )
-                view_rect =getattr (self ,"dungeon_view_rect",None )
-                view_left ,view_top ,view_w ,view_h =view_rect
-                scale_x =view_w /880 
-                scale_y =view_h /720 
-                dlg_x =view_left +int (40 *scale_x )
-                dlg_y =view_top +int (520 *scale_y )
-                dlg_w =max (1 ,int (800 *scale_x ))
-                dlg_h =max (1 ,int (160 *scale_y ))
-                text_x =view_left +int (60 *scale_x )
-                text_y =view_top +int (560 *scale_y )
-                line_h =max (1 ,int (28 *scale_y ))
-                prompt_x =view_left +int (700 *scale_x )
-                prompt_y =view_top +int (640 *scale_y )
-                pygame .draw .rect (screen ,BLACK ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ])
-                pygame .draw .rect (screen ,WHITE ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ],2 )
-                if self.boss_talk_index <len (self.boss_talk_lines ):
-                    line = self.boss_talk_lines [self.boss_talk_index ]
-                    now = pygame.time.get_ticks()
-                    if self.boss_talk_char_count < len(line) and now - self.boss_talk_last_tick >= 100:
-                        self.boss_talk_char_count += 1
-                        self.boss_talk_last_tick = now
-                    visible = line [:self.boss_talk_char_count ]
-                    parts = visible.split("\n")
-                    for i, part in enumerate(parts):
-                        self.draw_text (screen ,part ,text_x ,text_y + i *line_h ,fontS ,WHITE )
-                self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
+                layout =self.get_dialog_window_layout (screen ,dlg_y_ratio =520 /720 )
+                self.draw_dialog_window (screen ,layout ,alpha =255 )
+                visible ,self.boss_talk_index ,self.boss_talk_char_count ,self.boss_talk_last_tick =self.step_talk_text (
+                    self.boss_talk_lines ,
+                    self.boss_talk_index ,
+                    self.boss_talk_char_count ,
+                    self.boss_talk_last_tick
+                )
+                self.draw_dialog_text (screen ,fontS ,layout ,visible )
+                self.draw_text (screen ,"[A]/[Enter]",layout ["prompt_x"],layout ["prompt_y"],fontS ,WHITE )
                 if accept:
-                    if self.boss_talk_index <len (self.boss_talk_lines ):
-                        line = self.boss_talk_lines [self.boss_talk_index ]
-                        if self.boss_talk_char_count < len(line):
-                            self.boss_talk_char_count = len(line)
-                        else:
-                            if self.boss_talk_kind == "init" and self.floor ==40 and self.boss_talk_index ==0 :
-                                se [2 ].play ()
-                                self.pl_life =self.pl_lifemax 
-                            self.boss_talk_index +=1 
-                            self.boss_talk_char_count = 0
-                            self.boss_talk_last_tick = pygame.time.get_ticks()
+                    before_index =self.boss_talk_index
+                    self.boss_talk_index ,self.boss_talk_char_count ,self.boss_talk_last_tick ,_ =self.advance_talk_text (
+                        self.boss_talk_lines ,
+                        self.boss_talk_index ,
+                        self.boss_talk_char_count ,
+                        self.boss_talk_last_tick
+                    )
+                    if (before_index !=self.boss_talk_index and
+                        self.boss_talk_kind == "init" and self.floor ==40 and before_index ==0 ):
+                        se [2 ].play ()
+                        self.pl_life =self.pl_lifemax 
                     if self.boss_talk_index >=len (self.boss_talk_lines ):
                         self.truth_fragment_drop_battle =False
                         if self.boss_talk_kind == "end":
@@ -3973,46 +4097,23 @@ class Game:
 
             elif self.idx ==133 :# ラスボス会話
                 self.draw_dungeon (screen ,fontS )
-                view_rect =getattr (self ,"dungeon_view_rect",None )
-                if view_rect :
-                    view_left ,view_top ,view_w ,view_h =view_rect
-                else :
-                    view_left =0 
-                    view_top =0 
-                    view_w ,view_h =screen .get_size ()
-                scale_x =view_w /880 
-                scale_y =view_h /720 
-                dlg_x =view_left +int (40 *scale_x )
-                dlg_y =view_top +int (520 *scale_y )
-                dlg_w =max (1 ,int (800 *scale_x ))
-                dlg_h =max (1 ,int (160 *scale_y ))
-                text_x =view_left +int (60 *scale_x )
-                text_y =view_top +int (560 *scale_y )
-                line_h =max (1 ,int (28 *scale_y ))
-                prompt_x =view_left +int (700 *scale_x )
-                prompt_y =view_top +int (640 *scale_y )
-                pygame .draw .rect (screen ,BLACK ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ])
-                pygame .draw .rect (screen ,WHITE ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ],2 )
-                if self.boss_talk_index <len (self.boss_talk_lines ):
-                    line = self.boss_talk_lines [self.boss_talk_index ]
-                    now = pygame.time.get_ticks()
-                    if self.boss_talk_char_count < len(line) and now - self.boss_talk_last_tick >= 100:
-                        self.boss_talk_char_count += 1
-                        self.boss_talk_last_tick = now
-                    visible = line [:self.boss_talk_char_count ]
-                    parts = visible.split("\n")
-                    for i, part in enumerate(parts):
-                        self.draw_text (screen ,part ,text_x ,text_y + i *line_h ,fontS ,WHITE )
-                self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
+                layout =self.get_dialog_window_layout (screen ,dlg_y_ratio =520 /720 )
+                self.draw_dialog_window (screen ,layout ,alpha =255 )
+                visible ,self.boss_talk_index ,self.boss_talk_char_count ,self.boss_talk_last_tick =self.step_talk_text (
+                    self.boss_talk_lines ,
+                    self.boss_talk_index ,
+                    self.boss_talk_char_count ,
+                    self.boss_talk_last_tick
+                )
+                self.draw_dialog_text (screen ,fontS ,layout ,visible )
+                self.draw_text (screen ,"[A]/[Enter]",layout ["prompt_x"],layout ["prompt_y"],fontS ,WHITE )
                 if accept:
-                    if self.boss_talk_index <len (self.boss_talk_lines ):
-                        line = self.boss_talk_lines [self.boss_talk_index ]
-                        if self.boss_talk_char_count < len(line):
-                            self.boss_talk_char_count = len(line)
-                        else:
-                            self.boss_talk_index +=1 
-                            self.boss_talk_char_count = 0
-                            self.boss_talk_last_tick = pygame.time.get_ticks()
+                    self.boss_talk_index ,self.boss_talk_char_count ,self.boss_talk_last_tick ,_ =self.advance_talk_text (
+                        self.boss_talk_lines ,
+                        self.boss_talk_index ,
+                        self.boss_talk_char_count ,
+                        self.boss_talk_last_tick
+                    )
                     if self.boss_talk_index >=len (self.boss_talk_lines ):
                         if self.last_talk_mode == 2:
                             self.idx =82 
@@ -4023,61 +4124,33 @@ class Game:
 
             elif self.idx ==131 :# itemWallイベント
                 self.draw_dungeon (screen ,fontS )
-                view_rect =getattr (self ,"dungeon_view_rect",None )
-                if view_rect :
-                    view_left ,view_top ,view_w ,view_h =view_rect
-                else :
-                    view_left =0 
-                    view_top =0 
-                    view_w ,view_h =screen .get_size ()
-                scale_x =view_w /880 
-                scale_y =view_h /720 
-                dlg_x =view_left +int (40 *scale_x )
-                dlg_y =view_top +int (525 *scale_y )
-                dlg_w =max (1 ,int (800 *scale_x ))
-                dlg_h =max (1 ,int (160 *scale_y ))
-                text_x =view_left +int (60 *scale_x )
-                text_y =view_top +int (560 *scale_y )
-                line_h =max (1 ,int (28 *scale_y ))
-                prompt_x =view_left +int (700 *scale_x )
-                prompt_y =view_top +int (640 *scale_y )
+                layout =self.get_dialog_window_layout (screen ,dlg_y_ratio =525 /720 )
+                view_left =layout ["view_left"]
+                view_top =layout ["view_top"]
+                view_w =layout ["view_w"]
+                view_h =layout ["view_h"]
+                scale_x =layout ["scale_x"]
+                scale_y =layout ["scale_y"]
+                text_x =layout ["text_x"]
+                text_y =layout ["text_y"]
+                line_h =layout ["line_h"]
+                prompt_x =layout ["prompt_x"]
+                prompt_y =layout ["prompt_y"]
                 dialog_alpha = 255
                 if self.item_event_phase == 1:
                     dialog_alpha = 100
-                dialog = pygame.Surface((dlg_w, dlg_h), pygame.SRCALPHA)
-                dialog.fill((0, 0, 0, dialog_alpha))
-                screen.blit(dialog, [dlg_x, dlg_y])
-                pygame .draw .rect (screen ,WHITE ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ],2 )
+                self.draw_dialog_window (screen ,layout ,alpha =dialog_alpha )
                 if self.item_event_kind == "floor99_offer":
                     if self.item_event_phase in (0 ,2 ,3 ):
-                        if self.item_talk_index <len (self.item_talk_lines ):
-                            line =self.item_talk_lines [self.item_talk_index ]
-                            now =pygame .time .get_ticks ()
-                            if self.item_talk_char_count <len (line )and now -self.item_talk_last_tick >=100 :
-                                self.item_talk_char_count +=1
-                                self.item_talk_last_tick =now
-                            visible =line [:self.item_talk_char_count ]
-                            parts =visible .split ("\n")
-                            for i ,part in enumerate (parts ):
-                                self.draw_text (screen ,part ,text_x ,text_y +i *line_h ,fontS ,WHITE )
-                        self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
-                        if accept:
-                            if self.item_talk_index <len (self.item_talk_lines ):
-                                line =self.item_talk_lines [self.item_talk_index ]
-                                if self.item_talk_char_count <len (line ):
-                                    self.item_talk_char_count =len (line )
-                                else:
-                                    self.item_talk_index +=1
-                                    self.item_talk_char_count =0
-                                    self.item_talk_last_tick =pygame .time .get_ticks ()
-                            if self.item_talk_index >=len (self.item_talk_lines ):
-                                if self.item_event_phase ==0 :
-                                    self.item_event_phase =1
-                                elif self.item_event_phase ==2 :
-                                    self.start_floor99_trial_battle ()
-                                else:
-                                    self.idx =100
-                                    self.tmr =0
+                        finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
+                        if finished:
+                            if self.item_event_phase ==0 :
+                                self.item_event_phase =1
+                            elif self.item_event_phase ==2 :
+                                self.start_floor99_trial_battle ()
+                            else:
+                                self.idx =100
+                                self.tmr =0
                     elif self.item_event_phase ==1 :
                         options =["はい","いいえ"]
                         sel_line_h =max (1 ,int (25 *scale_y ))
@@ -4115,51 +4188,32 @@ class Game:
                         self.idx =100
                         self.tmr =0
                     elif self.item_event_phase in (0 ,2 ,4 ):
-                        if self.item_talk_index <len (self.item_talk_lines ):
-                            line =self.item_talk_lines [self.item_talk_index ]
-                            now =pygame .time .get_ticks ()
-                            if self.item_talk_char_count <len (line )and now -self.item_talk_last_tick >=100 :
-                                self.item_talk_char_count +=1
-                                self.item_talk_last_tick =now
-                            visible =line [:self.item_talk_char_count ]
-                            parts =visible .split ("\n")
-                            for i ,part in enumerate (parts ):
-                                self.draw_text (screen ,part ,text_x ,text_y +i *line_h ,fontS ,WHITE )
-                        self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
-                        if accept:
-                            if self.item_talk_index <len (self.item_talk_lines ):
-                                line =self.item_talk_lines [self.item_talk_index ]
-                                if self.item_talk_char_count <len (line ):
-                                    self.item_talk_char_count =len (line )
+                        finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
+                        if finished:
+                            if self.item_event_phase ==0 :
+                                if self.item_event_kind =="floor99_after":
+                                    self.truth_fragment =min (100 ,self.truth_fragment +self.floor99_trial_total )
+                                    self.item_event_popup_timer =0
+                                    self.item_event_phase =1
                                 else:
-                                    self.item_talk_index +=1
-                                    self.item_talk_char_count =0
-                                    self.item_talk_last_tick =pygame .time .get_ticks ()
-                            if self.item_talk_index >=len (self.item_talk_lines ):
-                                if self.item_event_phase ==0 :
-                                    if self.item_event_kind =="floor99_after":
-                                        self.truth_fragment =min (100 ,self.truth_fragment +self.floor99_trial_total )
-                                        self.item_event_popup_timer =0
-                                        self.item_event_phase =1
-                                    else:
-                                        self.item_event_phase =3
-                                elif self.item_event_phase ==2 :
                                     self.item_event_phase =3
-                                elif self.item_event_phase ==4 :
-                                    selected =self.item_reward if self.item_reward is not None else self.item_choice
-                                    selected =max (0 ,min (selected ,len (reward_entries )-1 ))
-                                    self.treasure =reward_entries [selected ]["treasure"]
-                                    self.dungeon [self.pl_y -1 ][self.pl_x ]=9
-                                    self.floor99_trial_battle_active =False
-                                    self.floor99_trial_post_pending =False
-                                    self.floor99_trial_missing =0
-                                    self.floor99_trial_total =0
-                                    self.idx =120
-                                    self.tmr =0
-                                if self.item_event_phase in (3 ,4 ):
-                                    self.item_talk_index =0
-                                    self.item_talk_char_count =0
-                                    self.item_talk_last_tick =pygame .time .get_ticks ()
+                            elif self.item_event_phase ==2 :
+                                self.item_event_phase =3
+                            elif self.item_event_phase ==4 :
+                                selected =self.item_reward if self.item_reward is not None else self.item_choice
+                                selected =max (0 ,min (selected ,len (reward_entries )-1 ))
+                                self.treasure =reward_entries [selected ]["treasure"]
+                                self.dungeon [self.pl_y -1 ][self.pl_x ]=9
+                                self.floor99_trial_battle_active =False
+                                self.floor99_trial_post_pending =False
+                                self.floor99_trial_missing =0
+                                self.floor99_trial_total =0
+                                self.idx =120
+                                self.tmr =0
+                            if self.item_event_phase in (3 ,4 ):
+                                self.item_talk_index =0
+                                self.item_talk_char_count =0
+                                self.item_talk_last_tick =pygame .time .get_ticks ()
                         self.tmr =0
                     elif self.item_event_phase ==1 :
                         win_w =360
@@ -4217,42 +4271,23 @@ class Game:
 
                 elif self.item_event_kind == "true_episode_event":
                     if self.item_event_phase in (0, 2):
-                        if self.item_talk_index <len (self.item_talk_lines ):
-                            line = self.item_talk_lines [self.item_talk_index ]
-                            now = pygame.time.get_ticks()
-                            if self.item_talk_char_count < len(line) and now - self.item_talk_last_tick >= 100:
-                                self.item_talk_char_count += 1
-                                self.item_talk_last_tick = now
-                            visible = line [:self.item_talk_char_count ]
-                            parts = visible.split("\n")
-                            for i, part in enumerate(parts):
-                                self.draw_text (screen ,part ,text_x ,text_y + i *line_h ,fontS ,WHITE )
-                        self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
-                        if accept:
-                            if self.item_talk_index <len (self.item_talk_lines ):
-                                line = self.item_talk_lines [self.item_talk_index ]
-                                if self.item_talk_char_count < len(line):
-                                    self.item_talk_char_count = len(line)
+                        finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
+                        if finished:
+                            if self.item_event_phase == 0:
+                                if self.truth_fragment >=100:
+                                    self.item_talk_lines =FLOOR100_EVENT_USE_FRAGMENT_PROMPT
+                                    self.item_talk_index =0
+                                    self.item_talk_char_count =0
+                                    self.item_talk_last_tick =pygame.time.get_ticks()
+                                    self.item_choice =0
+                                    self.item_event_phase =1
                                 else:
-                                    self.item_talk_index +=1
-                                    self.item_talk_char_count = 0
-                                    self.item_talk_last_tick = pygame.time.get_ticks()
-                            if self.item_talk_index >=len (self.item_talk_lines ):
-                                if self.item_event_phase == 0:
-                                    if self.truth_fragment >=100:
-                                        self.item_talk_lines =FLOOR100_EVENT_USE_FRAGMENT_PROMPT
-                                        self.item_talk_index =0
-                                        self.item_talk_char_count =0
-                                        self.item_talk_last_tick =pygame.time.get_ticks()
-                                        self.item_choice =0
-                                        self.item_event_phase =1
-                                    else:
-                                        self.idx =100
-                                        self.tmr =0
-                                else:
-                                    self.true_episode_heard =True
                                     self.idx =100
                                     self.tmr =0
+                            else:
+                                self.true_episode_heard =True
+                                self.idx =100
+                                self.tmr =0
                     elif self.item_event_phase == 1:
                         if self.item_talk_index <len (self.item_talk_lines ):
                             line = self.item_talk_lines [self.item_talk_index ]
@@ -4294,109 +4329,33 @@ class Game:
                                 self.idx =100
                                 self.tmr =0
                 elif self.item_event_kind in ("true_episode_event_replay","true_episode"):
-                    if self.item_talk_index <len (self.item_talk_lines ):
-                        line = self.item_talk_lines [self.item_talk_index ]
-                        now = pygame.time.get_ticks()
-                        if self.item_talk_char_count < len(line) and now - self.item_talk_last_tick >= 100:
-                            self.item_talk_char_count += 1
-                            self.item_talk_last_tick = now
-                        visible = line [:self.item_talk_char_count ]
-                        parts = visible.split("\n")
-                        for i, part in enumerate(parts):
-                            self.draw_text (screen ,part ,text_x ,text_y + i *line_h ,fontS ,WHITE )
-                    self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
-                    if accept:
-                        if self.item_talk_index <len (self.item_talk_lines ):
-                            line = self.item_talk_lines [self.item_talk_index ]
-                            if self.item_talk_char_count < len(line):
-                                self.item_talk_char_count = len(line)
-                            else:
-                                self.item_talk_index +=1
-                                self.item_talk_char_count = 0
-                                self.item_talk_last_tick = pygame.time.get_ticks()
-                        if self.item_talk_index >=len (self.item_talk_lines ):
-                            self.true_episode_heard = True
-                            self.idx =100
-                            self.tmr =0
+                    finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
+                    if finished:
+                        self.true_episode_heard = True
+                        self.idx =100
+                        self.tmr =0
                 elif self.item_event_kind in ("blocked","locked_stairs","floor99_need"):
-                    if self.item_talk_index <len (self.item_talk_lines ):
-                        line = self.item_talk_lines [self.item_talk_index ]
-                        now =pygame .time .get_ticks ()
-                        if self.item_talk_char_count <len (line )and now -self.item_talk_last_tick >=100 :
-                            self.item_talk_char_count +=1
-                            self.item_talk_last_tick =now
-                        visible =line [:self.item_talk_char_count ]
-                        parts =visible .split ("\n")
-                        for i ,part in enumerate (parts ):
-                            self.draw_text (screen ,part ,text_x ,text_y +i *line_h ,fontS ,WHITE )
-                    self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
-                    if accept:
-                        if self.item_talk_index <len (self.item_talk_lines ):
-                            line =self.item_talk_lines [self.item_talk_index ]
-                            if self.item_talk_char_count <len (line ):
-                                self.item_talk_char_count =len (line )
-                            else:
-                                self.item_talk_index +=1
-                                self.item_talk_char_count =0
-                                self.item_talk_last_tick =pygame .time .get_ticks ()
-                        if self.item_talk_index >=len (self.item_talk_lines ):
-                            self.idx =100
-                            self.tmr =0
+                    finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
+                    if finished:
+                        self.idx =100
+                        self.tmr =0
                 elif self.item_event_kind == "weapon_set":
-                    if self.item_talk_index <len (self.item_talk_lines ):
-                        line = self.item_talk_lines [self.item_talk_index ]
-                        now =pygame .time .get_ticks ()
-                        if self.item_talk_char_count <len (line )and now -self.item_talk_last_tick >=100 :
-                            self.item_talk_char_count +=1
-                            self.item_talk_last_tick =now
-                        visible =line [:self.item_talk_char_count ]
-                        parts =visible .split ("\n")
-                        for i ,part in enumerate (parts ):
-                            self.draw_text (screen ,part ,text_x ,text_y +i *line_h ,fontS ,WHITE )
-                    self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
-                    if accept:
-                        if self.item_talk_index <len (self.item_talk_lines ):
-                            line =self.item_talk_lines [self.item_talk_index ]
-                            if self.item_talk_char_count <len (line ):
-                                self.item_talk_char_count =len (line )
-                            else:
-                                self.item_talk_index +=1
-                                self.item_talk_char_count =0
-                                self.item_talk_last_tick =pygame .time .get_ticks ()
-                        if self.item_talk_index >=len (self.item_talk_lines ):
-                            self.grant_weapon_set_for_floor (self.floor )
-                            self.item_popup_text ="武具セット"
-                            self.dungeon [self.pl_y -1 ][self.pl_x ]=9
-                            self.idx =120
-                            self.tmr =0
+                    finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
+                    if finished:
+                        self.grant_weapon_set_for_floor (self.floor )
+                        self.item_popup_text ="武具セット"
+                        self.dungeon [self.pl_y -1 ][self.pl_x ]=9
+                        self.idx =120
+                        self.tmr =0
                 elif self.item_event_kind == "fairy_upgrade":
                     if self.item_event_phase in (0, 2):
-                        if self.item_talk_index <len (self.item_talk_lines ):
-                            line = self.item_talk_lines [self.item_talk_index ]
-                            now = pygame.time.get_ticks()
-                            if self.item_talk_char_count < len(line) and now - self.item_talk_last_tick >= 100:
-                                self.item_talk_char_count += 1
-                                self.item_talk_last_tick = now
-                            visible = line [:self.item_talk_char_count ]
-                            parts = visible.split("\n")
-                            for i, part in enumerate(parts):
-                                self.draw_text (screen ,part ,text_x ,text_y + i *line_h ,fontS ,WHITE )
-                        self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
-                        if accept:
-                            if self.item_talk_index <len (self.item_talk_lines ):
-                                line = self.item_talk_lines [self.item_talk_index ]
-                                if self.item_talk_char_count < len(line):
-                                    self.item_talk_char_count = len(line)
-                                else:
-                                    self.item_talk_index +=1
-                                    self.item_talk_char_count = 0
-                                    self.item_talk_last_tick = pygame.time.get_ticks()
-                            if self.item_talk_index >=len (self.item_talk_lines ):
-                                if self.item_event_phase == 0:
-                                    self.item_event_phase = 1
-                                elif self.item_event_phase == 2:
-                                    self.idx =100
-                                    self.tmr =0
+                        finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
+                        if finished:
+                            if self.item_event_phase == 0:
+                                self.item_event_phase = 1
+                            elif self.item_event_phase == 2:
+                                self.idx =100
+                                self.tmr =0
                         self.tmr =0
                     elif self.item_event_phase == 1:
                         options = ["傷薬", "爆弾", "守護"]
@@ -4438,35 +4397,16 @@ class Game:
                         self.idx =100
                         self.tmr =0
                     elif self.item_event_phase in (0, 2):
-                        if self.item_talk_index <len (self.item_talk_lines ):
-                            line = self.item_talk_lines [self.item_talk_index ]
-                            now = pygame.time.get_ticks()
-                            if self.item_talk_char_count < len(line) and now - self.item_talk_last_tick >= 100:
-                                self.item_talk_char_count += 1
-                                self.item_talk_last_tick = now
-                            visible = line [:self.item_talk_char_count ]
-                            parts = visible.split("\n")
-                            for i, part in enumerate(parts):
-                                self.draw_text (screen ,part ,text_x ,text_y + i *line_h ,fontS ,WHITE )
-                        self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
-                        if accept:
-                            if self.item_talk_index <len (self.item_talk_lines ):
-                                line = self.item_talk_lines [self.item_talk_index ]
-                                if self.item_talk_char_count < len(line):
-                                    self.item_talk_char_count = len(line)
-                                else:
-                                    self.item_talk_index +=1 
-                                    self.item_talk_char_count = 0
-                                    self.item_talk_last_tick = pygame.time.get_ticks()
-                            if self.item_talk_index >=len (self.item_talk_lines ):
-                                if self.item_event_phase == 0:
-                                    self.item_event_phase = 1
-                                elif self.item_event_phase == 2:
-                                    selected =self.item_reward if self.item_reward is not None else self.item_choice
-                                    selected =max (0 ,min (selected ,len (reward_entries )-1 ))
-                                    self.treasure =reward_entries [selected ]["treasure"]
-                                    self.dungeon [self.pl_y -1 ][self.pl_x ]=9
-                                    self.idx =120
+                        finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
+                        if finished:
+                            if self.item_event_phase == 0:
+                                self.item_event_phase = 1
+                            elif self.item_event_phase == 2:
+                                selected =self.item_reward if self.item_reward is not None else self.item_choice
+                                selected =max (0 ,min (selected ,len (reward_entries )-1 ))
+                                self.treasure =reward_entries [selected ]["treasure"]
+                                self.dungeon [self.pl_y -1 ][self.pl_x ]=9
+                                self.idx =120
                         self.tmr =0 
                     elif self.item_event_phase == 1:
                         options =[entry ["label"]for entry in reward_entries ]
@@ -4502,46 +4442,23 @@ class Game:
 
             elif self.idx ==132 :# eventWall会話
                 self.draw_dungeon (screen ,fontS )
-                view_rect =getattr (self ,"dungeon_view_rect",None )
-                if view_rect :
-                    view_left ,view_top ,view_w ,view_h =view_rect
-                else :
-                    view_left =0 
-                    view_top =0 
-                    view_w ,view_h =screen .get_size ()
-                scale_x =view_w /880 
-                scale_y =view_h /720 
-                dlg_x =view_left +int (40 *scale_x )
-                dlg_y =view_top +int (520 *scale_y )
-                dlg_w =max (1 ,int (800 *scale_x ))
-                dlg_h =max (1 ,int (160 *scale_y ))
-                text_x =view_left +int (60 *scale_x )
-                text_y =view_top +int (560 *scale_y )
-                line_h =max (1 ,int (28 *scale_y ))
-                prompt_x =view_left +int (700 *scale_x )
-                prompt_y =view_top +int (640 *scale_y )
-                pygame .draw .rect (screen ,BLACK ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ])
-                pygame .draw .rect (screen ,WHITE ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ],2 )
-                if self.event_talk_index <len (self.event_talk_lines ):
-                    line = self.event_talk_lines [self.event_talk_index ]
-                    now = pygame.time.get_ticks()
-                    if self.event_talk_char_count < len(line) and now - self.event_talk_last_tick >= 100:
-                        self.event_talk_char_count += 1
-                        self.event_talk_last_tick = now
-                    visible = line [:self.event_talk_char_count ]
-                    parts = visible.split("\n")
-                    for i, part in enumerate(parts):
-                        self.draw_text (screen ,part ,text_x ,text_y + i *line_h ,fontS ,WHITE )
-                self.draw_text (screen ,"[A]/[Enter]",prompt_x ,prompt_y ,fontS ,WHITE )
+                layout =self.get_dialog_window_layout (screen ,dlg_y_ratio =520 /720 )
+                self.draw_dialog_window (screen ,layout ,alpha =255 )
+                visible ,self.event_talk_index ,self.event_talk_char_count ,self.event_talk_last_tick =self.step_talk_text (
+                    self.event_talk_lines ,
+                    self.event_talk_index ,
+                    self.event_talk_char_count ,
+                    self.event_talk_last_tick
+                )
+                self.draw_dialog_text (screen ,fontS ,layout ,visible )
+                self.draw_text (screen ,"[A]/[Enter]",layout ["prompt_x"],layout ["prompt_y"],fontS ,WHITE )
                 if accept:
-                    if self.event_talk_index <len (self.event_talk_lines ):
-                        line = self.event_talk_lines [self.event_talk_index ]
-                        if self.event_talk_char_count < len(line):
-                            self.event_talk_char_count = len(line)
-                        else:
-                            self.event_talk_index +=1 
-                            self.event_talk_char_count = 0
-                            self.event_talk_last_tick = pygame.time.get_ticks()
+                    self.event_talk_index ,self.event_talk_char_count ,self.event_talk_last_tick ,_ =self.advance_talk_text (
+                        self.event_talk_lines ,
+                        self.event_talk_index ,
+                        self.event_talk_char_count ,
+                        self.event_talk_last_tick
+                    )
                     if self.event_talk_index >=len (self.event_talk_lines ):
                         if self.tutorial_enabled and self.tutorial_active_stage >0 :
                             self.complete_tutorial_talk ()
@@ -5232,14 +5149,11 @@ class Game:
                     else :
                         self.set_message ("　逃走に失敗した！")
                 if self.tmr ==15 :
-                    if self.emy_typ ==116 or self.emy_typ ==120 :
-                        self.idx =232 
-                        self.tmr =0 
                     if self.emy_typ ==119 :
                         self.idx =235 
                         self.tmr =0 
                     else :
-                        self.idx =230 
+                        self.idx =230
                         self.tmr =0 
 
 

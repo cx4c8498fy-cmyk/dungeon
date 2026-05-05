@@ -36,8 +36,6 @@ def load_images(base_path: str) -> ImageAssets:
         pygame.image.load(base_path + "/image/cocoon/cocoon0.png"),
         pygame.image.load(base_path + "/image/stairs.png"),
         pygame.image.load(base_path + "/image/wbox.png"),
-        pygame.image.load(base_path + "/image/floor_dmg.png"),
-        pygame.image.load(base_path + "/image/floor_cure.png"),
         pygame.image.load(base_path + "/image/wall_item.png"),
     ]
     img_players = [
