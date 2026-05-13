@@ -1063,11 +1063,11 @@ class Game:
         return self.boss_map_cache[cache_key]
 
     # dungeonマップ を生成する
-    def make_dungeon (self ):
+    def make_dungeon (self ,ignore_fixed =False ):
         self.fixed_floor_data = None
         self.last_talk_mode = 1
         self.reset_tutorial_runtime()
-        fixed_data = self.load_fixed_floor_data(self.floor)
+        fixed_data =None if ignore_fixed else self.load_fixed_floor_data(self.floor)
         if fixed_data:
             self.dungeon = fixed_data["dungeon"]
             self.fixed_floor_data = fixed_data
@@ -1241,7 +1241,8 @@ class Game:
         if self.truth_fragment_collected_current_floor:
             star_x =floor_x +fnt .size (floor_text )[0 ]+12
             self.draw_text (bg ,"★",star_x ,floor_y ,fnt ,GOLD )
-        self.draw_para (bg ,fnt ,bg_rect )# 主人公の能力を表示
+        if self.idx !=85 :
+            self.draw_para (bg ,fnt ,bg_rect )# 主人公の能力を表示
 
     # event の配置
     def put_event (self ):
@@ -1319,7 +1320,7 @@ class Game:
         if cocoon_cells: # 真実の繭の配置
             sx ,sy =random .choice (cocoon_cells )
             self.dungeon [sy ][sx ]=10
-        if not self.floor in {1, 100}:
+        if self.floor !=100:
             self.pl_x, self.pl_y = take_cells(1)[0] # プレイヤーの初期位置
         self.pl_d =1 
         self.pl_a =5 
@@ -1777,7 +1778,6 @@ class Game:
 
     # 文章スクロール演出を描画する
     def draw_story_scroll(self, bg, fnt, key, lines, line_duration, fade_in, end_hold, end_fade, lock_attr=None, complete_callback=None):
-        max_lines =12
         line_height =32
         total_duration =len (lines )*line_duration
 
@@ -1802,6 +1802,8 @@ class Game:
         bg_left ,bg_top ,bg_w ,bg_h =bg_rect
         text_x =bg_left +int (bg_w *0.1 )
         start_y =bg_top +90
+        text_bottom =bg_top +int (bg_h *0.8 )
+        max_lines =max (1 ,(text_bottom -start_y )//line_height +1 )
         skip_label ="[S]kip"
         skip_x =bg_left +bg_w -int (bg_w *0.1 )-fnt .size (skip_label )[0 ]
         self.draw_text (bg ,skip_label ,skip_x ,bg_top +40 ,fnt ,WHITE )
@@ -1889,26 +1891,6 @@ class Game:
             end_fade =30
         )
 
-    # end roll を描画する
-    def draw_end_roll (self ,bg ,fnt ,key ):
-        lines = END_ROLL
-        line_height =36 
-        speed =2
-        start_y =720 +line_height 
-        y0 =start_y -self.tmr *speed 
-
-        bg .fill (BLACK )
-        for i, txt in enumerate(lines):
-            y =y0 +i *line_height 
-            if -line_height <= y <= 720 + line_height:
-                self.draw_text (bg ,txt ,240 ,y ,fnt ,WHITE )
-        finished = y0 +len (lines )*line_height < -line_height
-        if finished:
-            self.draw_text (bg ,"Press space key",320 ,640 ,fnt ,BLINK [self.tmr %6 ])
-            if key [K_SPACE ]==1 :
-                return True
-        return False
-
     # フォントを取得する
     def get_font (self ,size ):
         font_path =os .path .join (self.path ,"fonts","PixelMplus12-Regular.ttf")
@@ -1945,6 +1927,27 @@ class Game:
         self.draw_text (bg ,self.get_equipped_weapon_text ("shield","盾"),X +175 ,Y +40 ,fnt ,WHITE )
         self.draw_text (bg ,self.get_equipped_weapon_text ("armor","鎧"),X +175 ,Y +65 ,fnt ,WHITE )
         self.draw_text (bg ,self.get_equipped_weapon_text ("sword","剣"),X +175 ,Y +90 ,fnt ,WHITE )
+
+    # 回想中のクレジットウィンドウを描画する
+    def draw_recollection_credits (self ,bg ,fnt ,view_rect =None ):
+        panel =BATTLE_UI_LAYOUT ["player_panel"]
+        if view_rect :
+            view_left ,view_top ,view_w ,view_h =view_rect
+        else :
+            view_left =0
+            view_top =0
+            view_w ,view_h =bg .get_size ()
+        X =view_left +panel ["x_offset"]
+        W =panel ["width"]
+        line_h =24
+        H =max (panel ["height"],line_h *len (END_ROLL )+26 )
+        Y =view_top +panel ["top_margin"]
+        win =pygame .Surface ((W ,H ),pygame .SRCALPHA )
+        win .fill ((0 ,0 ,0 ,100 ))
+        bg .blit (win ,[X ,Y ])
+        self.draw_text (bg ,"CREDIT",X +10 ,Y +8 ,fnt ,WHITE )
+        for i ,line in enumerate (END_ROLL ):
+            self.draw_text (bg ,line ,X +10 ,Y +30 +i *line_h ,fnt ,WHITE )
 
     # ミニマップを更新する
     def update_minimap_grid (self ,new_seen ):
@@ -2184,7 +2187,8 @@ class Game:
             self.draw_text (bg ,f"{self.emy_name}  Lv.{self.emy_lev}",bg_left +enemy_layout ["label_x_offset"],enemy_name_y ,fnt ,WHITE )
         else :
             self.draw_text (bg ,f"{self.emy_name}",bg_left +enemy_layout ["label_x_offset"],enemy_name_y ,fnt ,WHITE )
-        self.draw_para (bg ,fnt ,bg_rect )# 主人公の能力を表示
+        if self.idx !=85 :
+            self.draw_para (bg ,fnt ,bg_rect )# 主人公の能力を表示
 
     # menu command の処理を行う
     def menu_command (self ,bg ,fnt ,key ):
@@ -3294,7 +3298,7 @@ class Game:
                 screen .fill (BLACK )
                 title_rect =self.blit_scaled_bg (screen ,self.imgTitle )
                 if self.title_mode == 0:
-                    options = ["はじめから", "つづきから"]
+                    options = ["はじめから", "つづきから", "ゲーム終了"]
                     selected = self.title_cmd
                     if key [K_UP ]and self.title_cmd >0 :
                         self.title_cmd -=1 
@@ -3305,8 +3309,11 @@ class Game:
                             self.prologue_input_lock = True
                             self.idx =10 
                             self.tmr =0 
-                        else:
+                        elif self.title_cmd ==1 :
                             self.title_mode = 1
+                        else:
+                            pygame .quit ()
+                            sys .exit ()
                 else:
                     if key [K_b ]or key [K_BACKSPACE ]:
                         self.title_mode = 0
@@ -3340,9 +3347,9 @@ class Game:
                 screen.blit(title_win, [win_x, win_y])
                 for i, label in enumerate (options ):
                     y = int(win_y + win_h//2 - ((rows-1) *0.5)* line_h + i * line_h) - 10
-                    x = win_x + win_w//2 - len(options[0])*0.5*6 - 30
+                    x = win_x +win_w //2 -fontS .size (label )[0 ]//2
                     if i == selected :
-                        self.draw_text (screen ,"▶",x - 30 ,y ,fontS ,WHITE )
+                        self.draw_text (screen ,"▶",x - 25 ,y ,fontS ,WHITE )
                     self.draw_text (screen ,label ,x ,y ,fontS ,WHITE )
 
             elif self.idx ==10 :# プロローグ
@@ -3874,27 +3881,9 @@ class Game:
                         self.draw_text (screen ,"▶",win_x +20 ,y ,fontS ,WHITE )
                     self.draw_text (screen ,label ,win_x +50 ,y ,fontS ,WHITE )
 
-            elif self.idx ==70 :# ゲームオーバー
-                if self.tmr <=30 :
-                    PL_TURN =[3 ,6 ,0 ,9 ]
-                    self.pl_a =PL_TURN [self.tmr %4 ]
-                    if self.tmr ==30 :self.pl_a =12 # 倒れた絵
-                    self.draw_dungeon (screen ,fontS )
-                elif self.tmr ==31 :
-                    se [3 ].play ()
-                elif self.tmr ==100 :
-                    self.idx =0 
-                    self.tmr =0 
-
-
             elif self.idx ==82 :# エピローグ
                 if self.draw_epilogue (screen ,fontS ,key ):
-                    self.idx =83 
-                    self.tmr =0 
-
-            elif self.idx ==83 :# エンドロール
-                if self.draw_end_roll (screen ,fontS ,key ):
-                    self.idx =0 
+                    self.idx =84 
                     self.tmr =0 
 
             elif self.idx ==84 :# ラスボス会話後フェードアウト
@@ -3905,8 +3894,6 @@ class Game:
                 fade .fill ((0 ,0 ,0 ,alpha ))
                 screen .blit (fade ,[0 ,0 ])
                 if self.tmr >=fade_frames :
-                    pygame .mixer .music .load (self.path +"/sound/bgm_title.wav")
-                    pygame .mixer .music .play (-1 )
                     self.recollection_stage =0
                     self.idx =85
                     self.tmr =0
@@ -3915,8 +3902,12 @@ class Game:
                 if self.tmr ==1 :
                     recollection_floor_index =self.recollection_stage
                     recollection_floor_value =recollection_floor_index *10 +1
+                    self.floor =recollection_floor_value
                     self.set_floor_assets (recollection_floor_index ,recollection_floor_value )
+                    self.make_dungeon (ignore_fixed =True )
+                    self.put_event ()
                 self.draw_dungeon (screen ,fontS )
+                self.draw_recollection_credits (screen ,fontS ,self.dungeon_view_rect )
                 fade_len =8
                 hold_len =8
                 cycle_len =fade_len *2 +hold_len
@@ -4255,10 +4246,14 @@ class Game:
                         self.boss_talk_last_tick
                     )
                     if self.boss_talk_index >=len (self.boss_talk_lines ):
+                        self.clear_save_payload =self.make_current_save_data ()
                         if self.last_talk_mode == 2:
+                            pygame .mixer .music .load (self.path +"/sound/bgm_title.wav")
+                            pygame .mixer .music .play (-1 )
                             self.idx =82 
                         else:
-                            self.clear_save_payload =self.make_current_save_data ()
+                            pygame .mixer .music .load (self.path +"/sound/bgm_title.wav")
+                            pygame .mixer .music .play (-1 )
                             self.idx =84 
                         self.tmr =0 
 
@@ -5399,10 +5394,22 @@ class Game:
                     self.floor99_trial_missing =0
                     self.floor99_trial_total =0
                     self.tutorial_pending_battle =""
-                    self.set_message ("負けてしまった")
-                if self.tmr ==11 :
-                    self.idx =70 
-                    self.tmr =29 
+                fade_frames =20
+                hold_frames =75
+                if self.tmr <=fade_frames :
+                    alpha =min (255 ,int (255 *self.tmr /fade_frames ))
+                    fade =pygame .Surface (screen .get_size (),pygame .SRCALPHA )
+                    fade .fill ((0 ,0 ,0 ,alpha ))
+                    screen .blit (fade ,[0 ,0 ])
+                else:
+                    screen .fill (BLACK )
+                    msg ="きみは　力尽きた……"
+                    msg_x =screen .get_size ()[0 ]//2 -font .size (msg )[0 ]//2
+                    msg_y =screen .get_size ()[1 ]//2 -font .get_height ()//2
+                    self.draw_text (screen ,msg ,msg_x ,msg_y ,font ,WHITE )
+                if self.tmr >=fade_frames +hold_frames :
+                    self.idx =0
+                    self.tmr =0
 
             elif self.idx ==243 :# レベルアップ
                 self.draw_battle (screen ,fontS )
