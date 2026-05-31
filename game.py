@@ -201,6 +201,7 @@ class Game:
         self.emy_powup = 1
         self.poison = 0
         self.emy_poison = 0
+        self.enemy115_forced_crit_delay = -1
         self.madoka = 0
         self.burn_turns = 0
         self.inferno = 0
@@ -247,7 +248,6 @@ class Game:
         self.move_bgm_start_time = 0.0
         self.keep_title_bgm_on_next_title = False
         self.recollection_stage = 0
-        self.clear_save_payload = None
         self.emy_skip_turn = False
         self.item_talk_lines = []
         self.item_talk_index = 0
@@ -351,9 +351,23 @@ class Game:
             levels.append(max(0, min(99, level)))
         return levels
 
+    # プレイヤー主要ステータスの上限値を返す
+    def get_player_stat_cap(self):
+        return 9999
+
+    # プレイヤー主要ステータスを上限内に丸める
+    def clamp_player_core_stats(self):
+        cap = self.get_player_stat_cap()
+        self.pl_lifemax = max(1, min(cap, int(self.pl_lifemax)))
+        self.pl_str = max(1, min(cap, int(self.pl_str)))
+        self.pl_magmax = max(0, min(cap, int(self.pl_magmax)))
+        self.pl_life = max(0, min(int(self.pl_life), self.pl_lifemax))
+        self.pl_mag = max(0, min(int(self.pl_mag), self.pl_magmax))
+
     # pl_magmax を更新する
     def refresh_pl_magmax(self):
-        self.pl_magmax = 1000 + (self.pl_level - 1) * 50
+        self.pl_magmax = min(self.get_player_stat_cap(), 1000 + (self.pl_level - 1) * 50)
+        self.pl_mag = max(0, min(self.pl_mag, self.pl_magmax))
 
     # 音量レベル(1〜5)を妥当な範囲に丸める
     def clamp_volume_level(self, level):
@@ -383,6 +397,37 @@ class Game:
     # pl_mag を増減させる
     def add_pl_mag(self, amount):
         self.pl_mag = max(0, min(self.pl_mag + amount, self.pl_magmax))
+
+    # 所持アイテム数を加算する（傷薬・爆弾・守護は99上限）
+    def add_inventory_count(self, attr, amount):
+        if amount == 0:
+            return
+        current = getattr(self, attr, 0)
+        next_value = current + amount
+        if attr in ("potion", "blazegem", "guard"):
+            next_value = min(99, next_value)
+        setattr(self, attr, next_value)
+
+    # 妖精強化レベルの上限値を返す
+    def get_fairy_upgrade_level_cap(self):
+        return 20
+
+    # 妖精強化対象の一覧を返す
+    def get_fairy_upgrade_targets(self):
+        cap = self.get_fairy_upgrade_level_cap()
+        return [
+            {"label": "傷薬", "attr": "potion_lv", "can_upgrade": self.potion_lv < cap},
+            {"label": "爆弾", "attr": "blazegem_lv", "can_upgrade": self.blazegem_lv < cap},
+            {"label": "守護", "attr": "guard_lv", "can_upgrade": self.guard_lv < cap},
+        ]
+
+    # 妖精強化の最初に選択可能な項目indexを返す
+    def get_first_fairy_upgrade_choice(self):
+        targets = self.get_fairy_upgrade_targets()
+        for i, target in enumerate(targets):
+            if target["can_upgrade"]:
+                return i
+        return -1
 
     # guardの効果を計算する
     def get_guard_damage_multiplier(self, target="player"):
@@ -422,7 +467,10 @@ class Game:
             if 0 <= fx < DUNGEON_W and 0 <= fy < DUNGEON_H and self.dungeon[fy][fx] == 11:
                 self.dungeon[fy][fx] = 0
         self.fairy_pos = None
-        self.init_item_event(kind="fairy_upgrade", lines=FAIRY_UPGRADE_TALK)
+        if self.get_first_fairy_upgrade_choice() < 0:
+            self.init_item_event(kind="fairy_upgrade_gone", lines=["神秘的な生き物は　どこかに消えていった"])
+        else:
+            self.init_item_event(kind="fairy_upgrade", lines=FAIRY_UPGRADE_TALK)
         self.idx = 131
         self.tmr = 0
 
@@ -586,6 +634,16 @@ class Game:
         self.emy_skip_turn =False
         self.enemy_poison_fail_count =0
         self.emy_poison =0
+        self.enemy115_forced_crit_delay =-1
+
+    # サイファトゥ(115)の遅延確定クリティカルを予約する
+    def queue_enemy115_forced_crit (self ,delay_turns ):
+        if self.emy_typ !=115 :
+            return
+        if self.enemy115_forced_crit_delay <0 :
+            self.enemy115_forced_crit_delay =delay_turns
+        else :
+            self.enemy115_forced_crit_delay =min (self.enemy115_forced_crit_delay ,delay_turns )
 
     # プレイヤー側の戦闘中一時パラメータを初期化する
     def reset_player_battle_params(self):
@@ -1350,7 +1408,7 @@ class Game:
             if wall_cells:
                 wx, wy = random.choice(wall_cells)
                 self.dungeon[wy][wx] = 8
-        place_info_wall = (self.floor in INFO_TALK)
+        place_info_wall = (self.floor in INFO_TALK or self.floor %10 ==0)
         if place_info_wall: # 情報壁を配置
             wall_cells =[
                 (x ,y )
@@ -1372,11 +1430,11 @@ class Game:
             self.treasure =random .choice ([0 ,0 ,1 ,1 ,2 ])
             self.item_reward_count =1
             if self.treasure ==0 :
-                self.potion =self.potion +1 
+                self.add_inventory_count ("potion",1 )
             if self.treasure ==1 :
-                self.blazegem =self.blazegem +1 
+                self.add_inventory_count ("blazegem",1 )
             if self.treasure ==2 :
-                self.guard =self.guard +1 
+                self.add_inventory_count ("guard",1 )
             if self.tutorial_enabled and self.floor ==1 :
                 self.tutorial_progress ["room2_chest_opened"]=True
                 self.update_tutorial_floor_state ()
@@ -1403,7 +1461,7 @@ class Game:
                 self.dungeon [self.pl_y ][self.pl_x ]=0 
                 self.treasure =5
                 self.item_reward_count =1
-                self.tool_magic_seed =self.tool_magic_seed +1
+                self.add_inventory_count ("tool_magic_seed",1 )
                 self.tutorial_progress ["room4_item_obtained"]=True
                 self.update_tutorial_floor_state ()
                 self.idx =120
@@ -1422,11 +1480,11 @@ class Game:
                 self.treasure =random .choice ([3 ,3 ,3 ,3 ,3 ,4 ,4 ,4 ,4 ,4 ,5 ])
                 self.item_reward_count =1
                 if self.treasure ==3 :
-                    self.tool_food =self.tool_food +self.item_reward_count
+                    self.add_inventory_count ("tool_food",self.item_reward_count )
                 if self.treasure ==4 :
-                    self.tool_magic_water =self.tool_magic_water +self.item_reward_count
+                    self.add_inventory_count ("tool_magic_water",self.item_reward_count )
                 if self.treasure ==5 :
-                    self.tool_magic_seed =self.tool_magic_seed +self.item_reward_count
+                    self.add_inventory_count ("tool_magic_seed",self.item_reward_count )
                 self.idx =120 
                 self.tmr =0 
             else :# 敵出現
@@ -1611,12 +1669,12 @@ class Game:
                 self.pl_mag =loaddata ["pl_mag"]
                 self.pl_exp =loaddata ["pl_exp"]
                 self.pl_level =loaddata .get ("pl_level",1 )
-                self.potion =loaddata ["potion"]
-                self.potion_lv =loaddata .get ("potion_lv",0 )
-                self.blazegem =loaddata ["blazegem"]
-                self.blazegem_lv =loaddata .get ("blazegem_lv",0 )
-                self.guard =loaddata ["guard"]
-                self.guard_lv =loaddata .get ("guard_lv",0 )
+                self.potion =min (99 ,loaddata ["potion"])
+                self.potion_lv =min (self.get_fairy_upgrade_level_cap (),loaddata .get ("potion_lv",0 ))
+                self.blazegem =min (99 ,loaddata ["blazegem"])
+                self.blazegem_lv =min (self.get_fairy_upgrade_level_cap (),loaddata .get ("blazegem_lv",0 ))
+                self.guard =min (99 ,loaddata ["guard"])
+                self.guard_lv =min (self.get_fairy_upgrade_level_cap (),loaddata .get ("guard_lv",0 ))
                 self.truth_fragment =loaddata .get ("truth_fragment",0 )
                 self.truth_fragment_floors =set (int (v )for v in loaddata .get ("truth_fragment_floors",[] )if isinstance (v ,int ))
                 self.truth_fragment_collected_current_floor =bool (loaddata .get ("truth_fragment_collected_current_floor",not any (10 in row for row in self.dungeon )))
@@ -1675,6 +1733,7 @@ class Game:
                     loaddata .get ("equip_sword",0 ),
                 )
                 self.refresh_pl_magmax ()
+                self.clamp_player_core_stats ()
                 self.update_player_images ()
                 self.true_episode_heard = bool(loaddata.get("true_episode_heard", False))
                 self.encountered_enemies = set(loaddata.get("encountered_enemies", []))
@@ -2159,9 +2218,14 @@ class Game:
             enemy_state_entries .append (("力↑",RED ))
         if self.emy_poison >0 :
             enemy_state_entries .append ((f"毒 {'・'*self.emy_poison}",COPPER ))
+        if self.emy_typ ==118 :
+            if self.boss_mode == "fire":
+                enemy_state_entries .append (("状態：炎",RED ))
+            elif self.boss_mode == "ice":
+                enemy_state_entries .append (("状態：氷",LBLUE ))
         if self.emy_typ ==116 or self.emy_typ ==120 :
             magia_color =RED if self.madoka >=1000 else WHITE
-            enemy_state_entries .append (("マギア : "+str (self.madoka )+"/1000",magia_color ))
+            enemy_state_entries .insert (0 ,("マギア : "+str (self.madoka )+"/1000",magia_color ))
         enemy_state_line_h =fnt .get_height ()+2
         for i ,(state_txt ,state_col )in enumerate (enemy_state_entries ):
             self.draw_text (bg ,state_txt ,bg_left +enemy_layout ["label_x_offset"],enemy_state_y +i *enemy_state_line_h ,fnt ,state_col )
@@ -2345,10 +2409,7 @@ class Game:
         if self.tool_confirm_active and len (tools )>0 :
             confirm_options =["はい","いいえ"]
             confirm_message ="使用しますか？"
-            if selected_tool and selected_tool ["id"]=="truth_fragment":
-                consume =2 if self.truth_fragment_collected_current_floor else 1
-                confirm_message =f"かけらx{consume}消費で1階戻る。使用しますか？"
-            box_w =420 if selected_tool and selected_tool ["id"]=="truth_fragment" else 220
+            box_w =220
             box_h =96
             box_x =win_x +win_w -box_w -20
             box_y =win_y +win_h -box_h -46
@@ -2529,7 +2590,13 @@ class Game:
     # draw zukan description を描画する
     def draw_zukan_description(self, bg, fnt):
         desc = ""
-        if self.zukan_kind == 1 and 0 <= self.zukan_cursor < 3:
+        if self.zukan_kind == 0 and 0 <= self.zukan_cursor < len(EMY_ZUKAN_IDS):
+            if self.is_enemy_encountered_for_zukan(self.zukan_cursor):
+                enemy_id = EMY_ZUKAN_IDS[self.zukan_cursor]
+                desc = EMY_NAME.get(enemy_id, "？")
+            else:
+                desc = "？"
+        elif self.zukan_kind == 1 and 0 <= self.zukan_cursor < 3:
             item_name = TRE_NAME[self.zukan_cursor]
             item_level = [self.potion_lv, self.blazegem_lv, self.guard_lv][self.zukan_cursor]
             base_desc = ITEM_INFO.get(self.zukan_cursor, "情報が登録されていません。")
@@ -2568,8 +2635,6 @@ class Game:
                 "count":self.tool_sword_polish ,
                 "usable":any (target .get ("can_upgrade",True )for target in self.get_weapon_upgrade_targets ("sword_polish"))
             })
-        if self.truth_fragment >0 :
-            tools .append ({"id":"truth_fragment","name":"しんじつのかけら","count":self.truth_fragment ,"usable":True })
         if self.heirloom_pendant >0 :
             tools .append ({"id":"heirloom_pendant","name":"形見のペンダント","count":self.heirloom_pendant ,"usable":False })
         return tools
@@ -2684,28 +2749,21 @@ class Game:
             if self.tutorial_enabled and self.floor ==1 :
                 self.tutorial_progress ["room4_item_used"]=True
                 self.update_tutorial_floor_state ()
-        elif tool_id =="truth_fragment":
-            self.use_truth_fragment_item ()
 
     # どうぐ一覧で使用不可メッセージを表示する
     def show_tool_notice (self ,text ,duration =90 ):
         self.tool_notice_text =text
         self.tool_notice_timer =duration
 
-    # しんじつのかけら使用時に1階戻る処理を実行する
-    def use_truth_fragment_item (self ):
-        if self.floor %10 ==1 :
-            self.show_tool_notice ("この階では　使用できません")
+    # 現在のフロアを再初期化する遷移処理を実行する
+    def restart_current_floor_with_cost (self ,cost =2 ):
+        if self.truth_fragment <cost :
             return False
-        consume =2 if self.truth_fragment_collected_current_floor else 1
-        if self.truth_fragment <consume :
-            self.show_tool_notice ("しんじつのかけらが足りない")
-            return False
-        self.truth_fragment -=consume
+        self.truth_fragment -=cost
         self.save_from_stair =False
         self.save_from_boss =False
         self.boss_transition_mode =False
-        self.floor_transition_delta =-1
+        self.floor_transition_delta =0
         self.idx =110
         self.tmr =0
         return True
@@ -2719,6 +2777,7 @@ class Game:
             self.pl_lifemax +=4
         elif target =="str":
             self.pl_str +=2
+        self.clamp_player_core_stats ()
 
     # 図鑑のレイアウトを取得する
     def get_zukan_layout(self):
@@ -3181,7 +3240,7 @@ class Game:
                 self.tmr =self.tmr +1 
         if armor_mag >0 :
             if random .random ()>0.5 :
-                mgup =int (5 +armor_mag +random .randint (0 ,armor_mag //5 ))
+                mgup =int (5 +0.8*armor_mag +random .randint (0 ,armor_mag //5 ))
                 self.add_pl_mag (mgup )
                 self.set_message ("　鎧の魔力 魔力 +{}" .format (mgup ))
                 self.se [9 ].play ()
@@ -3377,12 +3436,12 @@ class Game:
                             self.pl_mag =loaddata ["pl_mag"]
                             self.pl_exp =loaddata ["pl_exp"]
                             self.pl_level =loaddata .get ("pl_level",1 )
-                            self.potion =loaddata ["potion"]
-                            self.potion_lv =loaddata .get ("potion_lv",0 )
-                            self.blazegem =loaddata ["blazegem"]
-                            self.blazegem_lv =loaddata .get ("blazegem_lv",0 )
-                            self.guard =loaddata ["guard"]
-                            self.guard_lv =loaddata .get ("guard_lv",0 )
+                            self.potion =min (99 ,loaddata ["potion"])
+                            self.potion_lv =min (self.get_fairy_upgrade_level_cap (),loaddata .get ("potion_lv",0 ))
+                            self.blazegem =min (99 ,loaddata ["blazegem"])
+                            self.blazegem_lv =min (self.get_fairy_upgrade_level_cap (),loaddata .get ("blazegem_lv",0 ))
+                            self.guard =min (99 ,loaddata ["guard"])
+                            self.guard_lv =min (self.get_fairy_upgrade_level_cap (),loaddata .get ("guard_lv",0 ))
                             self.truth_fragment =loaddata .get ("truth_fragment",0 )
                             self.truth_fragment_floors =set (int (v )for v in loaddata .get ("truth_fragment_floors",[] )if isinstance (v ,int ))
                             self.truth_fragment_collected_current_floor =bool (loaddata .get ("truth_fragment_collected_current_floor",not any (10 in row for row in self.dungeon )))
@@ -3423,6 +3482,7 @@ class Game:
                                 loaddata .get ("equip_sword",0 ),
                             )
                             self.refresh_pl_magmax ()
+                            self.clamp_player_core_stats ()
                             self.update_player_images ()
                             self.true_episode_heard = bool(loaddata.get("true_episode_heard", False))
                             self.item_event_phase = 0
@@ -3701,7 +3761,7 @@ class Game:
                                         self.tool_accept_lock =True
                                 else:
                                     self.tool_confirm_active = True
-                                    self.tool_confirm_cmd = 1 if selected_tool_id =="truth_fragment" else 0
+                                    self.tool_confirm_cmd = 0
                                     self.tool_accept_lock = True
 
             elif self.idx ==35 :# 装備変更
@@ -3925,51 +3985,14 @@ class Game:
                 if self.tmr >=cycle_len :
                     self.recollection_stage +=1
                     if self.recollection_stage >=10 :
-                        self.boss_save_cmd =0
-                        self.boss_save_input_lock = True
-                        self.save_cmd =0
-                        self.load_accept_lock = True
-                        self.idx =86
+                        self.idx =88
                         self.tmr =0
                     else:
                         self.tmr =0
 
-            elif self.idx ==86 :# クリア後セーブ確認
-                screen .fill (BLACK )
-                if self.boss_save_input_lock:
-                    self.boss_save_choice_command (screen ,fontS ,key ,enable_input =False )
-                    if not (key [K_UP ]or key [K_DOWN ]or key [K_LEFT ]or key [K_RIGHT ]or key [K_RETURN ]or key [K_a ]or key [K_b ]or key [K_BACKSPACE ]):
-                        self.boss_save_input_lock = False
-                else:
-                    if self.boss_save_choice_command (screen ,fontS ,key )==True :
-                        if self.boss_save_cmd ==0 :
-                            self.load_accept_lock = True
-                            self.idx =87
-                            self.tmr =0
-                        else :
-                            self.idx =88
-                            self.tmr =0
-
-            elif self.idx ==87 :# クリア後セーブ先選択
-                screen .fill (BLACK )
-                self.draw_text (screen ,"セーブ先を選択してください",260 ,200 ,fontS ,WHITE )
-                if self.save_command (screen ,fontS ,key )==True :
-                    save_data =self.clear_save_payload if self.clear_save_payload else self.make_current_save_data ()
-                    with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
-                        json .dump (save_data ,f )
-                    se [9 ].play ()
-                    self.floorlist [self.save_cmd ]=save_data ["floor"]
-                    self.idx =88
-                    self.tmr =0
-                if key [K_b ]or key [K_BACKSPACE ]:
-                    self.boss_save_input_lock = True
-                    self.idx =86
-                    self.tmr =0
-
             elif self.idx ==88 :# タイトル遷移待機
                 screen .fill (BLACK )
                 if self.tmr >=5 :
-                    self.clear_save_payload = None
                     self.keep_title_bgm_on_next_title = True
                     self.idx =0
                     self.tmr =0
@@ -4031,6 +4054,11 @@ class Game:
                                 self.init_info_talk()
                                 self.idx =132
                                 self.tmr =0
+                        elif self.floor %10 ==0:
+                            self.init_item_event (kind ="boss_info_retry",lines =BOSS_INFO_WALL_OFFER_TALK)
+                            self.item_choice =1
+                            self.idx =131
+                            self.tmr =0
                         else:
                             self.init_info_talk()
                             self.idx =132
@@ -4113,7 +4141,7 @@ class Game:
 
             elif self.idx ==110 :# 画面切り替え
                 transition_black =self.boss_transition_mode
-                transition_delta =self.floor_transition_delta if self.floor_transition_delta in (-1 ,1 )else 1
+                transition_delta =self.floor_transition_delta if self.floor_transition_delta in (-1 ,0 ,1 )else 1
                 if transition_black and self.tmr <=9 :
                     screen .fill (BLACK )
                 else:
@@ -4209,7 +4237,7 @@ class Game:
                         self.boss_talk_last_tick
                     )
                     if (before_index !=self.boss_talk_index and
-                        self.boss_talk_kind == "init" and self.floor ==40 and before_index ==0 ):
+                        self.boss_talk_kind == "init" and self.floor ==40 and before_index ==1 ):
                         se [2 ].play ()
                         self.pl_life =self.pl_lifemax 
                     if self.boss_talk_index >=len (self.boss_talk_lines ):
@@ -4246,7 +4274,6 @@ class Game:
                         self.boss_talk_last_tick
                     )
                     if self.boss_talk_index >=len (self.boss_talk_lines ):
-                        self.clear_save_payload =self.make_current_save_data ()
                         if self.last_talk_mode == 2:
                             pygame .mixer .music .load (self.path +"/sound/bgm_title.wav")
                             pygame .mixer .music .play (-1 )
@@ -4394,7 +4421,7 @@ class Game:
                         if self.item_reward is not None:
                             selected =max (0 ,min (self.item_reward ,len (reward_entries )-1 ))
                             attr =reward_entries [selected ]["attr"]
-                            setattr (self ,attr ,getattr (self ,attr )+self.item_reward_count )
+                            self.add_inventory_count (attr ,self.item_reward_count )
                             if self.item_event_kind =="floor99_after":
                                 self.item_talk_lines =FLOOR99_AFTER_TRIAL_REWARD_LINE
                             else:
@@ -4463,6 +4490,46 @@ class Game:
                             else:
                                 self.idx =100
                                 self.tmr =0
+                elif self.item_event_kind == "boss_info_retry":
+                    if self.item_event_phase in (0 ,2 ):
+                        finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
+                        if finished:
+                            if self.item_event_phase ==0 :
+                                self.item_event_phase =1
+                            else:
+                                self.idx =100
+                                self.tmr =0
+                    elif self.item_event_phase ==1 :
+                        options =["はい","いいえ"]
+                        sel_line_h =max (1 ,int (25 *scale_y ))
+                        box_h =max (1 ,int (15 *scale_y ))+sel_line_h *len (options )
+                        box_w =max (1 ,int (280 *scale_x ))
+                        box_x =view_left +int (520 *scale_x )
+                        box_y =view_top +int (420 *scale_y )
+                        arrow_x =view_left +int (540 *scale_x )
+                        text_sel_x =view_left +int (560 *scale_x )
+                        arrow_y =view_top +int (435 *scale_y )
+                        pygame .draw .rect (screen ,BLACK ,[box_x ,box_y ,box_w ,box_h ])
+                        pygame .draw .rect (screen ,WHITE ,[box_x ,box_y ,box_w ,box_h ],2 )
+                        for i, option in enumerate(options):
+                            if i == self.item_choice:
+                                self.draw_text (screen ,"▶",arrow_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
+                            self.draw_text (screen ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
+                        if key [K_UP ]and self.item_choice >0 :
+                            self.item_choice -=1
+                        if key [K_DOWN ]and self.item_choice <1 :
+                            self.item_choice +=1
+                        if accept:
+                            if self.item_choice ==0 :
+                                if not self.restart_current_floor_with_cost (2 ):
+                                    self.item_talk_lines =["しんじつのかけらが足りない"]
+                                    self.item_talk_index =0
+                                    self.item_talk_char_count =0
+                                    self.item_talk_last_tick =pygame.time.get_ticks()
+                                    self.item_event_phase =2
+                            else:
+                                self.idx =100
+                                self.tmr =0
                 elif self.item_event_kind in ("true_episode_event_replay","true_episode"):
                     finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
                     if finished:
@@ -4482,6 +4549,11 @@ class Game:
                         self.dungeon [self.pl_y -1 ][self.pl_x ]=9
                         self.idx =120
                         self.tmr =0
+                elif self.item_event_kind == "fairy_upgrade_gone":
+                    finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
+                    if finished:
+                        self.idx =100
+                        self.tmr =0
                 elif self.item_event_kind == "fairy_upgrade":
                     if self.item_event_phase in (0, 2):
                         finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
@@ -4493,7 +4565,8 @@ class Game:
                                 self.tmr =0
                         self.tmr =0
                     elif self.item_event_phase == 1:
-                        options = ["傷薬", "爆弾", "守護"]
+                        targets =self.get_fairy_upgrade_targets ()
+                        options =[target ["label"]for target in targets ]
                         sel_line_h =max (1 ,int (25 *scale_y ))
                         box_h =max (1 ,int (15 *scale_y ))+sel_line_h *len (options )
                         box_w =max (1 ,int (280 *scale_x ))
@@ -4504,23 +4577,38 @@ class Game:
                         arrow_y =view_top +int (435 *scale_y )
                         pygame .draw .rect (screen ,BLACK ,[box_x ,box_y ,box_w ,box_h ])
                         pygame .draw .rect (screen ,WHITE ,[box_x ,box_y ,box_w ,box_h ],2 )
+                        if not targets [self.item_choice ]["can_upgrade"]:
+                            first_choice =self.get_first_fairy_upgrade_choice ()
+                            if first_choice >=0 :
+                                self.item_choice =first_choice
                         for i, option in enumerate(options):
-                            if i == self.item_choice:
+                            if i == self.item_choice and targets [i ]["can_upgrade"]:
                                 self.draw_text (screen ,"▶",arrow_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
-                            self.draw_text (screen ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
-                        if key [K_UP ]and self.item_choice >0 :
-                            self.item_choice -=1
-                        if key [K_DOWN ]and self.item_choice <2 :
-                            self.item_choice +=1
+                            text_col =WHITE if targets [i ]["can_upgrade"] else GRAY
+                            self.draw_text (screen ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fontS ,text_col )
+                        if key [K_UP ]:
+                            idx =self.item_choice -1
+                            while idx >=0 and not targets [idx ]["can_upgrade"]:
+                                idx -=1
+                            if idx >=0 :
+                                self.item_choice =idx
+                        if key [K_DOWN ]:
+                            idx =self.item_choice +1
+                            while idx <len (targets )and not targets [idx ]["can_upgrade"]:
+                                idx +=1
+                            if idx <len (targets ):
+                                self.item_choice =idx
                         if accept and self.item_reward is None:
-                            self.item_reward = self.item_choice
+                            if targets [self.item_choice ]["can_upgrade"]:
+                                self.item_reward = self.item_choice
                         if self.item_reward is not None:
+                            cap =self.get_fairy_upgrade_level_cap ()
                             if self.item_reward ==0 :
-                                self.potion_lv +=1
+                                self.potion_lv =min (cap ,self.potion_lv +1 )
                             if self.item_reward ==1 :
-                                self.blazegem_lv +=1
+                                self.blazegem_lv =min (cap ,self.blazegem_lv +1 )
                             if self.item_reward ==2 :
-                                self.guard_lv +=1
+                                self.guard_lv =min (cap ,self.guard_lv +1 )
                             self.item_talk_lines = ["神秘の力で　アイテムの効果が強まった。"]
                             self.item_talk_index = 0
                             self.item_talk_char_count = 0
@@ -4568,7 +4656,7 @@ class Game:
                         if self.item_reward is not None:
                             selected =max (0 ,min (self.item_reward ,len (reward_entries )-1 ))
                             attr =reward_entries [selected ]["attr"]
-                            setattr (self ,attr ,getattr (self ,attr )+self.item_reward_count )
+                            self.add_inventory_count (attr ,self.item_reward_count )
                             self.item_talk_lines = ["よろしい。そなたに差し上げよう。"]
                             self.item_talk_index = 0
                             self.item_talk_char_count = 0
@@ -4707,6 +4795,7 @@ class Game:
                         dmg_add = self.pl_sword [0 ]
                         if random .random ()>0.7 :
                             cri =1 
+                            self.queue_enemy115_forced_crit (1 )
                             se [0 ].play ()
                             self.set_message ("　会心の一撃！")
                     dmg =self.pl_str +random .randint (0 ,9 )
@@ -4759,6 +4848,7 @@ class Game:
                     if active_ice_sword >0 :
                         if random .random ()>0.95 -0.003 *active_ice_sword :
                             ice =1
+                            self.queue_enemy115_forced_crit (0 )
                     dmg_add = 0 if active_ice_sword == 0 else self.pl_sword [1 ]
                     dmg =self.pl_str *1.5 +random .randint (0 ,9 )+ dmg_add
                     if self.guard_remain >0 and self.emy_typ ==119 :
@@ -5030,12 +5120,21 @@ class Game:
                             self.guard_remain =0 
                         else :
                             dmg =dmg *self.get_guard_damage_multiplier ()
-                    if self.emy_typ ==2 or self.emy_typ ==110:
+                    if self.emy_typ ==2 or self.emy_typ ==110 :
                         if random .random ()>0.7 :
                             se [0 ].play ()
                             self.set_message ("　会心の一撃！")
-                            dmg =dmg *{2:1.5, 110:2, 118:2.5}[self.emy_typ]
+                            dmg =dmg *1.5
+                    if self.emy_typ ==115 and self.enemy115_forced_crit_delay >=0 :
+                        if self.enemy115_forced_crit_delay ==0 :
+                            se [0 ].play ()
+                            self.set_message ("　会心の一撃！")
+                            dmg =dmg *15
+                            self.enemy115_forced_crit_delay =-1
+                        else :
+                            self.enemy115_forced_crit_delay =self.enemy115_forced_crit_delay -1
                     if self.emy_typ ==117 : #インフェルノの火力が低下
+                        dmg = int(dmg * (1.5-self.emy_life/self.emy_lifemax))
                         self.inferno = min(1, self.inferno - (15 + random .randint (0 ,10 )))
                     if self.emy_typ ==120 : #ゆうしゃ２は生命が減るほど攻撃が強くなる
                         dmg = int(dmg * self.emy_lifemax/(1.3*self.emy_life))
@@ -5051,16 +5150,17 @@ class Game:
                         self.pl_life =0 
                         self.idx =242 
                         self.tmr =0 
-                    if cou >0 :
-                        self.emy_blink =2 
-                        dmg =int (self.pl_str //20 +self.pl_str *cou *0.005 +random .randint (0 ,cou //5 ))
-                        self.set_message (f"　{dmg}　カウンター！")
-                        se [11 ].play ()
-                        self.emy_life =self.emy_life -dmg 
-                        if self.emy_life <=0 :
-                            self.emy_life =0 
-                            self.idx =241 
-                            self.tmr =0 
+                    else:
+                        if cou >0 :
+                            self.emy_blink =2 
+                            dmg =int (self.pl_str //20 +self.pl_str *cou *0.005 +random .randint (0 ,cou //5 ))
+                            self.set_message (f"　{dmg}　カウンター！")
+                            se [11 ].play ()
+                            self.emy_life =self.emy_life -dmg 
+                            if self.emy_life <=0 :
+                                self.emy_life =0 
+                                self.idx =241 
+                                self.tmr =0 
                 if self.tmr ==14 :
                     if self.emy_action (screen ):
                         self.tmr =self.tmr +3 
@@ -5205,14 +5305,15 @@ class Game:
                         self.pl_life =0 
                         self.idx =242 
                         self.tmr =0 
-                    recoil =2000 +random .randint (-100 ,100 )
-                    self.emy_life =max (0 ,self.emy_life -recoil )
-                    self.set_message (f"　敵の火傷 {recoil}　ダメージ！")
-                    self.burn_turns -=1 
-                    if self.emy_life <=0 :
-                        self.emy_life =0 
-                        self.idx =241 
-                        self.tmr =0
+                    else:
+                        recoil =2000 +random .randint (-100 ,100 )
+                        self.emy_life =max (0 ,self.emy_life -recoil )
+                        self.set_message (f"　敵の火傷 {recoil}　ダメージ！")
+                        self.burn_turns -=1 
+                        if self.emy_life <=0 :
+                            self.emy_life =0 
+                            self.idx =241 
+                            self.tmr =0
                 if self.tmr ==16 :
                     self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
@@ -5253,46 +5354,47 @@ class Game:
                     pro =0 
                     cou =0 
                 if self.tmr ==5 :
-                    self.set_message (f"　{self.emy_name}の　攻撃！")
+                    self.set_message (f"　{self.emy_name}の　毒攻撃！")
                     se [0 ].play ()
                     self.emy_step =30 
+                # if self.tmr ==8 :
+                    # active_defence_shield =self.get_active_weapon_level ("shield",0 )
+                    # active_counter_shield =self.get_active_weapon_level ("shield",1 )
+                    # if active_defence_shield >0 :
+                    #     if random .random ()>0.7 and self.emy_typ !=119 :
+                    #         pro =0.3 +0.01 *active_defence_shield
+                    #         self.set_message ("　盾で　防御した！")
+                    #         se [11 ].play ()
+                    # if active_counter_shield >0 :
+                    #     if random .random ()>0.65 :
+                    #         cou =active_counter_shield
+                    # dmg =max (self.emy_str +random .randint (0 ,9 )-defence ,1 )
+                    # dmg =int (dmg /(1 +pro ))* self.emy_powup
+                    # if self.guard_remain >0 :
+                    #     dmg =int (dmg *self.get_guard_damage_multiplier ())
+                    # self.set_message (f"　{dmg}　ダメージ！")
+                    # self.dmg_eff =6
+                    # self.emy_step =0 
+                # if self.tmr ==12 :
+                #     self.pl_life =self.pl_life -dmg 
+                #     if self.pl_life <=0 :
+                #         self.pl_life =0 
+                #         self.idx =242 
+                #         self.tmr =0 
+                    # else:
+                    #     if cou >0 :
+                    #         self.emy_blink =2 
+                    #         dmg =int (self.pl_str //10 +self.pl_str *cou *0.003 +random .randint (0 ,cou //5 ))
+                    #         self.set_message (f"　{dmg}　のカウンター！")
+                    #         se [11 ].play ()
+                    #         self.emy_life =self.emy_life -dmg 
+                    #         if self.emy_life <=0 :
+                    #             self.emy_life =0 
+                    #             self.idx =241 
+                    #             self.tmr =0 
                 if self.tmr ==8 :
-                    active_defence_shield =self.get_active_weapon_level ("shield",0 )
-                    active_counter_shield =self.get_active_weapon_level ("shield",1 )
-                    if active_defence_shield >0 :
-                        if random .random ()>0.7 and self.emy_typ !=119 :
-                            pro =0.3 +0.01 *active_defence_shield
-                            self.set_message ("　盾で　防御した！")
-                            se [11 ].play ()
-                    if active_counter_shield >0 :
-                        if random .random ()>0.65 :
-                            cou =active_counter_shield
-                    dmg =max (self.emy_str +random .randint (0 ,9 )-defence ,1 )
-                    dmg =int (dmg /(1 +pro ))* self.emy_powup
-                    if self.guard_remain >0 :
-                        dmg =int (dmg *self.get_guard_damage_multiplier ())
-                    self.set_message (f"　{dmg}　ダメージ！")
-                    self.dmg_eff =6
-                    self.emy_step =0 
-                if self.tmr ==12 :
-                    self.pl_life =self.pl_life -dmg 
-                    if self.pl_life <=0 :
-                        self.pl_life =0 
-                        self.idx =242 
-                        self.tmr =0 
-                    if cou >0 :
-                        self.emy_blink =2 
-                        dmg =int (self.pl_str //10 +self.pl_str *cou *0.003 +random .randint (0 ,cou //5 ))
-                        self.set_message (f"　{dmg}　のカウンター！")
-                        se [11 ].play ()
-                        self.emy_life =self.emy_life -dmg 
-                        if self.emy_life <=0 :
-                            self.emy_life =0 
-                            self.idx =241 
-                            self.tmr =0 
-                if self.tmr ==14 :
-                    self.poison =max (self.poison -1 ,0 )
-                    self.poison = 3
+                    # self.poison =max (self.poison -1 ,0 )
+                    self.poison = 4
                     self.set_message ("　毒を くらった！")
                     self.set_message (f"　毒 {self.poison *40}ダメージ！")
                     self.pl_life =self.pl_life -self.poison *40 
@@ -5427,6 +5529,7 @@ class Game:
                     self.pl_life =self.pl_life +lif_p 
                     self.add_pl_mag (mag_p )
                     self.pl_str =self.pl_str +str_p 
+                    self.clamp_player_core_stats ()
                     self.set_message (f"　最大生命 +{lif_p}")
                     self.set_message (f"　攻撃 +{str_p}")
                     self.set_message (f"　魔力 +{mag_p}")
