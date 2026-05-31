@@ -194,6 +194,8 @@ class Game:
         self.stair_choice_input_lock = False
         self.boss_save_cmd = 0
         self.boss_save_input_lock = False
+        self.boss_talk_choice_cmd = 1
+        self.boss_talk_choice_input_lock = False
         self.boss_transition_mode = False
         self.floor_transition_delta = 1
         self.btl_cmd = 0
@@ -1047,7 +1049,13 @@ class Game:
         if not self.truth_fragment_collected_current_floor:
             self.init_item_event(kind="floor99_need", lines=FLOOR99_NEED_FRAGMENT_TALK)
             return
-        self.floor99_trial_missing = max(0, 99 - self.truth_fragment)
+        if self.floor99_trial_missing > 0 and self.floor99_trial_total > 0:
+            done_count = max(0, self.floor99_trial_total - self.floor99_trial_missing)
+            lines = [line.format(x=done_count, y=self.floor99_trial_missing) for line in FLOOR99_TRIAL_PROGRESS_LINES]
+            self.init_item_event(kind="floor99_continue", lines=lines)
+            return
+        collected_1to99 = len({f for f in self.truth_fragment_floors if 1 <= f <= 99})
+        self.floor99_trial_missing = max(0, 99 - collected_1to99)
         self.floor99_trial_total = self.floor99_trial_missing
         if self.floor99_trial_missing > 0:
             lines = [line.format(n=self.floor99_trial_missing) for line in FLOOR99_TRIAL_OFFER_LINES]
@@ -1618,6 +1626,8 @@ class Game:
         self.stair_choice_input_lock = False
         self.boss_save_cmd = 0
         self.boss_save_input_lock = False
+        self.boss_talk_choice_cmd = 1
+        self.boss_talk_choice_input_lock = False
         self.boss_transition_mode = False
         self.floor_transition_delta = 1
         self.tool_growth_choice_active = False
@@ -1713,6 +1723,8 @@ class Game:
                 self.stair_choice_input_lock = False
                 self.boss_save_cmd = 0
                 self.boss_save_input_lock = False
+                self.boss_talk_choice_cmd = 1
+                self.boss_talk_choice_input_lock = False
                 self.boss_transition_mode = False
                 self.floor_transition_delta = 1
                 self.tool_growth_choice_active = False
@@ -3121,6 +3133,53 @@ class Game:
             self.draw_text (bg ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fnt ,WHITE )
         return ent 
 
+    # ボス会話開始前の確認ダイアログを処理する
+    def boss_talk_choice_command (self ,bg ,fnt ,key ,enable_input =True ):
+        ent =False
+        options =["はい","いいえ"]
+        if enable_input:
+            if key [K_UP ]and self.boss_talk_choice_cmd >0 :
+                self.boss_talk_choice_cmd -=1
+            if key [K_DOWN ]and self.boss_talk_choice_cmd <len (options )-1 :
+                self.boss_talk_choice_cmd +=1
+            if key [K_RETURN ]or key [K_a ]:
+                ent =True
+        view_rect =getattr (self ,"dungeon_view_rect",None )
+        if view_rect :
+            view_left ,view_top ,view_w ,view_h =view_rect
+        else :
+            view_left =0
+            view_top =0
+            view_w ,view_h =bg .get_size ()
+        scale_x =view_w /880
+        scale_y =view_h /720
+        dlg_x =view_left +int (40 *scale_x )
+        dlg_y =view_top +int (525 *scale_y )
+        dlg_w =max (1 ,int (800 *scale_x ))
+        dlg_h =max (1 ,int (160 *scale_y ))
+        text_x =view_left +int (60 *scale_x )
+        text_y =view_top +int (560 *scale_y )
+        dialog =pygame .Surface ((dlg_w ,dlg_h ),pygame .SRCALPHA )
+        dialog .fill ((0 ,0 ,0 ,255 ))
+        bg .blit (dialog ,[dlg_x ,dlg_y ])
+        pygame .draw .rect (bg ,WHITE ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ],2 )
+        self.draw_text (bg ,"話しかけますか？",text_x ,text_y ,fnt ,WHITE )
+        sel_line_h =max (1 ,int (25 *scale_y ))
+        box_h =max (1 ,int (15 *scale_y ))+sel_line_h *len (options )
+        box_w =max (1 ,int (280 *scale_x ))
+        box_x =view_left +int (520 *scale_x )
+        box_y =view_top +int (420 *scale_y )
+        arrow_x =view_left +int (540 *scale_x )
+        text_sel_x =view_left +int (560 *scale_x )
+        arrow_y =view_top +int (435 *scale_y )
+        pygame .draw .rect (bg ,BLACK ,[box_x ,box_y ,box_w ,box_h ])
+        pygame .draw .rect (bg ,WHITE ,[box_x ,box_y ,box_w ,box_h ],2 )
+        for i, option in enumerate(options):
+            if i == self.boss_talk_choice_cmd:
+                self.draw_text (bg ,"▶",arrow_x ,arrow_y + i *sel_line_h ,fnt ,WHITE )
+            self.draw_text (bg ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fnt ,WHITE )
+        return ent
+
     # battle command の戦闘用処理を行う
     def battle_command (self ,bg ,fnt ,key ):
         ent =False 
@@ -4090,10 +4149,10 @@ class Game:
                             self.idx =131
                             self.tmr =0
                 if self.idx ==100 and accept and self.get_front_tile_id ()==12:
-                    self.init_boss_talk ()
-                    self.idx =130 
+                    self.boss_talk_choice_cmd =1
+                    self.boss_talk_choice_input_lock = True
+                    self.idx =113
                     self.tmr =0 
-                    self.boss =1 
 
             elif self.idx ==111 :# 階段選択
                 self.draw_dungeon (screen ,fontS )
@@ -4138,6 +4197,25 @@ class Game:
                             self.save_from_boss = False
                             self.idx =110 
                             self.tmr =0 
+
+            elif self.idx ==113 :# ボス会話前確認
+                self.draw_dungeon (screen ,fontS )
+                if self.boss_talk_choice_input_lock:
+                    self.boss_talk_choice_command (screen ,fontS ,key ,enable_input =False )
+                    if not (key [K_UP ]or key [K_DOWN ]or key [K_LEFT ]or key [K_RIGHT ]or key [K_RETURN ]or key [K_a ]or key [K_b ]or key [K_BACKSPACE ]):
+                        self.boss_talk_choice_input_lock = False
+                else:
+                    if self.boss_talk_choice_command (screen ,fontS ,key )==True :
+                        if self.boss_talk_choice_cmd ==0 :
+                            self.init_boss_talk ()
+                            self.idx =130
+                            self.boss =1
+                        else:
+                            self.idx =100
+                        self.tmr =0
+                    if key [K_b ]or key [K_BACKSPACE ]:
+                        self.idx =100
+                        self.tmr =0
 
             elif self.idx ==110 :# 画面切り替え
                 transition_black =self.boss_transition_mode
@@ -4343,6 +4421,52 @@ class Game:
                             self.item_talk_index =0
                             self.item_talk_char_count =0
                             self.item_talk_last_tick =pygame .time .get_ticks ()
+                elif self.item_event_kind == "floor99_continue":
+                    if self.item_event_phase in (0, 2, 3):
+                        finished = self.step_item_event_talk(screen, fontS, layout, accept)
+                        if finished:
+                            if self.item_event_phase == 0:
+                                self.item_event_phase = 1
+                            elif self.item_event_phase == 2:
+                                self.start_floor99_trial_battle()
+                            else:
+                                self.resume_dungeon_bgm()
+                                self.idx = 100
+                                self.tmr = 0
+                    elif self.item_event_phase == 1:
+                        options = ["はい", "いいえ"]
+                        sel_line_h = max(1, int(25 * scale_y))
+                        box_h = max(1, int(15 * scale_y)) + sel_line_h * len(options)
+                        box_w = max(1, int(280 * scale_x))
+                        box_x = view_left + int(520 * scale_x)
+                        box_y = view_top + int(420 * scale_y)
+                        arrow_x = view_left + int(540 * scale_x)
+                        text_sel_x = view_left + int(560 * scale_x)
+                        arrow_y = view_top + int(435 * scale_y)
+                        pygame.draw.rect(screen, BLACK, [box_x, box_y, box_w, box_h])
+                        pygame.draw.rect(screen, WHITE, [box_x, box_y, box_w, box_h], 2)
+                        for i, option in enumerate(options):
+                            if i == self.item_choice:
+                                self.draw_text(screen, "▶", arrow_x, arrow_y + i * sel_line_h, fontS, WHITE)
+                            self.draw_text(screen, option, text_sel_x, arrow_y + i * sel_line_h, fontS, WHITE)
+                        if key[K_UP] and self.item_choice > 0:
+                            self.item_choice -= 1
+                        if key[K_DOWN] and self.item_choice < 1:
+                            self.item_choice += 1
+                        if accept:
+                            if self.item_choice == 0:
+                                self.item_talk_lines = FLOOR99_TRIAL_ACCEPT_LINES
+                                self.item_event_phase = 2
+                                self.item_talk_index = 0
+                                self.item_talk_char_count = 0
+                                self.item_talk_last_tick = pygame.time.get_ticks()
+                            else:
+                                self.floor99_trial_battle_active = False
+                                self.item_talk_lines = FLOOR99_TRIAL_DECLINE_LINES
+                                self.item_event_phase = 3
+                                self.item_talk_index = 0
+                                self.item_talk_char_count = 0
+                                self.item_talk_last_tick = pygame.time.get_ticks()
 
                 elif self.item_event_kind in ("floor99_bonus","floor99_after"):
                     reward_entries =self.get_item_wall_rewards ()
@@ -5583,8 +5707,14 @@ class Game:
                     if self.floor99_trial_post_pending:
                         self.floor99_trial_post_pending =False
                         if self.floor99_trial_missing >1:
+                            done_count =max (0 ,self.floor99_trial_total -self.floor99_trial_missing +1 )
                             self.floor99_trial_missing -=1
-                            self.start_floor99_trial_battle ()
+                            self.floor99_trial_battle_active =False
+                            lines =[line .format (x =done_count ,y =self.floor99_trial_missing )for line in FLOOR99_TRIAL_PROGRESS_LINES ]
+                            self.init_item_event (kind ="floor99_continue",lines =lines )
+                            self.item_choice =0
+                            self.idx =131
+                            self.tmr =0
                         else:
                             self.floor99_trial_missing =0
                             self.floor99_trial_battle_active =False

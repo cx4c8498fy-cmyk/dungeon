@@ -438,6 +438,10 @@ FLOOR99_TRIAL_DECLINE_LINES = [
 FLOOR99_TRIAL_ACCEPT_LINES = [
     "よかろう。健闘を祈る",
 ]
+FLOOR99_TRIAL_PROGRESS_LINES = [
+    "これで{x}回の試練を突破した。\n試練が終わるまであと{y}回だ。",
+    "試練を続けるか？",
+]
 FLOOR99_COMPLETE_LINES = [
     "きみは　しんじつのかけらを　全て集めてきたようだな",
     "次のアイテムの中から　１つ選ぶと良い。それを5つくれてやろう",
