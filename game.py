@@ -2434,9 +2434,9 @@ class Game:
                     self.draw_text (bg ,"▶",box_x +16 ,y ,fnt ,WHITE )
                 self.draw_text (bg ,label ,box_x +42 ,y ,fnt ,WHITE )
         if self.tool_growth_choice_active :
-            options =["生命 +4","攻撃 +2"]
+            options =["生命 +4","攻撃 +2","魔力 +100"]
             box_w =250
-            box_h =120
+            box_h =148
             box_x =win_x +win_w -box_w -20
             box_y =win_y +win_h -box_h -46
             pygame .draw .rect (bg ,BLACK ,[box_x ,box_y ,box_w ,box_h ])
@@ -2789,6 +2789,9 @@ class Game:
             self.pl_lifemax +=4
         elif target =="str":
             self.pl_str +=2
+        elif target =="mag":
+            self.pl_magmax +=100
+            self.pl_mag +=100
         self.clamp_player_core_stats ()
 
     # 図鑑のレイアウトを取得する
@@ -3754,7 +3757,7 @@ class Game:
                 elif self.tool_growth_choice_active:
                     if key [K_UP ]and self.tool_growth_choice_cmd >0 :
                         self.tool_growth_choice_cmd -=1
-                    if key [K_DOWN ]and self.tool_growth_choice_cmd <1 :
+                    if key [K_DOWN ]and self.tool_growth_choice_cmd <2 :
                         self.tool_growth_choice_cmd +=1
                     if (key [K_b ]or key [K_BACKSPACE ]) and not self.tool_back_lock:
                         self.tool_back_lock = True
@@ -3762,8 +3765,10 @@ class Game:
                     elif accept and not self.tool_accept_lock:
                         if self.tool_growth_choice_cmd ==0 :
                             self.use_growth_essence ("life")
-                        else :
+                        elif self.tool_growth_choice_cmd ==1 :
                             self.use_growth_essence ("str")
+                        else :
+                            self.use_growth_essence ("mag")
                         tool_entries =self.get_tool_entries ()
                         if len (tool_entries )==0 :
                             self.tool_cmd =0
@@ -5566,8 +5571,8 @@ class Game:
                         self.tmr =0
                 if self.tmr ==2 :
                     self.set_message ("{}を　たおした！".format (self.emy_name ))
-                    self.growth_essence_drop_battle =(self.boss ==0 and random .random ()<0.05 )
-                    if self.floor99_trial_battle_active:
+                    self.growth_essence_drop_battle =(self.boss ==0 and (self.emy_typ ==9 or random .random ()<0.05 ))
+                    if self.floor99_trial_battle_active and self.emy_typ !=9:
                         self.growth_essence_drop_battle =False
                     pygame .mixer .music .stop ()
                     if self.boss ==1 :
@@ -5591,7 +5596,10 @@ class Game:
                         self.tmr =0 
                     elif self.floor99_trial_battle_active:
                         self.floor99_trial_post_pending =True
-                        self.idx =244
+                        if self.growth_essence_drop_battle:
+                            self.idx =248
+                        else:
+                            self.idx =244
                         self.tmr =0
                     elif self.should_drop_iron_upgrade ():
                         self.idx =246
@@ -5664,7 +5672,10 @@ class Game:
                         self.tmr =0 
                     elif self.floor99_trial_battle_active:
                         self.floor99_trial_post_pending =True
-                        self.idx =244
+                        if self.growth_essence_drop_battle:
+                            self.idx =248
+                        else:
+                            self.idx =244
                         self.tmr =0
                     else :
                         if self.should_drop_iron_upgrade ():
