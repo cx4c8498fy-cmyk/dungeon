@@ -48,6 +48,19 @@ BATTLE_UI_LAYOUT = {
 WEAPON_LEVEL_ATTRS = {"shield": "pl_shield", "armor": "pl_armor", "sword": "pl_sword"}
 EQUIP_SLOT_ATTRS = {"shield": "eq_shield", "armor": "eq_armor", "sword": "eq_sword"}
 
+# 体験版用のフロア差し替え。ここを消せば体験版固有処理を追いやすい。
+DEMO_RULE_FLOORS = {3: 6, 4: 10, 5: 11, 6: 14, 7: 20}
+DEMO_EVENT_TALK_FLOORS = {2: 4, 6: 14}
+DEMO_INFO_TALK_FLOORS = {2: 2, 3: 6, 5: 12, 6: 16}
+DEMO_ITEM_WALL_FLOORS = {3, 6}
+DEMO_FAIRY_FLOORS = {3, 6}
+DEMO_BOSS_FLOORS = {4: 10, 7: 20}
+DEMO_LAST_FLOOR = 7
+DEMO_END_TALK = [
+    "……体験版は　ここまでです\nプレイしていただき　ありがとうございました",
+    "この洞窟はまだまだ先がありそうです\n通常プレイ版もぜひ遊んでくださいね！",
+]
+
 
 # すべてのセーブデータから現在のfloorを読み込む
 def load_floorlist(base_path):
@@ -100,6 +113,7 @@ class Game:
         self.title_cmd = 0
         self.tmr = 0
         self.floor = 0
+        self.demo_mode = False
         self.boss = 0
 
         self.pl_x = 0
@@ -326,9 +340,39 @@ class Game:
     # 階段がロックされているか判定する
     def is_stairs_locked(self, floor=None):
         check_floor = self.floor if floor is None else floor
+        check_floor = self.get_rule_floor(check_floor)
         if check_floor not in LOCKED_STAIRS_ITEM_WALL_FLOORS:
             return False
         return any(7 in row for row in self.dungeon)
+
+    # 体験版中だけ通常プレイ上の対応フロアへ変換する
+    def get_rule_floor(self, floor=None):
+        check_floor = self.floor if floor is None else floor
+        if self.demo_mode:
+            return DEMO_RULE_FLOORS.get(check_floor, check_floor)
+        return check_floor
+
+    # 体験版中のボスを通常プレイ上の対応ボスへ変換する
+    def get_boss_rule_floor(self):
+        if self.demo_mode:
+            return DEMO_BOSS_FLOORS.get(self.floor, self.floor)
+        return self.floor
+
+    # 体験版中のeventWall会話を通常プレイ上の対応会話へ変換する
+    def get_event_talk_floor(self):
+        if self.demo_mode:
+            return DEMO_EVENT_TALK_FLOORS.get(self.floor, self.floor)
+        return self.floor
+
+    # 体験版中のinfoWall会話を通常プレイ上の対応会話へ変換する
+    def get_info_talk_floor(self):
+        if self.demo_mode:
+            return DEMO_INFO_TALK_FLOORS.get(self.floor, self.floor)
+        return self.floor
+
+    # 体験版の最終フロアかどうかを判定する
+    def is_demo_last_floor(self):
+        return self.demo_mode and self.floor >= DEMO_LAST_FLOOR
 
     # 武具セットを所持しているかどうかの判定
     def has_full_basic_set(self):
@@ -337,21 +381,6 @@ class Game:
             self.pl_armor[0] > 0 and
             self.pl_sword[0] > 0
         )
-
-    # セーブデータから武器レベル配列を読み込む
-    def read_weapon_levels_from_save(self, data, key):
-        values = data.get(key, [0, 0, 0])
-        if not isinstance(values, list):
-            values = [0, 0, 0]
-        values = (values + [0, 0, 0])[:3]
-        levels = []
-        for value in values:
-            try:
-                level = int(value)
-            except (TypeError, ValueError):
-                level = 0
-            levels.append(max(0, min(99, level)))
-        return levels
 
     # プレイヤー主要ステータスの上限値を返す
     def get_player_stat_cap(self):
@@ -365,11 +394,6 @@ class Game:
         self.pl_magmax = max(0, min(cap, int(self.pl_magmax)))
         self.pl_life = max(0, min(int(self.pl_life), self.pl_lifemax))
         self.pl_mag = max(0, min(int(self.pl_mag), self.pl_magmax))
-
-    # pl_magmax を更新する
-    def refresh_pl_magmax(self):
-        self.pl_magmax = min(self.get_player_stat_cap(), 1000 + (self.pl_level - 1) * 50)
-        self.pl_mag = max(0, min(self.pl_mag, self.pl_magmax))
 
     # 音量レベル(1〜5)を妥当な範囲に丸める
     def clamp_volume_level(self, level):
@@ -449,7 +473,10 @@ class Game:
     # place fairy for floor を配置する
     def place_fairy_for_floor(self):
         self.fairy_pos = None
-        if self.floor % 10 not in FAIRY_FLOOR_MODS:
+        if self.demo_mode:
+            if self.floor not in DEMO_FAIRY_FLOORS:
+                return
+        elif self.floor % 10 not in FAIRY_FLOOR_MODS:
             return
         fairy_cells = [
             (x, y)
@@ -713,13 +740,15 @@ class Game:
 
     # set floor assets for current floor を設定する
     def set_floor_assets_for_current_floor(self):
-        floor_index = (self.floor - 1) // 10
-        self.set_floor_assets(floor_index, self.floor)
+        floor_value = self.get_rule_floor(self.floor)
+        floor_index = (floor_value - 1) // 10
+        self.set_floor_assets(floor_index, floor_value)
 
     # set floor assets for transition を設定する
     def set_floor_assets_for_transition(self, floor_value):
-        floor_index = (floor_value - 1) // 10
-        self.set_floor_assets(floor_index, floor_value)
+        asset_floor = self.get_rule_floor(floor_value)
+        floor_index = (asset_floor - 1) // 10
+        self.set_floor_assets(floor_index, asset_floor)
 
     # プレイヤーの正面のタイルIDを返す
     def get_front_tile_id(self):
@@ -1001,7 +1030,8 @@ class Game:
 
     # ボスとの会話内容を初期化
     def init_boss_talk(self, mode="init"):
-        boss_id = 9 + int(self.floor // 10)
+        boss_floor = self.get_boss_rule_floor()
+        boss_id = 9 + int(boss_floor // 10)
         boss_map_id = boss_id - 10
         self.boss_talk_kind = mode
         if mode == "end":
@@ -1097,7 +1127,7 @@ class Game:
     # init event talk を初期化する
     def init_event_talk(self):
         self.tutorial_active_stage = 0
-        event_id = (self.floor - 1) // 10
+        event_id = (self.get_event_talk_floor() - 1) // 10
         if 0 <= event_id < len(EVENT_TALK):
             self.event_talk_lines = EVENT_TALK[event_id]
         else:
@@ -1109,7 +1139,8 @@ class Game:
     # infoWall用の会話を初期化する
     def init_info_talk(self):
         self.tutorial_active_stage = 0
-        talk = INFO_TALK.get(self.floor, "古い壁画だ。文字がかすれていて読み取れない。")
+        talk_floor = self.get_info_talk_floor()
+        talk = INFO_TALK.get(talk_floor, "古い壁画だ。文字がかすれていて読み取れない。")
         if isinstance(talk, str):
             self.event_talk_lines = [talk]
         elif isinstance(talk, list):
@@ -1133,6 +1164,7 @@ class Game:
         self.fixed_floor_data = None
         self.last_talk_mode = 1
         self.reset_tutorial_runtime()
+        rule_floor = self.get_rule_floor()
         fixed_data =None if ignore_fixed else self.load_fixed_floor_data(self.floor)
         if fixed_data:
             self.dungeon = fixed_data["dungeon"]
@@ -1180,7 +1212,7 @@ class Game:
                 dx =x *cell +center 
                 dy =y *cell +center 
                 if self.maze [y ][x ]==0 :
-                    if self.floor %10 ==0 :
+                    if rule_floor %10 ==0 :
                         bossfloor =80 
                     else :
                         bossfloor =0 
@@ -1304,9 +1336,10 @@ class Game:
         floor_x =view_left +60
         floor_y =view_top +view_h -40
         self.draw_text (bg ,floor_text ,floor_x ,floor_y ,fnt ,WHITE )
-        if self.truth_fragment_collected_current_floor:
-            star_x =floor_x +fnt .size (floor_text )[0 ]+12
-            self.draw_text (bg ,"★",star_x ,floor_y ,fnt ,GOLD )
+        fragment_status ="取得済" if self.truth_fragment_collected_current_floor else "未取得"
+        fragment_text ="かけら：" +fragment_status
+        fragment_x =floor_x +fnt .size (floor_text )[0 ]+18
+        self.draw_text (bg ,fragment_text ,fragment_x ,floor_y ,fnt ,WHITE )
         if self.idx !=85 :
             self.draw_para (bg ,fnt ,bg_rect )# 主人公の能力を表示
 
@@ -1320,6 +1353,7 @@ class Game:
         fixed_item_wall_front =None
         fixed_event_wall_front =None
         fixed_player_start =None
+        rule_floor =self.get_rule_floor ()
         if self.fixed_floor_data and self.floor == 1: # チュートリアルフロアの配置
             self.setup_tutorial_floor()
             self.pl_x, self.pl_y = self.fixed_floor_data["pl_start"]
@@ -1327,7 +1361,7 @@ class Game:
             self.pl_a =5
             self.stair_prompted =False
             return
-        is_boss_floor =self.floor %10 ==0
+        is_boss_floor =rule_floor %10 ==0
         if self.fixed_floor_data and self.floor == 100: # 最終フロアの配置
             self.pl_x, self.pl_y = self.fixed_floor_data["pl_start"]
             fixed_player_start =(self.pl_x ,self.pl_y )
@@ -1376,7 +1410,7 @@ class Game:
         t_box_num = 7 if is_boss_floor else 4
         for x, y in take_cells(t_box_num): # 宝箱の配置
             self.dungeon[y][x] = 1
-        w_box_num = 0 if self.floor < 11 else 7 if is_boss_floor else 4 if self.floor < 91 else 5
+        w_box_num = 0 if rule_floor < 11 else 7 if is_boss_floor else 4 if rule_floor < 91 else 5
         for x ,y in take_cells (w_box_num ): # 強化素材箱の配置
             self.dungeon [y ][x ]=4
         cocoon_target =30 if is_boss_floor else 18
@@ -1391,9 +1425,12 @@ class Game:
         self.pl_d =1 
         self.pl_a =5 
         self.place_fairy_for_floor ()
-        place_item_wall =self.floor in {7 ,17 ,27 ,37 ,47 ,57 ,67 ,77 ,87, 
-                                        15, 25, 35, 45, 55, 65, 75, 85, 
-                                        91, 92, 93, 95, 96, 97, 98, 99, 100} or self.floor in ITEM_WALL_WEAPON_SET
+        if self.demo_mode:
+            place_item_wall =self.floor in DEMO_ITEM_WALL_FLOORS or rule_floor in ITEM_WALL_WEAPON_SET
+        else:
+            place_item_wall =self.floor in {7 ,17 ,27 ,37 ,47 ,57 ,67 ,77 ,87, 
+                                            15, 25, 35, 45, 55, 65, 75, 85, 
+                                            91, 92, 93, 95, 96, 97, 98, 99, 100} or self.floor in ITEM_WALL_WEAPON_SET
         if place_item_wall: # アイテム壁を配置
             if not (self.floor ==100 and fixed_item_wall_placed):
                 wall_cells =[
@@ -1405,7 +1442,10 @@ class Game:
                 if wall_cells:
                     wx ,wy =random .choice (wall_cells )
                     self.dungeon [wy ][wx ]=7
-        place_event_wall =self.wall_event and ((self.floor %10 ==4 and self.floor !=94 )or self.floor ==99 )
+        if self.demo_mode:
+            place_event_wall =self.wall_event and self.floor in DEMO_EVENT_TALK_FLOORS
+        else:
+            place_event_wall =self.wall_event and ((self.floor %10 ==4 and self.floor !=94 )or self.floor ==99 )
         if place_event_wall: # 壁イベントを配置
             wall_cells = [
                 (x, y)
@@ -1416,7 +1456,10 @@ class Game:
             if wall_cells:
                 wx, wy = random.choice(wall_cells)
                 self.dungeon[wy][wx] = 8
-        place_info_wall = (self.floor in INFO_TALK or self.floor %10 ==0)
+        if self.demo_mode:
+            place_info_wall = self.floor in DEMO_INFO_TALK_FLOORS
+        else:
+            place_info_wall = (self.floor in INFO_TALK or self.floor %10 ==0)
         if place_info_wall: # 情報壁を配置
             wall_cells =[
                 (x ,y )
@@ -1592,7 +1635,7 @@ class Game:
         self.pl_mag =0 
         self.pl_exp =0 
         self.pl_level =1 
-        self.refresh_pl_magmax ()
+        self.pl_magmax =1000
         self.potion =2 
         self.potion_lv =0
         self.blazegem =2 
@@ -1658,7 +1701,8 @@ class Game:
         self.pl_sword =[0 ,0 ,0 ]
         self.apply_equipped_slots()
         self.update_player_images ()
-        self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
+        rule_floor =self.get_rule_floor ()
+        self.move_bgm_path =self.path +"/sound/bgm_"+str ((rule_floor -1) //10 )+".wav"
         self.move_bgm_pos_ms =0 
         self.move_bgm_start_time =time .time ()
         pygame .mixer .music .load (self.move_bgm_path )
@@ -1666,6 +1710,7 @@ class Game:
 
     # game data を読み込む
     def load_game_data (self ,slot_index ):
+        self.demo_mode =False
         with open (self.path +"/savedata/data{}.json".format (slot_index +1 ),"r")as f :
             loaddata =json .load (f )
             self.floor =loaddata ["floor"]
@@ -1677,32 +1722,33 @@ class Game:
                 self.pl_life =loaddata ["pl_life"]
                 self.pl_str =loaddata ["pl_str"]
                 self.pl_mag =loaddata ["pl_mag"]
+                self.pl_magmax =loaddata ["pl_magmax"]
                 self.pl_exp =loaddata ["pl_exp"]
-                self.pl_level =loaddata .get ("pl_level",1 )
+                self.pl_level =loaddata ["pl_level"]
                 self.potion =min (99 ,loaddata ["potion"])
-                self.potion_lv =min (self.get_fairy_upgrade_level_cap (),loaddata .get ("potion_lv",0 ))
+                self.potion_lv =min (self.get_fairy_upgrade_level_cap (),loaddata ["potion_lv"])
                 self.blazegem =min (99 ,loaddata ["blazegem"])
-                self.blazegem_lv =min (self.get_fairy_upgrade_level_cap (),loaddata .get ("blazegem_lv",0 ))
+                self.blazegem_lv =min (self.get_fairy_upgrade_level_cap (),loaddata ["blazegem_lv"])
                 self.guard =min (99 ,loaddata ["guard"])
-                self.guard_lv =min (self.get_fairy_upgrade_level_cap (),loaddata .get ("guard_lv",0 ))
-                self.truth_fragment =loaddata .get ("truth_fragment",0 )
-                self.truth_fragment_floors =set (int (v )for v in loaddata .get ("truth_fragment_floors",[] )if isinstance (v ,int ))
-                self.truth_fragment_collected_current_floor =bool (loaddata .get ("truth_fragment_collected_current_floor",not any (10 in row for row in self.dungeon )))
-                self.heirloom_pendant =loaddata .get ("heirloom_pendant",1 )
-                self.tool_food =loaddata .get ("tool_food",0 )
-                self.tool_magic_water =loaddata .get ("tool_magic_water",0 )
-                self.tool_magic_seed =loaddata .get ("tool_magic_seed",0 )
-                self.tool_growth =loaddata .get ("tool_growth",0 )
-                self.tool_sword_polish =loaddata .get ("tool_sword_polish",0 )
-                self.tool_shield_harden =loaddata .get ("tool_shield_harden",0 )
-                self.tool_armor_patch =loaddata .get ("tool_armor_patch",0 )
-                self.bgm_volume_level =self.clamp_volume_level (loaddata .get ("bgm_volume_level",5 ))
-                self.se_volume_level =self.clamp_volume_level (loaddata .get ("se_volume_level",5 ))
-                self.auto_equip_attack_sword =bool (loaddata .get ("auto_equip_attack_sword",False ))
-                self.auto_equip_magic_staff =bool (loaddata .get ("auto_equip_magic_staff",False ))
-                self.auto_equip_bomb_cannon =bool (loaddata .get ("auto_equip_bomb_cannon",False ))
-                self.auto_equip_guard_shield =bool (loaddata .get ("auto_equip_guard_shield",False ))
-                self.auto_equip_potion_armor =bool (loaddata .get ("auto_equip_potion_armor",False ))
+                self.guard_lv =min (self.get_fairy_upgrade_level_cap (),loaddata ["guard_lv"])
+                self.truth_fragment =loaddata ["truth_fragment"]
+                self.truth_fragment_floors =set (loaddata ["truth_fragment_floors"])
+                self.truth_fragment_collected_current_floor =bool (loaddata ["truth_fragment_collected_current_floor"])
+                self.heirloom_pendant =loaddata ["heirloom_pendant"]
+                self.tool_food =loaddata ["tool_food"]
+                self.tool_magic_water =loaddata ["tool_magic_water"]
+                self.tool_magic_seed =loaddata ["tool_magic_seed"]
+                self.tool_growth =loaddata ["tool_growth"]
+                self.tool_sword_polish =loaddata ["tool_sword_polish"]
+                self.tool_shield_harden =loaddata ["tool_shield_harden"]
+                self.tool_armor_patch =loaddata ["tool_armor_patch"]
+                self.bgm_volume_level =self.clamp_volume_level (loaddata ["bgm_volume_level"])
+                self.se_volume_level =self.clamp_volume_level (loaddata ["se_volume_level"])
+                self.auto_equip_attack_sword =bool (loaddata ["auto_equip_attack_sword"])
+                self.auto_equip_magic_staff =bool (loaddata ["auto_equip_magic_staff"])
+                self.auto_equip_bomb_cannon =bool (loaddata ["auto_equip_bomb_cannon"])
+                self.auto_equip_guard_shield =bool (loaddata ["auto_equip_guard_shield"])
+                self.auto_equip_potion_armor =bool (loaddata ["auto_equip_potion_armor"])
                 self.item_popup_text =""
                 self.truth_fragment_drop_battle =False
                 self.growth_essence_drop_battle =False
@@ -1736,19 +1782,18 @@ class Game:
                 self.tool_weapon_choice_prompt = ""
                 self.tool_notice_text = ""
                 self.tool_notice_timer = 0
-                self.pl_shield =self.read_weapon_levels_from_save (loaddata ,"shield")
-                self.pl_armor =self.read_weapon_levels_from_save (loaddata ,"armor")
-                self.pl_sword =self.read_weapon_levels_from_save (loaddata ,"sword")
+                self.pl_shield =loaddata ["shield"]
+                self.pl_armor =loaddata ["armor"]
+                self.pl_sword =loaddata ["sword"]
                 self.apply_equipped_slots(
-                    loaddata .get ("equip_shield",0 ),
-                    loaddata .get ("equip_armor",0 ),
-                    loaddata .get ("equip_sword",0 ),
+                    loaddata ["equip_shield"],
+                    loaddata ["equip_armor"],
+                    loaddata ["equip_sword"],
                 )
-                self.refresh_pl_magmax ()
                 self.clamp_player_core_stats ()
                 self.update_player_images ()
-                self.true_episode_heard = bool(loaddata.get("true_episode_heard", False))
-                self.encountered_enemies = set(loaddata.get("encountered_enemies", []))
+                self.true_episode_heard = bool(loaddata["true_episode_heard"])
+                self.encountered_enemies = set(loaddata["encountered_enemies"])
                 self.item_event_phase = 0
                 self.item_choice = 0
                 self.item_reward = None
@@ -1762,7 +1807,7 @@ class Game:
                 self.init_map_state ()
                 self.fixed_floor_data = self.load_fixed_floor_data (self.floor )
                 if self.floor ==1 and self.fixed_floor_data:
-                    self.setup_tutorial_floor (loaddata .get ("tutorial_progress"))
+                    self.setup_tutorial_floor (loaddata ["tutorial_progress"])
                 else:
                     self.reset_tutorial_runtime ()
                 self.fairy_pos =self.find_fairy_position ()
@@ -2113,28 +2158,30 @@ class Game:
                 self.move_bgm_pos_ms =0
                 self.move_bgm_start_time =time .time ()
         else :
-            pygame .mixer .music .load (self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav")
+            rule_floor =self.get_rule_floor ()
+            pygame .mixer .music .load (self.path +"/sound/bgm_"+str ((rule_floor -1) //10 )+".wav")
             pygame .mixer .music .play (-1 )
 
 
     # 通常の戦闘を初期化する
     def init_battle (self ):
+        rule_floor =self.get_rule_floor ()
         if self.floor99_trial_battle_active:
             self.emy_typ =random .choice ([7 ,8 ,9 ,10 ])
             self.emy_lev =99
         else:
-            self.emy_typ =random .randint (0 ,EMY_APPEAR [self.floor -1 ] )
+            self.emy_typ =random .randint (0 ,EMY_APPEAR [rule_floor -1 ] )
             if self.truth_fragment_drop_battle and self.emy_typ ==6 :
                 while self.emy_typ ==6 :
-                    self.emy_typ =random .randint (0 ,EMY_APPEAR [self.floor -1 ] )
-            self.emy_lev =random .randint (1 ,self.floor )
+                    self.emy_typ =random .randint (0 ,EMY_APPEAR [rule_floor -1 ] )
+            self.emy_lev =random .randint (1 ,rule_floor )
         self.encountered_enemies.add(self.emy_typ)
-        self.imgEnemy =pygame .image .load (self.path +"/image/enemy/enemy"+str (self.emy_typ )+"_"+str ((self.floor -1 )//30 )+".png")
+        self.imgEnemy =pygame .image .load (self.path +"/image/enemy/enemy"+str (self.emy_typ )+"_"+str ((rule_floor -1 )//30 )+".png")
         new_w =int (self.imgEnemy .get_width ()*1.1 )
         new_h =int (self.imgEnemy .get_height ()*1.1 )
         self.imgEnemy =pygame .transform .scale (self.imgEnemy ,(new_w ,new_h ))
         self.emy_name =EMY_NAME [self.emy_typ ]
-        tier =(self.floor -1 )//10
+        tier =(rule_floor -1 )//10
         base =max (1 ,int (2.4 *EMY_LIFE [self.emy_typ ]-100 ))
         floor_mul =1.0 +0.16 *tier
         level_mul =1.0 +0.12 *(self.emy_lev -1 )/99
@@ -2152,8 +2199,9 @@ class Game:
 
     # bossbattle を初期化する
     def init_bossbattle (self ):
+        boss_floor = self.get_boss_rule_floor()
         self.emy_lev =1
-        self.emy_typ =109 +int (self.floor //10 ) +self.change
+        self.emy_typ =109 +int (boss_floor //10 ) +self.change
         self.encountered_enemies.add(self.emy_typ)
         self.imgEnemy =pygame .image .load (self.path +"/image/boss/boss_"+str (self.emy_typ -110 )+".png")
         new_w =int (self.imgEnemy .get_width ()*1.1 )
@@ -2484,7 +2532,7 @@ class Game:
         self.draw_bottom_description_window (bg ,fnt ,desc )
 
     # 共通のセリフウィンドウレイアウト情報を取得する
-    def get_dialog_window_layout(self, bg, dlg_y_ratio=525 / 720):
+    def get_dialog_window_layout(self, bg):
         view_rect =getattr (self ,"dungeon_view_rect",None )
         if view_rect :
             view_left ,view_top ,view_w ,view_h =view_rect
@@ -2495,7 +2543,7 @@ class Game:
         scale_x =view_w /880
         scale_y =view_h /720
         dlg_x =view_left +int (40 *scale_x )
-        dlg_y =view_top +int (dlg_y_ratio *view_h )
+        dlg_y =view_top +int ((525 /720 )*view_h )
         dlg_w =max (1 ,int (800 *scale_x ))
         dlg_h =max (1 ,int (160 *scale_y ))
         text_x =view_left +int (60 *scale_x )
@@ -2584,7 +2632,7 @@ class Game:
 
     # draw bottom description window を描画する
     def draw_bottom_description_window (self ,bg ,fnt ,desc ):
-        layout =self.get_dialog_window_layout (bg ,dlg_y_ratio =525 /720 )
+        layout =self.get_dialog_window_layout (bg )
         self.draw_dialog_window (bg ,layout ,alpha =255 )
         self.draw_dialog_text (bg ,fnt ,layout ,desc )
 
@@ -3062,11 +3110,17 @@ class Game:
     # 階段の選択コマンドの処理
     def stair_choice_command (self ,bg ,fnt ,key ,enable_input =True ):
         ent =False 
-        options =[
-            "下の階に移動",
-            "下の階に移動＋データセーブ",
-            "移動しない",
-        ]
+        if self.demo_mode:
+            options =[
+                "下の階に移動",
+                "移動しない",
+            ]
+        else:
+            options =[
+                "下の階に移動",
+                "下の階に移動＋データセーブ",
+                "移動しない",
+            ]
         if enable_input:
             if key [K_UP ]and self.stair_choice_cmd >0 :
                 self.stair_choice_cmd -=1 
@@ -3294,10 +3348,12 @@ class Game:
         armor_mag =self.get_active_weapon_level ("armor",1 )
         if armor_heal >0 :
             if random .random ()>0.5 :
-                cure =int(armor_heal//2 +random .randint (0 ,10))
-                self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
-                self.set_message ("　鎧の癒し 生命 +{}" .format (cure ))
-                self.se [2 ].play ()
+                cure =max (1 ,int (armor_heal //2 +random .randint (0 ,10 )))
+                cure =min (cure ,self.pl_lifemax -self.pl_life )
+                if cure >0 :
+                    self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
+                    self.set_message ("　鎧の癒し 生命 +{}" .format (cure ))
+                    self.se [2 ].play ()
             else :
                 self.tmr =self.tmr +1 
         if armor_mag >0 :
@@ -3385,6 +3441,7 @@ class Game:
 
             if self.idx ==0 :# タイトル画面
                 if self.tmr ==1 :
+                    self.demo_mode =False
                     self.truth_fragment =0
                     self.truth_fragment_floors = set()
                     self.truth_fragment_collected_current_floor = False
@@ -3419,7 +3476,7 @@ class Game:
                 screen .fill (BLACK )
                 title_rect =self.blit_scaled_bg (screen ,self.imgTitle )
                 if self.title_mode == 0:
-                    options = ["はじめから", "つづきから", "ゲーム終了"]
+                    options = ["はじめから", "つづきから", "体験版をプレイ", "ゲーム終了"]
                     selected = self.title_cmd
                     if key [K_UP ]and self.title_cmd >0 :
                         self.title_cmd -=1 
@@ -3427,18 +3484,25 @@ class Game:
                         self.title_cmd +=1 
                     if accept:
                         if self.title_cmd ==0 :
+                            self.demo_mode =False
                             self.prologue_input_lock = True
                             self.idx =10 
                             self.tmr =0 
                         elif self.title_cmd ==1 :
+                            self.demo_mode =False
                             self.title_mode = 1
+                        elif self.title_cmd ==2 :
+                            self.demo_mode =True
+                            self.prologue_input_lock = True
+                            self.idx =10
+                            self.tmr =0
                         else:
                             pygame .quit ()
                             sys .exit ()
                 else:
                     if key [K_b ]or key [K_BACKSPACE ]:
                         self.title_mode = 0
-                        options = ["はじめから", "つづきから"]
+                        options = ["はじめから", "つづきから", "体験版をプレイ", "ゲーム終了"]
                         selected = self.title_cmd
                     else:
                         options = [
@@ -3456,7 +3520,7 @@ class Game:
                 rows = len (options )
                 line_h =32 
                 win_w =360 
-                win_h =3 *line_h +20 
+                win_h =rows *line_h +20 
                 screen_w =screen .get_size ()[0 ]
                 win_x =(screen_w -win_w )//2 
                 title_top =title_rect [1 ]
@@ -3475,106 +3539,6 @@ class Game:
 
             elif self.idx ==10 :# プロローグ
                 self.draw_prologue (screen ,fontS ,key )
-
-            elif self.idx ==20 :#データのロード
-                screen .fill (BLACK )
-                self.blit_scaled_bg (screen ,self.imgTitle )
-                self.draw_text (screen ,"Choose load data.",320 ,200 ,font ,WHITE )
-                self.draw_text (screen ,"[B]ack to title.",320 ,420 ,font ,WHITE )
-                if key [K_b ]==1 :
-                    self.idx =0 
-                    self.tmr =2 
-                if self.save_command (screen ,fontS ,key )==True :
-                    with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"r")as f :
-                        loaddata =json .load (f )
-                        self.floor =loaddata ["floor"]
-                        if self.floor >0 :
-                            self.dungeon =loaddata ["dungeon"]
-                            self.pl_x =loaddata ["pl_x"]
-                            self.pl_y =loaddata ["pl_y"]
-                            self.pl_lifemax =loaddata ["pl_lifemax"]
-                            self.pl_life =loaddata ["pl_life"]
-                            self.pl_str =loaddata ["pl_str"]
-                            self.pl_mag =loaddata ["pl_mag"]
-                            self.pl_exp =loaddata ["pl_exp"]
-                            self.pl_level =loaddata .get ("pl_level",1 )
-                            self.potion =min (99 ,loaddata ["potion"])
-                            self.potion_lv =min (self.get_fairy_upgrade_level_cap (),loaddata .get ("potion_lv",0 ))
-                            self.blazegem =min (99 ,loaddata ["blazegem"])
-                            self.blazegem_lv =min (self.get_fairy_upgrade_level_cap (),loaddata .get ("blazegem_lv",0 ))
-                            self.guard =min (99 ,loaddata ["guard"])
-                            self.guard_lv =min (self.get_fairy_upgrade_level_cap (),loaddata .get ("guard_lv",0 ))
-                            self.truth_fragment =loaddata .get ("truth_fragment",0 )
-                            self.truth_fragment_floors =set (int (v )for v in loaddata .get ("truth_fragment_floors",[] )if isinstance (v ,int ))
-                            self.truth_fragment_collected_current_floor =bool (loaddata .get ("truth_fragment_collected_current_floor",not any (10 in row for row in self.dungeon )))
-                            self.heirloom_pendant =loaddata .get ("heirloom_pendant",1 )
-                            self.tool_food =loaddata .get ("tool_food",0 )
-                            self.tool_magic_water =loaddata .get ("tool_magic_water",0 )
-                            self.tool_magic_seed =loaddata .get ("tool_magic_seed",0 )
-                            self.tool_growth =loaddata .get ("tool_growth",0 )
-                            self.tool_sword_polish =loaddata .get ("tool_sword_polish",0 )
-                            self.tool_shield_harden =loaddata .get ("tool_shield_harden",0 )
-                            self.tool_armor_patch =loaddata .get ("tool_armor_patch",0 )
-                            self.bgm_volume_level =self.clamp_volume_level (loaddata .get ("bgm_volume_level",5 ))
-                            self.se_volume_level =self.clamp_volume_level (loaddata .get ("se_volume_level",5 ))
-                            self.auto_equip_attack_sword =bool (loaddata .get ("auto_equip_attack_sword",False ))
-                            self.auto_equip_magic_staff =bool (loaddata .get ("auto_equip_magic_staff",False ))
-                            self.auto_equip_bomb_cannon =bool (loaddata .get ("auto_equip_bomb_cannon",False ))
-                            self.auto_equip_guard_shield =bool (loaddata .get ("auto_equip_guard_shield",False ))
-                            self.auto_equip_potion_armor =bool (loaddata .get ("auto_equip_potion_armor",False ))
-                            self.item_popup_text =""
-                            self.truth_fragment_drop_battle =False
-                            self.growth_essence_drop_battle =False
-                            self.floor99_trial_missing =0
-                            self.floor99_trial_total =0
-                            self.floor99_trial_battle_active =False
-                            self.floor99_trial_post_pending =False
-                            self.battle_auto_equip_used =False
-                            self.powup =1
-                            self.reset_enemy_battle_params ()
-                            self.emy_powup =1
-                            self.poison =0
-                            self.idx =100 
-                            self.pl_shield =self.read_weapon_levels_from_save (loaddata ,"shield")
-                            self.pl_armor =self.read_weapon_levels_from_save (loaddata ,"armor")
-                            self.pl_sword =self.read_weapon_levels_from_save (loaddata ,"sword")
-                            self.apply_equipped_slots(
-                                loaddata .get ("equip_shield",0 ),
-                                loaddata .get ("equip_armor",0 ),
-                                loaddata .get ("equip_sword",0 ),
-                            )
-                            self.refresh_pl_magmax ()
-                            self.clamp_player_core_stats ()
-                            self.update_player_images ()
-                            self.true_episode_heard = bool(loaddata.get("true_episode_heard", False))
-                            self.item_event_phase = 0
-                            self.item_choice = 0
-                            self.item_reward = None
-                            self.item_event_kind = ""
-                            self.item_talk_lines = []
-                            self.item_talk_index = 0
-                            self.item_talk_char_count = 0
-                            self.item_talk_last_tick = pygame.time.get_ticks()
-                            self.tool_weapon_choice_active = False
-                            self.tool_weapon_choice_cmd = 0
-                            self.tool_weapon_choice_targets = []
-                            self.tool_weapon_choice_tool_id = ""
-                            self.tool_weapon_choice_prompt = ""
-                            self.set_floor_assets_for_current_floor ()
-                            self.init_floor_variant_map ()
-                            self.init_map_state ()
-                            self.fixed_floor_data = self.load_fixed_floor_data (self.floor )
-                            if self.floor ==1 and self.fixed_floor_data:
-                                self.setup_tutorial_floor (loaddata .get ("tutorial_progress"))
-                            else:
-                                self.reset_tutorial_runtime ()
-                            self.fairy_pos =self.find_fairy_position ()
-                            self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
-                            self.move_bgm_pos_ms =0 
-                            self.move_bgm_start_time =time .time ()
-                            pygame .mixer .music .load (self.move_bgm_path )
-                            pygame .mixer .music .play (-1 )
-                            self.apply_audio_volumes ()
 
             elif self.idx ==30 :#メニュー
                 self.draw_dungeon (screen ,fontS )
@@ -4128,26 +4092,27 @@ class Game:
                             self.idx =132
                             self.tmr =0
                     elif front_tile ==7:
+                        rule_floor =self.get_rule_floor ()
                         if self.tutorial_enabled and self.floor ==1:
                             stage =self.tutorial_stage_for_wall ((tx ,ty ))
                             if stage >0 and self.init_tutorial_talk (stage ):
                                 self.idx =132
                                 self.tmr =0
-                        elif self.floor in ITEM_WALL_WEAPON_SET:
+                        elif rule_floor in ITEM_WALL_WEAPON_SET:
                             self.init_item_event (
                                 kind ="weapon_set",
                                 lines =ITEM_WALL_WEAPON_SET_TALK
                             )
                             self.idx =131
                             self.tmr =0
-                        elif self.floor >= 91 and not self.all_cocoons_cleared():
+                        elif rule_floor >= 91 and not self.all_cocoons_cleared():
                             self.init_item_event (kind="blocked", lines=["魔物を……滅ぼすのだ……"])
                             self.idx =131
                             self.tmr =0
                         else:
-                            if 91 <= self.floor <= 100:
+                            if 91 <= rule_floor <= 100:
                                 self.init_item_event (kind="item", reward_count=5)
-                            elif self.floor %10 ==5:
+                            elif rule_floor %10 ==5:
                                 self.init_item_event (kind="item_upgrade")
                             else:
                                 self.init_item_event ()
@@ -4167,19 +4132,29 @@ class Game:
                         self.stair_choice_input_lock = False
                 else:
                     if self.stair_choice_command (screen ,fontS ,key )==True :
-                        if self.stair_choice_cmd ==0 :
-                            self.save_from_stair = False
-                            self.idx =110 
-                            self.tmr =0 
-                        elif self.stair_choice_cmd ==1 :
-                            self.save_from_stair = True
-                            self.load_accept_lock = True
-                            self.idx =40 
-                            self.tmr =0 
-                        else :
-                            self.save_from_stair = False
-                            self.idx =100 
-                            self.tmr =0 
+                        if self.demo_mode:
+                            if self.stair_choice_cmd ==0:
+                                self.save_from_stair = False
+                                self.idx =110
+                                self.tmr =0
+                            else:
+                                self.save_from_stair = False
+                                self.idx =100
+                                self.tmr =0
+                        else:
+                            if self.stair_choice_cmd ==0 :
+                                self.save_from_stair = False
+                                self.idx =110 
+                                self.tmr =0 
+                            elif self.stair_choice_cmd ==1 :
+                                self.save_from_stair = True
+                                self.load_accept_lock = True
+                                self.idx =40 
+                                self.tmr =0 
+                            else :
+                                self.save_from_stair = False
+                                self.idx =100 
+                                self.tmr =0 
                     if key [K_b ]or key [K_BACKSPACE ]:
                         self.save_from_stair = False
                         self.idx =100 
@@ -4248,13 +4223,16 @@ class Game:
                     screen .blit (fade ,[0 ,0 ])
                 if self.tmr ==5 :
                     self.floor =max (1 ,self.floor +transition_delta )
-                    if self.floor %10 ==1 :
+                    if self.demo_mode or self.floor %10 ==1 :
                         self.set_floor_assets_for_transition (self.floor )
-                        self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
-                        self.move_bgm_pos_ms =0 
-                        self.move_bgm_start_time =time .time ()
-                        pygame .mixer .music .load (self.move_bgm_path )
-                        pygame .mixer .music .play (-1 )
+                        rule_floor =self.get_rule_floor ()
+                        next_bgm_path =self.path +"/sound/bgm_"+str ((rule_floor -1) //10 )+".wav"
+                        if self.boss_transition_mode or next_bgm_path !=self.move_bgm_path or not pygame .mixer .music .get_busy ():
+                            self.move_bgm_path =next_bgm_path
+                            self.move_bgm_pos_ms =0 
+                            self.move_bgm_start_time =time .time ()
+                            pygame .mixer .music .load (self.move_bgm_path )
+                            pygame .mixer .music .play (-1 )
                     self.make_dungeon ()
                     self.put_event ()
                     if self.save_from_stair or self.save_from_boss:
@@ -4301,7 +4279,7 @@ class Game:
 
             elif self.idx ==130 :# ボス会話
                 self.draw_dungeon (screen ,fontS )
-                layout =self.get_dialog_window_layout (screen ,dlg_y_ratio =520 /720 )
+                layout =self.get_dialog_window_layout (screen )
                 self.draw_dialog_window (screen ,layout ,alpha =255 )
                 visible ,self.boss_talk_index ,self.boss_talk_char_count ,self.boss_talk_last_tick =self.step_talk_text (
                     self.boss_talk_lines ,
@@ -4326,20 +4304,29 @@ class Game:
                     if self.boss_talk_index >=len (self.boss_talk_lines ):
                         self.truth_fragment_drop_battle =False
                         if self.boss_talk_kind == "end":
-                            self.boss_save_cmd =0
-                            self.boss_save_input_lock = True
-                            self.save_from_boss = False
-                            if 90 <self.floor <100 :
-                                pygame .mixer .music .load (self.path +"/sound/bgm_9.wav")
-                                pygame .mixer .music .play (-1 )
-                            self.idx =112 
+                            if self.demo_mode:
+                                if self.is_demo_last_floor():
+                                    self.init_item_event (kind ="demo_end",lines =DEMO_END_TALK)
+                                    self.idx =131
+                                else:
+                                    self.boss_transition_mode =True
+                                    self.floor_transition_delta =1
+                                    self.idx =110
+                            else:
+                                self.boss_save_cmd =0
+                                self.boss_save_input_lock = True
+                                self.save_from_boss = False
+                                if 90 <self.floor <100 :
+                                    pygame .mixer .music .load (self.path +"/sound/bgm_9.wav")
+                                    pygame .mixer .music .play (-1 )
+                                self.idx =112 
                         else:
                             self.idx =200 
                         self.tmr =0 
 
             elif self.idx ==133 :# ラスボス会話
                 self.draw_dungeon (screen ,fontS )
-                layout =self.get_dialog_window_layout (screen ,dlg_y_ratio =520 /720 )
+                layout =self.get_dialog_window_layout (screen )
                 self.draw_dialog_window (screen ,layout ,alpha =255 )
                 visible ,self.boss_talk_index ,self.boss_talk_char_count ,self.boss_talk_last_tick =self.step_talk_text (
                     self.boss_talk_lines ,
@@ -4369,7 +4356,7 @@ class Game:
 
             elif self.idx ==131 :# itemWallイベント
                 self.draw_dungeon (screen ,fontS )
-                layout =self.get_dialog_window_layout (screen ,dlg_y_ratio =525 /720 )
+                layout =self.get_dialog_window_layout (screen )
                 view_left =layout ["view_left"]
                 view_top =layout ["view_top"]
                 view_w =layout ["view_w"]
@@ -4670,10 +4657,18 @@ class Game:
                     if finished:
                         self.idx =100
                         self.tmr =0
+                elif self.item_event_kind == "demo_end":
+                    finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
+                    if finished:
+                        pygame .mixer .music .load (self.path +"/sound/bgm_title.wav")
+                        pygame .mixer .music .play (-1 )
+                        self.keep_title_bgm_on_next_title =True
+                        self.idx =88
+                        self.tmr =0
                 elif self.item_event_kind == "weapon_set":
                     finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
                     if finished:
-                        self.grant_weapon_set_for_floor (self.floor )
+                        self.grant_weapon_set_for_floor (self.get_rule_floor ())
                         self.item_popup_text ="武具セット"
                         self.dungeon [self.pl_y -1 ][self.pl_x ]=9
                         self.idx =120
@@ -4794,7 +4789,7 @@ class Game:
 
             elif self.idx ==132 :# eventWall会話
                 self.draw_dungeon (screen ,fontS )
-                layout =self.get_dialog_window_layout (screen ,dlg_y_ratio =520 /720 )
+                layout =self.get_dialog_window_layout (screen )
                 self.draw_dialog_window (screen ,layout ,alpha =255 )
                 visible ,self.event_talk_index ,self.event_talk_char_count ,self.event_talk_last_tick =self.step_talk_text (
                     self.event_talk_lines ,
@@ -4827,7 +4822,7 @@ class Game:
                     if self.move_bgm_path :
                         now =time .time ()
                         self.move_bgm_pos_ms =int ((now -self.move_bgm_start_time )*1000 )
-                    bg_idx = (self.floor - 1) // 10
+                    bg_idx = (self.get_rule_floor () - 1) // 10
                     if self.last_btl_bg_idx != bg_idx:
                         self.bg_cache.clear()
                         self.last_btl_bg_idx = bg_idx
@@ -5651,21 +5646,23 @@ class Game:
                     self.set_message ("レベルアップ！")
                     se [4 ].play ()
                     self.pl_level =self.pl_level +1 
-                    self.refresh_pl_magmax ()
-                    lif_p =random .randint (10 ,20 )
-                    str_p =random .randint (6 ,8 )
-                    mag_p =random .randint (15 ,30 )
+                    growth_mul =3 if self.demo_mode else 1
+                    lif_p =random .randint (10 ,20 )*growth_mul
+                    str_p =random .randint (6 ,8 )*growth_mul
+                    mag_p =random .randint (15 ,30 )*growth_mul
+                    magmax_p =50 *growth_mul
                     self.pl_exp =self.pl_exp -(self.pl_lifemax -250 )*20 
                 if self.tmr ==10 :
                     self.pl_lifemax =self.pl_lifemax +lif_p 
                     self.pl_life =self.pl_life +lif_p 
+                    self.pl_magmax =self.pl_magmax +magmax_p
                     self.add_pl_mag (mag_p )
                     self.pl_str =self.pl_str +str_p 
                     self.clamp_player_core_stats ()
                     self.set_message (f"　最大生命 +{lif_p}")
                     self.set_message (f"　攻撃 +{str_p}")
                     self.set_message (f"　魔力 +{mag_p}")
-                    self.set_message (f"　魔力上限 +50")
+                    self.set_message (f"　魔力上限 +{magmax_p}")
                 if self.tmr ==23 :
                     if self.pl_exp >(self.pl_lifemax -250 )*20 :
                         self.idx =243 
