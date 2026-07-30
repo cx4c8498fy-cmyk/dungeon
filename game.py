@@ -10,7 +10,7 @@ import json
 import glob
 from pygame.locals import *
 from game_data import *
-from assets import load_images, load_sounds, load_floor_variants, load_wall_variants, make_wall_top
+from assets import load_images, load_sounds, load_floor_variants, load_wall_variants, make_wall_top, resolve_sound_path
 
 
 BATTLE_UI_LAYOUT = {
@@ -1552,6 +1552,7 @@ class Game:
             self.tmr =0
             return
         if key [K_m ]==1 :# メニュー
+            self.menu_cmd =0
             self.idx =30 
 
         # 方向キーで上下左右に移動
@@ -1702,7 +1703,7 @@ class Game:
         self.apply_equipped_slots()
         self.update_player_images ()
         rule_floor =self.get_rule_floor ()
-        self.move_bgm_path =self.path +"/sound/bgm_"+str ((rule_floor -1) //10 )+".wav"
+        self.move_bgm_path =resolve_sound_path (self.path ,"bgm_"+str ((rule_floor -1) //10 )+".wav")
         self.move_bgm_pos_ms =0 
         self.move_bgm_start_time =time .time ()
         pygame .mixer .music .load (self.move_bgm_path )
@@ -1811,7 +1812,7 @@ class Game:
                 else:
                     self.reset_tutorial_runtime ()
                 self.fairy_pos =self.find_fairy_position ()
-                self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".wav"
+                self.move_bgm_path =resolve_sound_path (self.path ,"bgm_"+str ((self.floor-1) //10 )+".wav")
                 self.move_bgm_pos_ms =0 
                 self.move_bgm_start_time =time .time ()
                 pygame .mixer .music .load (self.move_bgm_path )
@@ -2110,7 +2111,7 @@ class Game:
             if 0 <=wy <len (self.dungeon )and 0 <=wx <len (self.dungeon [wy ])and self.dungeon [wy ][wx ]==7 :
                 mx =int (wx *scale )
                 my =int (wy *scale )
-                bg .fill ((255 ,255 ,0 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
+                bg .fill ((205 ,120 ,255 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
         for wx ,wy in self.map_event_walls :
             if 0 <=wy <len (self.dungeon )and 0 <=wx <len (self.dungeon [wy ])and self.dungeon [wy ][wx ]==8 :
                 mx =int (wx *scale )
@@ -2130,12 +2131,12 @@ class Game:
             if 0 <=ty <len (self.dungeon )and 0 <=tx <len (self.dungeon [ty ])and self.dungeon [ty ][tx ]==1 :
                 mx =int (tx *scale )
                 my =int (ty *scale )
-                bg .fill ((255 ,140 ,0 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
+                bg .fill ((255 ,255 ,0 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
         for wx ,wy in self.map_wboxes :
             if 0 <=wy <len (self.dungeon )and 0 <=wx <len (self.dungeon [wy ])and self.dungeon [wy ][wx ]==4 :
                 mx =int (wx *scale )
                 my =int (wy *scale )
-                bg .fill ((255 ,140 ,0 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
+                bg .fill ((255 ,255 ,0 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
         if self.fairy_pos :
             fx ,fy =self.fairy_pos
             mx =int (fx *scale )
@@ -2159,7 +2160,7 @@ class Game:
                 self.move_bgm_start_time =time .time ()
         else :
             rule_floor =self.get_rule_floor ()
-            pygame .mixer .music .load (self.path +"/sound/bgm_"+str ((rule_floor -1) //10 )+".wav")
+            pygame .mixer .music .load (resolve_sound_path (self.path ,"bgm_"+str ((rule_floor -1) //10 )+".wav"))
             pygame .mixer .music .play (-1 )
 
 
@@ -3469,7 +3470,7 @@ class Game:
                     if self.keep_title_bgm_on_next_title:
                         self.keep_title_bgm_on_next_title = False
                     else:
-                        pygame .mixer .music .load (self.path +"/sound/bgm_title.wav")
+                        pygame .mixer .music .load (resolve_sound_path (self.path ,"bgm_title.wav"))
                         pygame .mixer .music .play (-1 )
                     self.title_mode = 0
                     self.title_cmd = 0
@@ -4226,7 +4227,7 @@ class Game:
                     if self.demo_mode or self.floor %10 ==1 :
                         self.set_floor_assets_for_transition (self.floor )
                         rule_floor =self.get_rule_floor ()
-                        next_bgm_path =self.path +"/sound/bgm_"+str ((rule_floor -1) //10 )+".wav"
+                        next_bgm_path =resolve_sound_path (self.path ,"bgm_"+str ((rule_floor -1) //10 )+".wav")
                         if self.boss_transition_mode or next_bgm_path !=self.move_bgm_path or not pygame .mixer .music .get_busy ():
                             self.move_bgm_path =next_bgm_path
                             self.move_bgm_pos_ms =0 
@@ -4317,7 +4318,7 @@ class Game:
                                 self.boss_save_input_lock = True
                                 self.save_from_boss = False
                                 if 90 <self.floor <100 :
-                                    pygame .mixer .music .load (self.path +"/sound/bgm_9.wav")
+                                    pygame .mixer .music .load (resolve_sound_path (self.path ,"bgm_9.wav"))
                                     pygame .mixer .music .play (-1 )
                                 self.idx =112 
                         else:
@@ -4345,11 +4346,11 @@ class Game:
                     )
                     if self.boss_talk_index >=len (self.boss_talk_lines ):
                         if self.last_talk_mode == 2:
-                            pygame .mixer .music .load (self.path +"/sound/bgm_title.wav")
+                            pygame .mixer .music .load (resolve_sound_path (self.path ,"bgm_title.wav"))
                             pygame .mixer .music .play (-1 )
                             self.idx =82 
                         else:
-                            pygame .mixer .music .load (self.path +"/sound/bgm_title.wav")
+                            pygame .mixer .music .load (resolve_sound_path (self.path ,"bgm_title.wav"))
                             pygame .mixer .music .play (-1 )
                             self.idx =84 
                         self.tmr =0 
@@ -4660,7 +4661,7 @@ class Game:
                 elif self.item_event_kind == "demo_end":
                     finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
                     if finished:
-                        pygame .mixer .music .load (self.path +"/sound/bgm_title.wav")
+                        pygame .mixer .music .load (resolve_sound_path (self.path ,"bgm_title.wav"))
                         pygame .mixer .music .play (-1 )
                         self.keep_title_bgm_on_next_title =True
                         self.idx =88
@@ -4830,14 +4831,14 @@ class Game:
                     if self.boss ==1 :
                         self.init_bossbattle ()
                         battle_bgm ="bgm_battle_2.wav" if self.floor ==100 else "bgm_battle_1.wav"
-                        pygame .mixer .music .load (self.path +"/sound/"+battle_bgm)
+                        pygame .mixer .music .load (resolve_sound_path (self.path ,battle_bgm))
                         pygame .mixer .music .play (-1 )
                         self.init_message ()
                         if self.emy_typ ==116 :
                             self.madoka =0 
                     else :
                         self.init_battle ()
-                        pygame .mixer .music .load (self.path +"/sound/bgm_battle_0.wav")
+                        pygame .mixer .music .load (resolve_sound_path (self.path ,"bgm_battle_0.wav"))
                         pygame .mixer .music .play (-1 )
                         self.init_message ()
                     self.set_message (f"{self.emy_name}が　あらわれた！")

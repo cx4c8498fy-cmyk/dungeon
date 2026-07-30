@@ -5,6 +5,16 @@ import os
 import glob
 import pygame
 
+
+def resolve_sound_path(base_path: str, filename: str) -> str:
+    """Prefer same-name mp3 in sound/ when it exists, otherwise use filename."""
+    stem, _ = os.path.splitext(filename)
+    mp3_path = os.path.join(base_path, "sound", stem + ".mp3")
+    if os.path.exists(mp3_path):
+        return mp3_path
+    return os.path.join(base_path, "sound", filename)
+
+
 @dataclass
 class ImageAssets:
     title: object
@@ -68,19 +78,19 @@ def load_images(base_path: str) -> ImageAssets:
 def load_sounds(base_path: str) -> list:
     """Load sound effects and jingles in the existing order."""
     return [
-        pygame.mixer.Sound(base_path + "/sound/ohd_se_attack.wav"),
-        pygame.mixer.Sound(base_path + "/sound/se_blaze.wav"),
-        pygame.mixer.Sound(base_path + "/sound/ohd_se_potion.wav"),
-        pygame.mixer.Sound(base_path + "/sound/ohd_jin_gameover.wav"),
-        pygame.mixer.Sound(base_path + "/sound/jin_levup.wav"),
-        pygame.mixer.Sound(base_path + "/sound/jin_win.wav"),
-        pygame.mixer.Sound(base_path + "/sound/se_magic.wav"),
-        pygame.mixer.Sound(base_path + "/sound/jin_bosswin.wav"),
-        pygame.mixer.Sound(base_path + "/sound/se_guard.wav"),
-        pygame.mixer.Sound(base_path + "/sound/se_magup.wav"),
-        pygame.mixer.Sound(base_path + "/sound/se_kakera.wav"),
-        pygame.mixer.Sound(base_path + "/sound/se_defence.wav"),
-        pygame.mixer.Sound(base_path + "/sound/se_powup.wav"),
+        pygame.mixer.Sound(resolve_sound_path(base_path, "ohd_se_attack.wav")),
+        pygame.mixer.Sound(resolve_sound_path(base_path, "se_blaze.wav")),
+        pygame.mixer.Sound(resolve_sound_path(base_path, "ohd_se_potion.wav")),
+        pygame.mixer.Sound(resolve_sound_path(base_path, "ohd_jin_gameover.wav")),
+        pygame.mixer.Sound(resolve_sound_path(base_path, "jin_levup.wav")),
+        pygame.mixer.Sound(resolve_sound_path(base_path, "jin_win.wav")),
+        pygame.mixer.Sound(resolve_sound_path(base_path, "se_magic.wav")),
+        pygame.mixer.Sound(resolve_sound_path(base_path, "jin_bosswin.wav")),
+        pygame.mixer.Sound(resolve_sound_path(base_path, "se_guard.wav")),
+        pygame.mixer.Sound(resolve_sound_path(base_path, "se_magup.wav")),
+        pygame.mixer.Sound(resolve_sound_path(base_path, "se_kakera.wav")),
+        pygame.mixer.Sound(resolve_sound_path(base_path, "se_defence.wav")),
+        pygame.mixer.Sound(resolve_sound_path(base_path, "se_powup.wav")),
     ]
 
 
