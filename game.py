@@ -10,7 +10,7 @@ import json
 import glob
 from pygame.locals import *
 from game_data import *
-from assets import load_images, load_sounds, load_floor_variants, load_wall_variants, make_wall_top, resolve_sound_path
+from assets import load_images, load_sounds, load_floor_variants, load_wall_variants, make_wall_top
 
 
 BATTLE_UI_LAYOUT = {
@@ -99,6 +99,7 @@ class Game:
         self.imgFairy = pygame.image.load(self.path + "/image/fairy.png")
         self.imgLockedStairs = pygame.image.load(self.path + "/image/locked_stairs.png")
         self.imgWallInfo = pygame.image.load(self.path + "/image/wall_info.png")
+        self.wall_check = None
 
         self.floor_variants = load_floor_variants(self.path, 0)
         if not self.floor_variants:
@@ -201,13 +202,10 @@ class Game:
         self.settings_accept_lock = False
         self.save_cmd = 0
         self.save_from_stair = False
-        self.save_from_boss = False
         self.stair_save_slot = 0
         self.stair_choice_cmd = 0
         self.stair_prompted = False
         self.stair_choice_input_lock = False
-        self.boss_save_cmd = 0
-        self.boss_save_input_lock = False
         self.boss_talk_choice_cmd = 1
         self.boss_talk_choice_input_lock = False
         self.boss_transition_mode = False
@@ -296,6 +294,7 @@ class Game:
         self.map_item_walls = None
         self.map_event_walls = None
         self.map_info_walls = None
+        self.map_check_walls = None
         self.map_cocoons = None
         self.map_tboxes = None
         self.map_wboxes = None
@@ -328,6 +327,7 @@ class Game:
         self.map_item_walls = set()
         self.map_event_walls = set()
         self.map_info_walls = set()
+        self.map_check_walls = set()
         self.map_cocoons = set()
         self.map_tboxes = set()
         self.map_wboxes = set()
@@ -737,6 +737,8 @@ class Game:
         self.imgWall2 = self.wall_variantsB[0]
         event_path = os.path.join(self.path, "image", "wall", "wallA{}_event.png".format(wall_set))
         self.wall_event = pygame.image.load(event_path)
+        check_path = os.path.join(self.path, "image", "wall", "wallA{}_check.png".format(wall_set))
+        self.wall_check = pygame.image.load(check_path) if os.path.exists(check_path) else None
 
     # set floor assets for current floor を設定する
     def set_floor_assets_for_current_floor(self):
@@ -1151,6 +1153,20 @@ class Game:
         self.event_talk_char_count = 0
         self.event_talk_last_tick = pygame.time.get_ticks()
 
+    # checkWall用の会話を初期化する
+    def init_check_talk(self):
+        self.tutorial_active_stage = 0
+        talk = WALL_CHECK.get(self.floor, "壁には　何も書かれていない。")
+        if isinstance(talk, str):
+            self.event_talk_lines = [talk]
+        elif isinstance(talk, list):
+            self.event_talk_lines = [str(line) for line in talk]
+        else:
+            self.event_talk_lines = [str(talk)]
+        self.event_talk_index = 0
+        self.event_talk_char_count = 0
+        self.event_talk_last_tick = pygame.time.get_ticks()
+
     # get boss map image を取得する
     def get_boss_map_image(self):
         cache_key = "boss_map"
@@ -1158,6 +1174,20 @@ class Game:
             path = self.path + "/image/boss_map.png"
             self.boss_map_cache[cache_key] = pygame.image.load(path)
         return self.boss_map_cache[cache_key]
+
+    # 撃破されたボスの位置を階段に置き換える
+    def replace_boss_with_stairs(self):
+        for y, row in enumerate(self.dungeon):
+            for x, tile in enumerate(row):
+                if tile ==12:
+                    self.dungeon[y][x] =3
+                    if self.map_bosses is not None:
+                        self.map_bosses.discard((x, y))
+                    if self.map_stairs is not None:
+                        self.map_stairs.add((x, y))
+                    self.stair_prompted =False
+                    return True
+        return False
 
     # dungeonマップ を生成する
     def make_dungeon (self ,ignore_fixed =False ):
@@ -1275,7 +1305,7 @@ class Game:
                 wall_only =(y >=start_y +rows )
                 if 0 <=dx <DUNGEON_W and 0 <=dy <DUNGEON_H :
                     tile_id =self.dungeon [dy ][dx ]
-                    if not wall_only and tile_id not in (7 ,8 ,9 ,13 ):
+                    if not wall_only and tile_id not in (7 ,8 ,9 ,13 ,14 ):
                         if not self.map_seen [dy ][dx ]:
                             self.map_seen [dy ][dx ]=True
                             new_seen .append ((dx ,dy ))
@@ -1287,6 +1317,8 @@ class Game:
                         self.map_event_walls.add((dx, dy))
                     if not wall_only and tile_id ==13 and self.map_info_walls is not None:
                         self.map_info_walls.add((dx, dy))
+                    if not wall_only and tile_id ==14 and self.map_check_walls is not None:
+                        self.map_check_walls.add((dx, dy))
                     if not wall_only and tile_id in (2, 10) and self.map_cocoons is not None:
                         self.map_cocoons.add((dx, dy))
                     if not wall_only and tile_id ==1 and self.map_tboxes is not None:
@@ -1315,16 +1347,18 @@ class Game:
                                 bg .blit (self.imgLockedStairs ,[X ,Y ])
                             else:
                                 bg .blit (self.imgFloor [tile_id ],[X ,Y ])
-                    if tile_id in (7 ,8 ,9 ,13 ):
+                    if tile_id in (7 ,8 ,9 ,13 ,14 ):
                         if tile_id ==8 and self.wall_event:
                             bg .blit (self.wall_event ,[X ,Y -40 ])
+                        elif tile_id ==14 and self.wall_check:
+                            bg .blit (self.wall_check ,[X ,Y -40 ])
                         else :
                             bg .blit (self.imgWall ,[X ,Y -40 ])
                         if tile_id ==7 :
                             bg .blit (self.imgFloor [-1 ],[X ,Y ])
                         if tile_id ==13 :
                             bg .blit (self.imgWallInfo ,[X ,Y ])
-                        if dy >=1 and self.dungeon [dy -1 ][dx ] in (7 ,8 ,9 ,13 ):
+                        if dy >=1 and self.dungeon [dy -1 ][dx ] in (7 ,8 ,9 ,13 ,14 ):
                             bg .blit (self.imgWall2 ,[X ,Y -80 ])
                 if not wall_only and x ==0 and y ==0 :# 主人公キャラの表示
                     bg .blit (self.imgPlayer [self.pl_a ],[X ,Y -40 ])
@@ -1470,6 +1504,16 @@ class Game:
             if wall_cells:
                 wx ,wy =random .choice (wall_cells )
                 self.dungeon [wy ][wx ]=13
+        if (not self.demo_mode) and self.wall_check and self.floor in WALL_CHECK: # 調査壁を配置
+            wall_cells =[
+                (x ,y )
+                for y in range (DUNGEON_H -1 )
+                for x in range (DUNGEON_W )
+                if self.dungeon [y ][x ]==9 and self.dungeon [y +1 ][x ]==0
+            ]
+            if wall_cells:
+                wx ,wy =random .choice (wall_cells )
+                self.dungeon [wy ][wx ]=14
 
     # player の移動・更新を行う
     def move_player (self ,key ):
@@ -1560,19 +1604,19 @@ class Game:
         y =self.pl_y 
         if key [K_UP ]==1 :
             self.pl_d =0 
-            if self.dungeon [self.pl_y -1 ][self.pl_x ] not in (7 ,8 ,9 ,12 ,13 ):
+            if self.dungeon [self.pl_y -1 ][self.pl_x ] not in (7 ,8 ,9 ,12 ,13 ,14 ):
                 self.pl_y =self.pl_y -1 
         if key [K_DOWN ]==1 :
             self.pl_d =1 
-            if self.dungeon [self.pl_y +1 ][self.pl_x ] not in (7 ,8 ,9 ,12 ,13 ):
+            if self.dungeon [self.pl_y +1 ][self.pl_x ] not in (7 ,8 ,9 ,12 ,13 ,14 ):
                 self.pl_y =self.pl_y +1 
         if key [K_LEFT ]==1 :
             self.pl_d =2 
-            if self.dungeon [self.pl_y ][self.pl_x -1 ] not in (7 ,8 ,9 ,12 ,13 ):
+            if self.dungeon [self.pl_y ][self.pl_x -1 ] not in (7 ,8 ,9 ,12 ,13 ,14 ):
                 self.pl_x =self.pl_x -1 
         if key [K_RIGHT ]==1 :
             self.pl_d =3 
-            if self.dungeon [self.pl_y ][self.pl_x +1 ] not in (7 ,8 ,9 ,12 ,13 ):
+            if self.dungeon [self.pl_y ][self.pl_x +1 ] not in (7 ,8 ,9 ,12 ,13 ,14 ):
                 self.pl_x =self.pl_x +1 
         self.pl_a =self.pl_d *3 +2 
         if self.pl_x !=x or self.pl_y !=y :
@@ -1663,13 +1707,10 @@ class Game:
         self.floor99_trial_post_pending =False
         self.reset_enemy_battle_params ()
         self.save_from_stair = False
-        self.save_from_boss = False
         self.stair_save_slot = 0
         self.stair_choice_cmd = 0
         self.stair_prompted = False
         self.stair_choice_input_lock = False
-        self.boss_save_cmd = 0
-        self.boss_save_input_lock = False
         self.boss_talk_choice_cmd = 1
         self.boss_talk_choice_input_lock = False
         self.boss_transition_mode = False
@@ -1703,7 +1744,7 @@ class Game:
         self.apply_equipped_slots()
         self.update_player_images ()
         rule_floor =self.get_rule_floor ()
-        self.move_bgm_path =resolve_sound_path (self.path ,"bgm_"+str ((rule_floor -1) //10 )+".wav")
+        self.move_bgm_path =self.path +"/sound/bgm_"+str ((rule_floor -1) //10 )+".mp3"
         self.move_bgm_pos_ms =0 
         self.move_bgm_start_time =time .time ()
         pygame .mixer .music .load (self.move_bgm_path )
@@ -1763,13 +1804,10 @@ class Game:
                 self.emy_powup =1
                 self.poison =0
                 self.save_from_stair = False
-                self.save_from_boss = False
                 self.stair_save_slot = 0
                 self.stair_choice_cmd = 0
                 self.stair_prompted = False
                 self.stair_choice_input_lock = False
-                self.boss_save_cmd = 0
-                self.boss_save_input_lock = False
                 self.boss_talk_choice_cmd = 1
                 self.boss_talk_choice_input_lock = False
                 self.boss_transition_mode = False
@@ -1812,7 +1850,7 @@ class Game:
                 else:
                     self.reset_tutorial_runtime ()
                 self.fairy_pos =self.find_fairy_position ()
-                self.move_bgm_path =resolve_sound_path (self.path ,"bgm_"+str ((self.floor-1) //10 )+".wav")
+                self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".mp3"
                 self.move_bgm_pos_ms =0 
                 self.move_bgm_start_time =time .time ()
                 pygame .mixer .music .load (self.move_bgm_path )
@@ -2074,7 +2112,7 @@ class Game:
             for y in range (DUNGEON_H ):
                 row =self.map_seen [y ]
                 for x in range (DUNGEON_W ):
-                    if row [x ]and self.dungeon [y ][x ] not in (7 ,8 ,9 ,13 ) :
+                    if row [x ]and self.dungeon [y ][x ] not in (7 ,8 ,9 ,13 ,14 ) :
                         self.map_grid_surface.set_at((x, y), (140, 140, 140, 160))
         if new_seen :
             for x ,y in new_seen :
@@ -2117,6 +2155,11 @@ class Game:
                 mx =int (wx *scale )
                 my =int (wy *scale )
                 bg .fill ((80 ,255 ,80 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
+        for wx ,wy in self.map_check_walls :
+            if 0 <=wy <len (self.dungeon )and 0 <=wx <len (self.dungeon [wy ])and self.dungeon [wy ][wx ]==14 :
+                mx =int (wx *scale )
+                my =int (wy *scale )
+                bg .fill ((80 ,255 ,80 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
         for wx ,wy in self.map_info_walls :
             if 0 <=wy <len (self.dungeon )and 0 <=wx <len (self.dungeon [wy ])and self.dungeon [wy ][wx ]==13 :
                 mx =int (wx *scale )
@@ -2154,13 +2197,15 @@ class Game:
             try:
                 pygame .mixer .music .play (-1 ,self.move_bgm_pos_ms /1000.0 )
                 self.move_bgm_start_time =time .time ()-self.move_bgm_pos_ms /1000.0
-            except pygame.error:
+            except pygame.error as err:
+                print("[BGM resume fallback]", self.move_bgm_path, self.move_bgm_pos_ms /1000.0, repr(err), flush=True)
                 pygame .mixer .music .play (-1 )
                 self.move_bgm_pos_ms =0
                 self.move_bgm_start_time =time .time ()
         else :
             rule_floor =self.get_rule_floor ()
-            pygame .mixer .music .load (resolve_sound_path (self.path ,"bgm_"+str ((rule_floor -1) //10 )+".wav"))
+            print("[BGM resume no path]", self.floor, rule_floor, flush=True)
+            pygame .mixer .music .load (self.path +"/sound/bgm_"+str ((rule_floor -1) //10 )+".mp3")
             pygame .mixer .music .play (-1 )
 
 
@@ -2822,7 +2867,6 @@ class Game:
             return False
         self.truth_fragment -=cost
         self.save_from_stair =False
-        self.save_from_boss =False
         self.boss_transition_mode =False
         self.floor_transition_delta =0
         self.idx =110
@@ -3144,53 +3188,6 @@ class Game:
             self.draw_text (bg ,label ,win_x +50 ,y ,fnt ,WHITE )
         return ent 
 
-    # boss save choice command の処理を行う
-    def boss_save_choice_command (self ,bg ,fnt ,key ,enable_input =True ):
-        ent =False 
-        options =["はい","いいえ"]
-        if enable_input:
-            if key [K_UP ]and self.boss_save_cmd >0 :
-                self.boss_save_cmd -=1 
-            if key [K_DOWN ]and self.boss_save_cmd <len (options )-1 :
-                self.boss_save_cmd +=1 
-            if key [K_RETURN ]or key [K_a ]:
-                ent =True 
-        view_rect =getattr (self ,"dungeon_view_rect",None )
-        if view_rect :
-            view_left ,view_top ,view_w ,view_h =view_rect
-        else :
-            view_left =0 
-            view_top =0 
-            view_w ,view_h =bg .get_size ()
-        scale_x =view_w /880 
-        scale_y =view_h /720 
-        dlg_x =view_left +int (40 *scale_x )
-        dlg_y =view_top +int (525 *scale_y )
-        dlg_w =max (1 ,int (800 *scale_x ))
-        dlg_h =max (1 ,int (160 *scale_y ))
-        text_x =view_left +int (60 *scale_x )
-        text_y =view_top +int (560 *scale_y )
-        dialog =pygame .Surface ((dlg_w ,dlg_h ),pygame .SRCALPHA )
-        dialog .fill ((0 ,0 ,0 ,255 ))
-        bg .blit (dialog ,[dlg_x ,dlg_y ])
-        pygame .draw .rect (bg ,WHITE ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ],2 )
-        self.draw_text (bg ,"セーブしますか？",text_x ,text_y ,fnt ,WHITE )
-        sel_line_h =max (1 ,int (25 *scale_y ))
-        box_h =max (1 ,int (15 *scale_y ))+sel_line_h *len (options )
-        box_w =max (1 ,int (280 *scale_x ))
-        box_x =view_left +int (520 *scale_x )
-        box_y =view_top +int (420 *scale_y )
-        arrow_x =view_left +int (540 *scale_x )
-        text_sel_x =view_left +int (560 *scale_x )
-        arrow_y =view_top +int (435 *scale_y )
-        pygame .draw .rect (bg ,BLACK ,[box_x ,box_y ,box_w ,box_h ])
-        pygame .draw .rect (bg ,WHITE ,[box_x ,box_y ,box_w ,box_h ],2 )
-        for i, option in enumerate(options):
-            if i == self.boss_save_cmd:
-                self.draw_text (bg ,"▶",arrow_x ,arrow_y + i *sel_line_h ,fnt ,WHITE )
-            self.draw_text (bg ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fnt ,WHITE )
-        return ent 
-
     # ボス会話開始前の確認ダイアログを処理する
     def boss_talk_choice_command (self ,bg ,fnt ,key ,enable_input =True ):
         ent =False
@@ -3470,7 +3467,7 @@ class Game:
                     if self.keep_title_bgm_on_next_title:
                         self.keep_title_bgm_on_next_title = False
                     else:
-                        pygame .mixer .music .load (resolve_sound_path (self.path ,"bgm_title.wav"))
+                        pygame .mixer .music .load (self.path +"/sound/bgm_title.mp3")
                         pygame .mixer .music .play (-1 )
                     self.title_mode = 0
                     self.title_cmd = 0
@@ -3830,22 +3827,14 @@ class Game:
                         self.settings_accept_lock =True
 
             elif self.idx ==40 :#セーブデータ選択
-                if self.save_from_boss:
-                    screen .fill (BLACK )
-                else:
-                    self.draw_dungeon (screen ,fontS )
+                self.draw_dungeon (screen ,fontS )
                 if self.save_command (screen ,fontS ,key )==True :
                     self.confirm_cmd =0 
                     self.save_confirm_lock = True
                     self.idx =50 
                     self.tmr =0 
                 if key [K_b ]==1 or key [K_BACKSPACE ]==1 :
-                    if self.save_from_boss:
-                        self.save_from_boss = False
-                        self.boss_save_input_lock = True
-                        self.idx =112 
-                        self.tmr =0 
-                    elif self.save_from_stair:
+                    if self.save_from_stair:
                         self.save_from_stair = False
                         self.stair_choice_input_lock = True
                         self.idx =111 
@@ -3855,10 +3844,7 @@ class Game:
                         self.idx =30 
 
             elif self.idx ==50 :#確認とセーブ
-                if self.save_from_boss:
-                    screen .fill (BLACK )
-                else:
-                    self.draw_dungeon (screen ,fontS )
+                self.draw_dungeon (screen ,fontS )
                 d =self.make_current_save_data ()
                 if key [K_b ]==1 or key [K_BACKSPACE ]==1 :
                     self.load_accept_lock = True
@@ -3898,7 +3884,7 @@ class Game:
                             self.draw_text (screen ,"▶",win_x +20 ,y ,fontS ,WHITE )
                         self.draw_text (screen ,label ,win_x +50 ,y ,fontS ,WHITE )
                     if confirm_yes :
-                        if self.save_from_stair or self.save_from_boss:
+                        if self.save_from_stair:
                             self.stair_save_slot = self.save_cmd
                             self.idx =110 
                             self.tmr =0 
@@ -3913,7 +3899,7 @@ class Game:
                         self.load_accept_lock = True
                         self.idx =40 
                 else :
-                    if self.save_from_stair or self.save_from_boss:
+                    if self.save_from_stair:
                         self.stair_save_slot = self.save_cmd
                         self.idx =110 
                         self.tmr =0 
@@ -4073,6 +4059,10 @@ class Game:
                             self.init_event_talk ()
                             self.idx =132
                             self.tmr =0
+                    elif front_tile ==14:
+                        self.init_check_talk()
+                        self.idx =132
+                        self.tmr =0
                     elif front_tile ==13:
                         if self.tutorial_enabled and self.floor ==1:
                             stage =self.tutorial_stage_for_wall ((tx ,ty ))
@@ -4161,24 +4151,6 @@ class Game:
                         self.idx =100 
                         self.tmr =0 
 
-            elif self.idx ==112 :# ボス戦後セーブ確認
-                screen .fill (BLACK )
-                if self.boss_save_input_lock:
-                    self.boss_save_choice_command (screen ,fontS ,key ,enable_input =False )
-                    if not (key [K_UP ]or key [K_DOWN ]or key [K_LEFT ]or key [K_RIGHT ]or key [K_RETURN ]or key [K_a ]or key [K_b ]or key [K_BACKSPACE ]):
-                        self.boss_save_input_lock = False
-                else:
-                    if self.boss_save_choice_command (screen ,fontS ,key )==True :
-                        if self.boss_save_cmd ==0 :
-                            self.save_from_boss = True
-                            self.load_accept_lock = True
-                            self.idx =40 
-                            self.tmr =0 
-                        else :
-                            self.save_from_boss = False
-                            self.idx =110 
-                            self.tmr =0 
-
             elif self.idx ==113 :# ボス会話前確認
                 self.draw_dungeon (screen ,fontS )
                 if self.boss_talk_choice_input_lock:
@@ -4227,7 +4199,7 @@ class Game:
                     if self.demo_mode or self.floor %10 ==1 :
                         self.set_floor_assets_for_transition (self.floor )
                         rule_floor =self.get_rule_floor ()
-                        next_bgm_path =resolve_sound_path (self.path ,"bgm_"+str ((rule_floor -1) //10 )+".wav")
+                        next_bgm_path =self.path +"/sound/bgm_"+str ((rule_floor -1) //10 )+".mp3"
                         if self.boss_transition_mode or next_bgm_path !=self.move_bgm_path or not pygame .mixer .music .get_busy ():
                             self.move_bgm_path =next_bgm_path
                             self.move_bgm_pos_ms =0 
@@ -4236,14 +4208,13 @@ class Game:
                             pygame .mixer .music .play (-1 )
                     self.make_dungeon ()
                     self.put_event ()
-                    if self.save_from_stair or self.save_from_boss:
+                    if self.save_from_stair:
                         d =self.make_current_save_data ()
                         with open (self.path +"/savedata/data{}.json".format (self.stair_save_slot +1 ),"w")as f :
                             json .dump (d ,f )
                         se [9 ].play ()
                         self.floorlist [self.stair_save_slot ]=self.floor 
                         self.save_from_stair = False
-                        self.save_from_boss = False
                         self.load_accept_lock = True
                 if 6 <=self.tmr and self.tmr <=9 :
                     fade =pygame .Surface (screen .get_size (),pygame .SRCALPHA )
@@ -4310,20 +4281,19 @@ class Game:
                                     self.init_item_event (kind ="demo_end",lines =DEMO_END_TALK)
                                     self.idx =131
                                 else:
-                                    self.boss_transition_mode =True
-                                    self.floor_transition_delta =1
-                                    self.idx =110
+                                    self.replace_boss_with_stairs ()
+                                    self.boss_transition_mode =False
+                                    self.resume_dungeon_bgm ()
+                                    self.idx =100
                             else:
-                                self.boss_save_cmd =0
-                                self.boss_save_input_lock = True
-                                self.save_from_boss = False
-                                if 90 <self.floor <100 :
-                                    pygame .mixer .music .load (resolve_sound_path (self.path ,"bgm_9.wav"))
-                                    pygame .mixer .music .play (-1 )
-                                self.idx =112 
+                                self.replace_boss_with_stairs ()
+                                self.boss_transition_mode =False
+                                self.resume_dungeon_bgm ()
+                                self.idx =100
+                            self.tmr =0
                         else:
                             self.idx =200 
-                        self.tmr =0 
+                            self.tmr =0 
 
             elif self.idx ==133 :# ラスボス会話
                 self.draw_dungeon (screen ,fontS )
@@ -4346,11 +4316,11 @@ class Game:
                     )
                     if self.boss_talk_index >=len (self.boss_talk_lines ):
                         if self.last_talk_mode == 2:
-                            pygame .mixer .music .load (resolve_sound_path (self.path ,"bgm_title.wav"))
+                            pygame .mixer .music .load (self.path +"/sound/bgm_title.mp3")
                             pygame .mixer .music .play (-1 )
                             self.idx =82 
                         else:
-                            pygame .mixer .music .load (resolve_sound_path (self.path ,"bgm_title.wav"))
+                            pygame .mixer .music .load (self.path +"/sound/bgm_title.mp3")
                             pygame .mixer .music .play (-1 )
                             self.idx =84 
                         self.tmr =0 
@@ -4661,7 +4631,7 @@ class Game:
                 elif self.item_event_kind == "demo_end":
                     finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
                     if finished:
-                        pygame .mixer .music .load (resolve_sound_path (self.path ,"bgm_title.wav"))
+                        pygame .mixer .music .load (self.path +"/sound/bgm_title.mp3")
                         pygame .mixer .music .play (-1 )
                         self.keep_title_bgm_on_next_title =True
                         self.idx =88
@@ -4830,15 +4800,15 @@ class Game:
                     self.imgBtlBG =pygame .image .load (self.path +f"/image/btlbg/btlbg{bg_idx}.png")
                     if self.boss ==1 :
                         self.init_bossbattle ()
-                        battle_bgm ="bgm_battle_2.wav" if self.floor ==100 else "bgm_battle_1.wav"
-                        pygame .mixer .music .load (resolve_sound_path (self.path ,battle_bgm))
+                        battle_bgm ="bgm_battle_2.mp3" if self.floor ==100 else "bgm_battle_1.mp3"
+                        pygame .mixer .music .load (self.path +"/sound/"+battle_bgm)
                         pygame .mixer .music .play (-1 )
                         self.init_message ()
                         if self.emy_typ ==116 :
                             self.madoka =0 
                     else :
                         self.init_battle ()
-                        pygame .mixer .music .load (resolve_sound_path (self.path ,"bgm_battle_0.wav"))
+                        pygame .mixer .music .load (self.path +"/sound/bgm_battle_0.mp3")
                         pygame .mixer .music .play (-1 )
                         self.init_message ()
                     self.set_message (f"{self.emy_name}が　あらわれた！")
@@ -5708,7 +5678,7 @@ class Game:
                 elif self.boss ==1 :
                     time .sleep (1 )
                     self.boss =0 
-                    self.boss_transition_mode = True
+                    self.boss_transition_mode = False
                     self.init_boss_talk ("end")
                     self.idx =130 
                     self.tmr =0 
