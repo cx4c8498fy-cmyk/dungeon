@@ -490,7 +490,7 @@ FLOOR99_AFTER_TRIAL_REWARD_LINE = [
     "わかった。有効に使いたまえよ",
 ]
 
-MAZE_W = 13
+MAZE_W = 12
 MAZE_H = 10
 DUNGEON_W = MAZE_W * 9
 DUNGEON_H = MAZE_H * 9

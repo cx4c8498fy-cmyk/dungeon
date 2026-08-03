@@ -95,11 +95,11 @@ class Game:
         self.imgPlayerBase1.append(pygame.image.load(self.path + "/image/mychr/mychr_4_0_1.png"))
         self.imgPlayer = self.imgPlayerBase0
         self.imgEffect = images.effects
-        self.imgFire = pygame.image.load(self.path + "/image/fire.png")
         self.imgFairy = pygame.image.load(self.path + "/image/fairy.png")
         self.imgLockedStairs = pygame.image.load(self.path + "/image/locked_stairs.png")
         self.imgWallInfo = pygame.image.load(self.path + "/image/wall_info.png")
         self.wall_check = None
+        self.boss_image_path = ""
 
         self.floor_variants = load_floor_variants(self.path, 0)
         if not self.floor_variants:
@@ -1175,6 +1175,27 @@ class Game:
             self.boss_map_cache[cache_key] = pygame.image.load(path)
         return self.boss_map_cache[cache_key]
 
+    # 現在のボス状態に対応する画像パスを返す
+    def get_boss_image_path(self):
+        boss_id =self.emy_typ -110
+        suffix ="_fire" if boss_id ==2 and (self.boss_mode =="fire" or self.burn_turns >0 )else ""
+        return self.path +"/image/boss/boss_"+str (boss_id )+suffix +".png"
+
+    # 現在のボス状態に対応する画像を読み込む
+    def load_current_boss_image(self):
+        path =self.get_boss_image_path ()
+        if self.boss_image_path ==path:
+            return
+        self.imgEnemy =pygame .image .load (path )
+        new_w =int (self.imgEnemy .get_width ()*1.1 )
+        new_h =int (self.imgEnemy .get_height ()*1.1 )
+        self.imgEnemy =pygame .transform .scale (self.imgEnemy ,(new_w ,new_h ))
+        screen =pygame .display .get_surface ()
+        screen_w ,screen_h =screen .get_size ()
+        self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2
+        self.emy_y =1.45 *screen_h //2 -self.imgEnemy .get_height ()
+        self.boss_image_path =path
+
     # 撃破されたボスの位置を階段に置き換える
     def replace_boss_with_stairs(self):
         for y, row in enumerate(self.dungeon):
@@ -2249,18 +2270,12 @@ class Game:
         self.emy_lev =1
         self.emy_typ =109 +int (boss_floor //10 ) +self.change
         self.encountered_enemies.add(self.emy_typ)
-        self.imgEnemy =pygame .image .load (self.path +"/image/boss/boss_"+str (self.emy_typ -110 )+".png")
-        new_w =int (self.imgEnemy .get_width ()*1.1 )
-        new_h =int (self.imgEnemy .get_height ()*1.1 )
-        self.imgEnemy =pygame .transform .scale (self.imgEnemy ,(new_w ,new_h ))
+        self.boss_image_path =""
+        self.load_current_boss_image ()
         self.emy_name =EMY_NAME [self.emy_typ ]
         self.emy_lifemax =EMY_LIFE [self.emy_typ ]
         self.emy_life =self.emy_lifemax 
         self.emy_str =EMY_STR [self.emy_typ ]
-        screen =pygame .display .get_surface ()
-        screen_w ,screen_h =screen .get_size ()
-        self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2 
-        self.emy_y =1.45*screen_h //2 -self.imgEnemy .get_height ()
 
     # grant weapon set for floor を付与する
     def grant_weapon_set_for_floor (self ,floor ):
@@ -2312,13 +2327,12 @@ class Game:
         win =pygame .Surface ((W ,H ),pygame .SRCALPHA )
         win .fill ((0 ,0 ,0 ,100 ))
         bg .blit (win ,[msg_x ,msg_y ])
+        if self.emy_typ >=110 :
+            self.load_current_boss_image ()
         if self.emy_life >0 and self.emy_blink %2 ==0 :
             bg .blit (self.imgEnemy ,[self.emy_x ,self.emy_y +self.emy_step])
         enemy_state_entries =[]
         if self.burn_turns >0 :
-            fx = self.emy_x + self.imgEnemy.get_width() - self.imgFire.get_width()
-            fy = self.emy_y + self.emy_step - self.imgFire.get_height() // 2
-            bg .blit (self.imgFire ,[fx ,fy ])
             enemy_state_entries .append ((f"火傷 {'・'*self.burn_turns}",RED ))
         if self.emy_powup >1 :
             enemy_state_entries .append (("力↑",RED ))
