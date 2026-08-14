@@ -100,7 +100,10 @@ def load_floor_variants(base_path: str, floor_index: int) -> list:
 def load_wall_variants(base_path: str, wall_prefix: str, wall_set: int) -> list:
     """Load wall variants like wallA1_0.png, wallA1_1.png, ..."""
     pattern = os.path.join(base_path, "image", "wall", f"{wall_prefix}{wall_set}_*.png")
-    paths = sorted(glob.glob(pattern))
+    paths = sorted(
+        path for path in glob.glob(pattern)
+        if os.path.splitext(os.path.basename(path))[0].rsplit("_", 1)[-1].isdigit()
+    )
     if paths:
         return [pygame.image.load(path) for path in paths]
     fallback = os.path.join(base_path, "image", "wall", f"{wall_prefix}{wall_set}.png")

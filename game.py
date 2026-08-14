@@ -101,6 +101,7 @@ class Game:
         self.imgLockedStairs = pygame.image.load(self.path + "/image/locked_stairs.png")
         self.imgWallInfo = pygame.image.load(self.path + "/image/wall_info.png")
         self.wall_check = None
+        self.wall_book = None
         self.boss_image_path = ""
 
         self.floor_variants = load_floor_variants(self.path, 0)
@@ -300,6 +301,7 @@ class Game:
         self.map_event_walls = None
         self.map_info_walls = None
         self.map_check_walls = None
+        self.map_book_walls = None
         self.map_cocoons = None
         self.map_tboxes = None
         self.map_wboxes = None
@@ -333,6 +335,7 @@ class Game:
         self.map_event_walls = set()
         self.map_info_walls = set()
         self.map_check_walls = set()
+        self.map_book_walls = set()
         self.map_cocoons = set()
         self.map_tboxes = set()
         self.map_wboxes = set()
@@ -425,17 +428,6 @@ class Game:
             for sound in self.se:
                 sound.set_volume(se_volume)
 
-    # BGM再生位置の調査用ログを即時出力する
-    def log_bgm(self, label, *values):
-        print("[BGM]", label, *values, flush=True)
-
-    # pygame mixerのBGM再生位置をログ出力用に安全に取得する
-    def get_music_pos_for_log(self):
-        try:
-            return pygame.mixer.music.get_pos()
-        except pygame.error as err:
-            return "pygame.error:{}".format(repr(err))
-
     # BGMファイルの長さをミリ秒で取得し、再利用のためキャッシュする
     def get_bgm_length_ms(self, path):
         if path not in self.bgm_length_ms_cache:
@@ -445,10 +437,7 @@ class Game:
     # 保存したBGM再生位置を曲長の範囲内に丸め、ループ再開できる値にする
     def normalize_bgm_pos_ms(self, path, pos_ms):
         length_ms =self.get_bgm_length_ms (path )
-        normalized =pos_ms %length_ms
-        if normalized !=pos_ms:
-            self.log_bgm ("normalize_pos","path",path,"raw_ms",pos_ms,"length_ms",length_ms,"normalized_ms",normalized)
-        return normalized
+        return pos_ms %length_ms
 
     # プレイヤーの現在魔力を増減し、0から最大魔力の範囲に収める
     def add_pl_mag(self, amount):
@@ -769,6 +758,8 @@ class Game:
         self.wall_event = pygame.image.load(event_path)
         check_path = os.path.join(self.path, "image", "wall", "wallA{}_check.png".format(wall_set))
         self.wall_check = pygame.image.load(check_path) if os.path.exists(check_path) else None
+        book_path = os.path.join(self.path, "image", "wall", "wallA{}_book.png".format(wall_set))
+        self.wall_book = pygame.image.load(book_path) if os.path.exists(book_path) else None
 
     # 現在階のルールフロアに合わせて床・壁・繭画像を設定する
     def set_floor_assets_for_current_floor(self):
@@ -1156,6 +1147,20 @@ class Game:
         self.event_talk_char_count = 0
         self.event_talk_last_tick = pygame.time.get_ticks()
 
+    # 現在階に対応するbookWall会話を読み込み、文字送り状態を初期化する
+    def init_book_talk(self):
+        self.tutorial_active_stage = 0
+        talk = WALL_BOOK.get(self.floor, [""])
+        if isinstance(talk, str):
+            self.event_talk_lines = [talk]
+        elif isinstance(talk, list):
+            self.event_talk_lines = [str(line) for line in talk]
+        else:
+            self.event_talk_lines = [str(talk)]
+        self.event_talk_index = 0
+        self.event_talk_char_count = 0
+        self.event_talk_last_tick = pygame.time.get_ticks()
+
     # ダンジョン上に描画するボス用マップ画像を読み込みキャッシュする
     def get_boss_map_image(self):
         cache_key = "boss_map"
@@ -1323,7 +1328,7 @@ class Game:
                 wall_only =(y >=start_y +rows )
                 if 0 <=dx <DUNGEON_W and 0 <=dy <DUNGEON_H :
                     tile_id =self.dungeon [dy ][dx ]
-                    if not wall_only and tile_id not in (7 ,8 ,9 ,13 ,14 ):
+                    if not wall_only and tile_id not in (7 ,8 ,9 ,13 ,14 ,15 ):
                         if not self.map_seen [dy ][dx ]:
                             self.map_seen [dy ][dx ]=True
                             new_seen .append ((dx ,dy ))
@@ -1337,6 +1342,8 @@ class Game:
                         self.map_info_walls.add((dx, dy))
                     if not wall_only and tile_id ==14 and self.map_check_walls is not None:
                         self.map_check_walls.add((dx, dy))
+                    if not wall_only and tile_id ==15 and self.map_book_walls is not None:
+                        self.map_book_walls.add((dx, dy))
                     if not wall_only and tile_id in (2, 10) and self.map_cocoons is not None:
                         self.map_cocoons.add((dx, dy))
                     if not wall_only and tile_id ==1 and self.map_tboxes is not None:
@@ -1365,18 +1372,20 @@ class Game:
                                 bg .blit (self.imgLockedStairs ,[X ,Y ])
                             else:
                                 bg .blit (self.imgFloor [tile_id ],[X ,Y ])
-                    if tile_id in (7 ,8 ,9 ,13 ,14 ):
+                    if tile_id in (7 ,8 ,9 ,13 ,14 ,15 ):
                         if tile_id ==8 and self.wall_event:
                             bg .blit (self.wall_event ,[X ,Y -40 ])
                         elif tile_id ==14 and self.wall_check:
                             bg .blit (self.wall_check ,[X ,Y -40 ])
+                        elif tile_id ==15 and self.wall_book:
+                            bg .blit (self.wall_book ,[X ,Y -40 ])
                         else :
                             bg .blit (self.imgWall ,[X ,Y -40 ])
                         if tile_id ==7 :
                             bg .blit (self.imgFloor [-1 ],[X ,Y ])
                         if tile_id ==13 :
                             bg .blit (self.imgWallInfo ,[X ,Y ])
-                        if dy >=1 and self.dungeon [dy -1 ][dx ] in (7 ,8 ,9 ,13 ,14 ):
+                        if dy >=1 and self.dungeon [dy -1 ][dx ] in (7 ,8 ,9 ,13 ,14 ,15 ):
                             bg .blit (self.imgWall2 ,[X ,Y -80 ])
                 if not wall_only and x ==0 and y ==0 :# 主人公キャラの表示
                     bg .blit (self.imgPlayer [self.pl_a ],[X ,Y -40 ])
@@ -1527,6 +1536,16 @@ class Game:
             if wall_cells:
                 wx ,wy =random .choice (wall_cells )
                 self.dungeon [wy ][wx ]=13
+        if (not self.demo_mode) and self.wall_book and self.floor in WALL_BOOK: # 本棚壁を配置
+            wall_cells =[
+                (x ,y )
+                for y in range (DUNGEON_H -1 )
+                for x in range (DUNGEON_W )
+                if self.dungeon [y ][x ]==9 and self.dungeon [y +1 ][x ]==0
+            ]
+            if wall_cells:
+                wx ,wy =random .choice (wall_cells )
+                self.dungeon [wy ][wx ]=15
         if (not self.demo_mode) and self.wall_check and self.floor in WALL_CHECK: # 調査壁を配置
             wall_cells =[
                 (x ,y )
@@ -1627,19 +1646,19 @@ class Game:
         y =self.pl_y 
         if key [K_UP ]==1 or key [K_w ]==1 :
             self.pl_d =0 
-            if self.dungeon [self.pl_y -1 ][self.pl_x ] not in (7 ,8 ,9 ,12 ,13 ,14 ):
+            if self.dungeon [self.pl_y -1 ][self.pl_x ] not in (7 ,8 ,9 ,12 ,13 ,14 ,15 ):
                 self.pl_y =self.pl_y -1 
         if key [K_DOWN ]==1 or key [K_s ]==1 :
             self.pl_d =1 
-            if self.dungeon [self.pl_y +1 ][self.pl_x ] not in (7 ,8 ,9 ,12 ,13 ,14 ):
+            if self.dungeon [self.pl_y +1 ][self.pl_x ] not in (7 ,8 ,9 ,12 ,13 ,14 ,15 ):
                 self.pl_y =self.pl_y +1 
         if key [K_LEFT ]==1 or key [K_a ]==1 :
             self.pl_d =2 
-            if self.dungeon [self.pl_y ][self.pl_x -1 ] not in (7 ,8 ,9 ,12 ,13 ,14 ):
+            if self.dungeon [self.pl_y ][self.pl_x -1 ] not in (7 ,8 ,9 ,12 ,13 ,14 ,15 ):
                 self.pl_x =self.pl_x -1 
         if key [K_RIGHT ]==1 or key [K_d ]==1 :
             self.pl_d =3 
-            if self.dungeon [self.pl_y ][self.pl_x +1 ] not in (7 ,8 ,9 ,12 ,13 ,14 ):
+            if self.dungeon [self.pl_y ][self.pl_x +1 ] not in (7 ,8 ,9 ,12 ,13 ,14 ,15 ):
                 self.pl_x =self.pl_x +1 
         self.pl_a =self.pl_d *3 +2 
         if self.pl_x !=x or self.pl_y !=y :
@@ -2139,7 +2158,7 @@ class Game:
             for y in range (DUNGEON_H ):
                 row =self.map_seen [y ]
                 for x in range (DUNGEON_W ):
-                    if row [x ]and self.dungeon [y ][x ] not in (7 ,8 ,9 ,13 ,14 ) :
+                    if row [x ]and self.dungeon [y ][x ] not in (7 ,8 ,9 ,13 ,14 ,15 ) :
                         self.map_grid_surface.set_at((x, y), (140, 140, 140, 160))
         if new_seen :
             for x ,y in new_seen :
@@ -2192,6 +2211,11 @@ class Game:
                 mx =int (wx *scale )
                 my =int (wy *scale )
                 bg .fill ((205 ,120 ,255 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
+        for wx ,wy in self.map_book_walls :
+            if 0 <=wy <len (self.dungeon )and 0 <=wx <len (self.dungeon [wy ])and self.dungeon [wy ][wx ]==15 :
+                mx =int (wx *scale )
+                my =int (wy *scale )
+                bg .fill ((80 ,255 ,80 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
         for cx ,cy in self.map_cocoons :
             if 0 <=cy <len (self.dungeon )and 0 <=cx <len (self.dungeon [cy ])and self.dungeon [cy ][cx ] in (2 ,10 ):
                 mx =int (cx *scale )
@@ -2222,20 +2246,16 @@ class Game:
         if self.move_bgm_path :
             self.move_bgm_pos_ms =self.normalize_bgm_pos_ms (self.move_bgm_path ,self.move_bgm_pos_ms )
             requested_sec =self.move_bgm_pos_ms /1000.0
-            self.log_bgm ("resume_attempt","floor",self.floor,"path",self.move_bgm_path,"pos_ms",self.move_bgm_pos_ms,"busy",pygame .mixer .music .get_busy (),"mixer_pos",self.get_music_pos_for_log ())
             pygame .mixer .music .load (self.move_bgm_path )
             try:
                 pygame .mixer .music .play (-1 ,requested_sec )
                 self.move_bgm_start_time =time .time ()-requested_sec
-                self.log_bgm ("resume_play_called","floor",self.floor,"requested_sec",requested_sec,"busy",pygame .mixer .music .get_busy (),"mixer_pos",self.get_music_pos_for_log ())
-            except pygame.error as err:
-                self.log_bgm ("resume_fallback",self.move_bgm_path,requested_sec,repr(err))
+            except pygame.error:
                 pygame .mixer .music .play (-1 )
                 self.move_bgm_pos_ms =0
                 self.move_bgm_start_time =time .time ()
         else :
             rule_floor =self.get_rule_floor ()
-            self.log_bgm ("resume_no_path","floor",self.floor,"rule_floor",rule_floor)
             pygame .mixer .music .load (self.path +"/sound/bgm_"+str ((rule_floor -1) //10 )+".mp3")
             pygame .mixer .music .play (-1 )
 
@@ -3244,7 +3264,7 @@ class Game:
         dialog .fill ((0 ,0 ,0 ,255 ))
         bg .blit (dialog ,[dlg_x ,dlg_y ])
         pygame .draw .rect (bg ,WHITE ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ],2 )
-        self.draw_text (bg ,"話しかけますか？",text_x ,text_y ,fnt ,WHITE )
+        self.draw_text (bg ,"強敵の気配を感じる\nこの階の探索を終了し、何者か確認しますか？",text_x ,text_y ,fnt ,WHITE )
         sel_line_h =max (1 ,int (25 *scale_y ))
         box_h =max (1 ,int (15 *scale_y ))+sel_line_h *len (options )
         box_w =max (1 ,int ((280 if self.demo_mode else 360 )*scale_x ))
@@ -4129,6 +4149,10 @@ class Game:
                         self.init_check_talk()
                         self.idx =132
                         self.tmr =0
+                    elif front_tile ==15:
+                        self.init_book_talk()
+                        self.idx =132
+                        self.tmr =0
                     elif front_tile ==13:
                         if self.tutorial_enabled and self.floor ==1:
                             stage =self.tutorial_stage_for_wall ((tx ,ty ))
@@ -4275,14 +4299,6 @@ class Game:
                         rule_floor =self.get_rule_floor ()
                         next_bgm_path =self.path +"/sound/bgm_"+str ((rule_floor -1) //10 )+".mp3"
                         if self.boss_transition_mode or next_bgm_path !=self.move_bgm_path or not pygame .mixer .music .get_busy ():
-                            reason =[]
-                            if self.boss_transition_mode:
-                                reason .append ("boss_transition")
-                            if next_bgm_path !=self.move_bgm_path:
-                                reason .append ("path_changed")
-                            if not pygame .mixer .music .get_busy ():
-                                reason .append ("not_busy")
-                            self.log_bgm ("floor_play_from_head","floor",self.floor,"rule_floor",rule_floor,"reason","/".join (reason ),"old_path",self.move_bgm_path,"next_path",next_bgm_path,"old_pos_ms",self.move_bgm_pos_ms,"mixer_pos",self.get_music_pos_for_log ())
                             self.move_bgm_path =next_bgm_path
                             self.move_bgm_pos_ms =0 
                             self.move_bgm_start_time =time .time ()
@@ -4881,9 +4897,6 @@ class Game:
                         now =time .time ()
                         self.move_bgm_pos_ms =self.normalize_bgm_pos_ms (self.move_bgm_path ,int ((now -self.move_bgm_start_time )*1000 ))
                         self.move_bgm_start_time =now -self.move_bgm_pos_ms /1000.0
-                        self.log_bgm ("battle_save_pos","floor",self.floor,"path",self.move_bgm_path,"pos_ms",self.move_bgm_pos_ms,"busy",pygame .mixer .music .get_busy (),"mixer_pos",self.get_music_pos_for_log ())
-                    else:
-                        self.log_bgm ("battle_save_pos_no_path","floor",self.floor)
                     bg_idx = (self.get_rule_floor () - 1) // 10
                     if self.last_btl_bg_idx != bg_idx:
                         self.bg_cache.clear()
@@ -4892,7 +4905,6 @@ class Game:
                     if self.boss ==1 :
                         self.init_bossbattle ()
                         battle_bgm ="bgm_battle_2.mp3" if self.floor ==100 else "bgm_battle_1.mp3"
-                        self.log_bgm ("battle_bgm_start","kind","boss","floor",self.floor,"field_pos_ms",self.move_bgm_pos_ms,"battle_bgm",battle_bgm)
                         pygame .mixer .music .load (self.path +"/sound/"+battle_bgm)
                         pygame .mixer .music .play (-1 )
                         self.init_message ()
@@ -4900,7 +4912,6 @@ class Game:
                             self.madoka =0 
                     else :
                         self.init_battle ()
-                        self.log_bgm ("battle_bgm_start","kind","normal","floor",self.floor,"field_pos_ms",self.move_bgm_pos_ms,"battle_bgm","bgm_battle_0.mp3")
                         pygame .mixer .music .load (self.path +"/sound/bgm_battle_0.mp3")
                         pygame .mixer .music .play (-1 )
                         self.init_message ()
