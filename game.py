@@ -62,6 +62,17 @@ DEMO_END_TALK = [
     "……体験版は　ここまでです\nプレイしていただき　ありがとうございました",
     "この洞窟はまだまだ先がありそうです\n通常プレイ版もぜひ遊んでくださいね！",
 ]
+ZUKAN_ENEMY_THUMB_SCALE = 0.5
+
+
+class BufferedKeyState:
+    # 現在押下中のキーと前フレーム後に発生したKEYDOWNを同じkey[]形式で参照させる
+    def __init__(self, pressed, buffered_keys):
+        self.pressed = pressed
+        self.buffered_keys = buffered_keys
+
+    def __getitem__(self, key_code):
+        return self.pressed[key_code] or key_code in self.buffered_keys
 
 
 # セーブデータ3枠の到達階を読み取り、タイトル画面の表示に使う一覧を返す
@@ -177,6 +188,7 @@ class Game:
         self.zukan_detail = 0
         self.zukan_back_lock = False
         self.zukan_accept_lock = False
+        self.zukan_detail_move_lock = False
         self.zukan_enemy_cache = {}
         self.encountered_enemies = set()
         self.confirm_cmd = 0
@@ -1207,9 +1219,6 @@ class Game:
         if self.boss_image_path ==path:
             return
         self.imgEnemy =pygame .image .load (path )
-        new_w =int (self.imgEnemy .get_width ()*1.1 )
-        new_h =int (self.imgEnemy .get_height ()*1.1 )
-        self.imgEnemy =pygame .transform .scale (self.imgEnemy ,(new_w ,new_h ))
         screen =pygame .display .get_surface ()
         screen_w ,screen_h =screen .get_size ()
         self.emy_x =screen_w //2 -self.imgEnemy .get_width ()//2
@@ -1654,7 +1663,7 @@ class Game:
                 return
             self.dungeon [self.pl_y ][self.pl_x ]=0 
             r =random .randint (0 ,99 )
-            if r <35 :# 食料
+            if r <35 :# 薬草
                 self.treasure =random .choice ([3 ,3 ,3 ,3 ,3 ,4 ,4 ,4 ,4 ,4 ,5 ])
                 self.item_reward_count =1
                 if self.treasure ==3 :
@@ -2323,9 +2332,6 @@ class Game:
             self.emy_lev =random .randint (1 ,rule_floor )
         self.encountered_enemies.add(self.emy_typ)
         self.imgEnemy =pygame .image .load (self.path +"/image/enemy/enemy"+str (self.emy_typ )+"_"+str ((rule_floor -1 )//30 )+".png")
-        new_w =int (self.imgEnemy .get_width ()*1.1 )
-        new_h =int (self.imgEnemy .get_height ()*1.1 )
-        self.imgEnemy =pygame .transform .scale (self.imgEnemy ,(new_w ,new_h ))
         self.emy_name =EMY_NAME [self.emy_typ ]
         tier =(rule_floor -1 )//10
         base =max (1 ,int (2.4 *EMY_LIFE [self.emy_typ ]-100 ))
@@ -2786,18 +2792,12 @@ class Game:
             desc =WEAPON_INFO .get (trap_id ,"情報が登録されていません。")
         self.draw_bottom_description_window (bg ,fnt ,desc )
 
-    # 図鑑画面で選択中の敵名またはアイテム説明を画面下部に表示する
+    # アイテム図鑑で選択中アイテムのレベルと説明を画面下部に表示する
     def draw_zukan_description(self, bg, fnt):
         desc = ""
-        if self.zukan_kind == 0 and 0 <= self.zukan_cursor < len(EMY_ZUKAN_IDS):
-            if self.is_enemy_encountered_for_zukan(self.zukan_cursor):
-                enemy_id = EMY_ZUKAN_IDS[self.zukan_cursor]
-                desc = EMY_NAME.get(enemy_id, "？")
-            else:
-                desc = "？"
-        elif self.zukan_kind == 1 and 0 <= self.zukan_cursor < 3:
+        if self.zukan_kind == 1 and 0 <= self.zukan_cursor < 3:
             item_name = TRE_NAME[self.zukan_cursor]
-            item_level = [self.potion_lv, self.blazegem_lv, self.guard_lv][self.zukan_cursor]
+            item_level = [self.potion_lv, self.blazegem_lv, self.guard_lv][self.zukan_cursor] + 1
             base_desc = ITEM_INFO.get(self.zukan_cursor, "情報が登録されていません。")
             desc = f"{item_name}　レベル{item_level}\n{base_desc}"
         self.draw_bottom_description_window(bg, fnt, desc)
@@ -2933,7 +2933,7 @@ class Game:
             return True
         return False
 
-    # 食料・魔水・魔力のたねを使用し、生命/魔力やチュートリアル進行を更新する
+    # 薬草・精霊水・魔結晶を使用し、生命/魔力やチュートリアル進行を更新する
     def use_selected_tool (self ,tool_id ):
         if tool_id =="food" and self.tool_food >0 :
             self.tool_food -=1 
@@ -3000,7 +3000,7 @@ class Game:
         enemy_id = EMY_ZUKAN_IDS[enemy_index]
         return enemy_id in self.encountered_enemies
 
-    # 敵図鑑用の画像を読み込み、表示サイズに合わせて縮小する
+    # 敵図鑑で使う敵画像をIDから読み込みキャッシュする
     def get_enemy_catalog_image(self, enemy_id):
         if enemy_id in self.zukan_enemy_cache:
             return self.zukan_enemy_cache[enemy_id]
@@ -3022,6 +3022,27 @@ class Game:
             pygame.draw.rect(img, WHITE, [0, 0, 240, 240], 2)
         self.zukan_enemy_cache[enemy_id] = img
         return img
+
+    # 敵図鑑一覧で使う0.5倍サムネイル画像を作成してキャッシュする
+    def get_enemy_catalog_thumb_image(self, enemy_id):
+        cache_key = ("thumb", enemy_id)
+        if cache_key in self.zukan_enemy_cache:
+            return self.zukan_enemy_cache[cache_key]
+        img = self.get_enemy_catalog_image(enemy_id)
+        thumb_w = max(1, int(img.get_width() * ZUKAN_ENEMY_THUMB_SCALE))
+        thumb_h = max(1, int(img.get_height() * ZUKAN_ENEMY_THUMB_SCALE))
+        thumb = pygame.transform.scale(img, (thumb_w, thumb_h))
+        self.zukan_enemy_cache[cache_key] = thumb
+        return thumb
+
+    # 敵図鑑詳細で左右移動したとき、次に表示できる遭遇済み敵のindexを返す
+    def find_zukan_detail_neighbor(self, step):
+        idx = self.zukan_detail + step
+        while 0 <= idx < len(EMY_ZUKAN_IDS):
+            if self.is_enemy_encountered_for_zukan(idx):
+                return idx
+            idx += step
+        return -1
 
     # 記録メニュー内のカテゴリ選択を処理し、敵/アイテム/プロローグを選ばせる
     def zukan_category_command(self, bg, fnt, key):
@@ -3101,18 +3122,27 @@ class Game:
             x = start_x + c * (cell + gap)
             y = start_y + r * (cell + gap)
             if i < count:
-                pygame.draw.rect(bg, WHITE, [x, y, cell, cell], 1)
                 if self.zukan_kind == 0:
-                    label = str(i) if self.is_enemy_encountered_for_zukan(i) else "？"
+                    if self.is_enemy_encountered_for_zukan(i):
+                        enemy_id = EMY_ZUKAN_IDS[i]
+                        crop_x, crop_y = EMY_ZUKAN_CROP[enemy_id]
+                        img = self.get_enemy_catalog_thumb_image(enemy_id)
+                        crop_x = min(max(0, int(crop_x * ZUKAN_ENEMY_THUMB_SCALE)), max(0, img.get_width() - cell))
+                        crop_y = min(max(0, int(crop_y * ZUKAN_ENEMY_THUMB_SCALE)), max(0, img.get_height() - cell))
+                        bg.blit(img, [x, y], pygame.Rect(crop_x, crop_y, cell, cell))
+                    else:
+                        self.draw_text(bg, "？", x + cell // 2 - 8, y + cell // 2 - 10, fnt, WHITE)
                 else:
                     label = item_names[i]
-                self.draw_text(bg, label, x + 8, y + cell // 2 - 10, fnt, WHITE)
+                    self.draw_text(bg, label, x + 8, y + cell // 2 - 10, fnt, WHITE)
+                pygame.draw.rect(bg, WHITE, [x, y, cell, cell], 1)
             else:
                 pygame.draw.rect(bg, (80, 80, 80), [x, y, cell, cell], 1)
             if i == self.zukan_cursor:
                 pygame.draw.rect(bg, (255, 220, 90), [x, y, cell, cell], 3)
 
-        self.draw_zukan_description(bg, fnt)
+        if self.zukan_kind == 1:
+            self.draw_zukan_description(bg, fnt)
         return ent
 
     # 敵図鑑の詳細画面に敵画像・名前・説明文を表示する
@@ -3146,6 +3176,11 @@ class Game:
         for i, part in enumerate(parts):
             self.draw_text(bg, part, win_x + 320, win_y + 110 + i * 28, fnt, WHITE)
         self.draw_text(bg, "[X]/[Back] 戻る", win_x + win_w - 180, win_y + win_h - 36, fnt, WHITE)
+        arrow_font = self.get_font(44)
+        if self.find_zukan_detail_neighbor(-1) >= 0:
+            self.draw_text(bg, "←", win_x - 54, win_y + win_h // 2 - 24, arrow_font, WHITE)
+        if self.find_zukan_detail_neighbor(1) >= 0:
+            self.draw_text(bg, "→", win_x + win_w + 18, win_y + win_h // 2 - 24, arrow_font, WHITE)
 
     # 3x3装備変更グリッドの移動・決定入力と武具名表示を処理する
     def equip_grid_command(self, bg, fnt, key):
@@ -3541,16 +3576,19 @@ class Game:
         se =load_sounds (self.path )# 効果音とジングル
         self.se = se
         self.apply_audio_volumes ()
+        buffered_keys =set ()
 
         while True :
             for event in pygame .event .get ():
                 if event .type ==QUIT :
                     pygame .quit ()
                     sys .exit ()
+                if event .type ==KEYDOWN :
+                    buffered_keys .add (event .key )
 
             self.tmr =self.tmr +1 
-            key =pygame .key .get_pressed ()
-            accept = (key [K_RETURN ]and not self.prev_return )or (key [K_z ]and not self.prev_z )
+            key =BufferedKeyState (pygame .key .get_pressed (),buffered_keys )
+            accept =K_RETURN in buffered_keys or K_z in buffered_keys or (key [K_RETURN ]and not self.prev_return )or (key [K_z ]and not self.prev_z )
 
             if self.idx ==0 :# タイトル画面
                 if self.tmr ==1 :
@@ -3766,6 +3804,7 @@ class Game:
                                     self.zukan_accept_lock = True
                                 else:
                                     self.zukan_detail =self.zukan_cursor
+                                    self.zukan_detail_move_lock =False
                                     self.zukan_accept_lock = True
                                     self.idx =33
                                     self.tmr =0
@@ -3780,6 +3819,20 @@ class Game:
                     self.zukan_back_lock = True
                     self.idx =32
                     self.tmr =0
+                else:
+                    if self.zukan_detail_move_lock:
+                        if not (self.input_left (key )or self.input_right (key )):
+                            self.zukan_detail_move_lock =False
+                    elif self.input_left (key ):
+                        prev_idx =self.find_zukan_detail_neighbor (-1 )
+                        if prev_idx >=0:
+                            self.zukan_detail =prev_idx
+                        self.zukan_detail_move_lock =True
+                    elif self.input_right (key ):
+                        next_idx =self.find_zukan_detail_neighbor (1 )
+                        if next_idx >=0:
+                            self.zukan_detail =next_idx
+                        self.zukan_detail_move_lock =True
 
             elif self.idx ==37 :# 記録メニューからのプロローグ再生
                 self.draw_prologue_replay (screen ,fontS ,key )
@@ -4862,7 +4915,7 @@ class Game:
                             before_lv =getattr (self ,attr )
                             after_lv =min (cap ,before_lv +1 )
                             setattr (self ,attr ,after_lv )
-                            self.item_talk_lines = [f"神秘の力で　アイテムの効果が強まった。\n（レベル{before_lv}→レベル{after_lv}）"]
+                            self.item_talk_lines = [f"神秘の力で　アイテムの効果が強まった。\n（レベル{before_lv +1}→レベル{after_lv +1}）"]
                             self.item_talk_index = 0
                             self.item_talk_char_count = 0
                             self.item_talk_last_tick = pygame.time.get_ticks()
@@ -5932,6 +5985,7 @@ class Game:
             clock .tick (10 )
             self.prev_return = key [K_RETURN ]
             self.prev_z = key [K_z ]
+            buffered_keys .clear ()
 
 
 # Gameインスタンスを作成してゲームのメインループを開始する
