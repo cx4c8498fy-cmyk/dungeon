@@ -98,6 +98,7 @@ class Game:
         self.imgPlayer = self.imgPlayerBase0
         self.imgEffect = images.effects
         self.imgFairy = pygame.image.load(self.path + "/image/fairy.png")
+        self.imgFloorCure = pygame.image.load(self.path + "/image/floor/floor_cure.png")
         self.imgLockedStairs = pygame.image.load(self.path + "/image/locked_stairs.png")
         self.imgWallInfo = pygame.image.load(self.path + "/image/wall_info.png")
         self.wall_check = None
@@ -146,6 +147,7 @@ class Game:
         self.truth_fragment = 0
         self.truth_fragment_floors = set()
         self.truth_fragment_collected_current_floor = False
+        self.floor99_trial_wall_talked = False
         self.heirloom_pendant = 1
         self.tool_food = 0
         self.tool_magic_water = 0
@@ -305,6 +307,7 @@ class Game:
         self.map_cocoons = None
         self.map_tboxes = None
         self.map_wboxes = None
+        self.map_cure_floors = None
         self.map_grid_surface = None
         self.map_surface = None
         self.map_surface_scale = None
@@ -326,6 +329,26 @@ class Game:
     def init_floor_flip_map(self):
         self.floor_flip_map = [[random.randint(0, 1) for j in range(DUNGEON_W)] for i in range(DUNGEON_H)]
 
+    # 矢印キーとWSADキーを同じ方向入力として判定する
+    def input_up(self, key):
+        return key[K_UP] or key[K_w]
+
+    # 矢印キーとWSADキーを同じ方向入力として判定する
+    def input_down(self, key):
+        return key[K_DOWN] or key[K_s]
+
+    # 矢印キーとWSADキーを同じ方向入力として判定する
+    def input_left(self, key):
+        return key[K_LEFT] or key[K_a]
+
+    # 矢印キーとWSADキーを同じ方向入力として判定する
+    def input_right(self, key):
+        return key[K_RIGHT] or key[K_d]
+
+    # いずれかの方向キー入力が押されているかを判定する
+    def input_direction(self, key):
+        return self.input_up(key) or self.input_down(key) or self.input_left(key) or self.input_right(key)
+
     # ミニマップ表示用の発見済み座標と特殊タイル座標の記録を初期化する
     def init_map_state(self):
         self.map_seen = [[False for j in range(DUNGEON_W)] for i in range(DUNGEON_H)]
@@ -339,6 +362,7 @@ class Game:
         self.map_cocoons = set()
         self.map_tboxes = set()
         self.map_wboxes = set()
+        self.map_cure_floors = set()
         self.map_grid_surface = pygame.Surface((DUNGEON_W, DUNGEON_H), pygame.SRCALPHA)
         self.map_grid_surface.fill((0, 0, 0, 120))
         self.map_surface = None
@@ -349,6 +373,8 @@ class Game:
     def is_stairs_locked(self, floor=None):
         check_floor = self.floor if floor is None else floor
         check_floor = self.get_rule_floor(check_floor)
+        if check_floor == 99:
+            return not self.floor99_trial_wall_talked
         if check_floor not in LOCKED_STAIRS_ITEM_WALL_FLOORS:
             return False
         return any(7 in row for row in self.dungeon)
@@ -1244,15 +1270,15 @@ class Game:
             for x in range (1 ,maze_w -1 ):
                 maze [y ][x ]=0 
         #柱
-        for y in range (2 ,maze_h -2 ,2 ):
-            for x in range (2 ,maze_w -2 ,2 ):
+        for y in range (2 ,maze_h -1 ,2 ):
+            for x in range (2 ,maze_w -1 ,2 ):
                 maze [y ][x ]=1 
         #柱から壁を作る
-        for y in range (2 ,maze_h -2 ,2 ):
-            for x in range (2 ,maze_w -2 ,2 ):
-                d =random .randint (0 ,3 )
-                if x >2 :
-                    d =random .randint (0 ,2 )
+        for y in range (2 ,maze_h -1 ,2 ):
+            for x in range (2 ,maze_w -1 ,2 ):
+                dirs =[0 ,1 ,2 ,3 ]if x ==2 else [0 ,1 ,2 ]
+                dirs =[d for d in dirs if 0 <y +YP [d ]<maze_h -1 and 0 <x +XP [d ]<maze_w -1 ]
+                d =random .choice (dirs )
                 maze [y +YP [d ]][x +XP [d ]]=1 
 
         #迷路からダンジョンを生成
@@ -1350,8 +1376,10 @@ class Game:
                         self.map_tboxes.add((dx, dy))
                     if not wall_only and tile_id ==4 and self.map_wboxes is not None:
                         self.map_wboxes.add((dx, dy))
-                    if not wall_only and tile_id in (0 ,1 ,2 ,3 ,4 ,5 ,6 ,10 ,11 ,12 ):
-                        if tile_id in (0 ,1 ,2 ,4 ,10 ,11 ,12 ):
+                    if not wall_only and tile_id ==16 and self.map_cure_floors is not None:
+                        self.map_cure_floors.add((dx, dy))
+                    if not wall_only and tile_id in (0 ,1 ,2 ,3 ,4 ,5 ,6 ,10 ,11 ,12 ,16 ):
+                        if tile_id in (0 ,1 ,2 ,4 ,10 ,11 ,12 ,16 ):
                             variant =self.floor_var_map [dy ][dx ]
                             if self.floor_flip_map [dy ][dx ]:
                                 bg .blit (self.floor_variants_flipped [variant ],[X ,Y ])
@@ -1360,6 +1388,8 @@ class Game:
                             overlay_tile =2 if tile_id ==10 else tile_id
                             if overlay_tile ==11 :
                                 bg .blit (self.imgFairy ,[X ,Y ])
+                            elif overlay_tile ==16 :
+                                bg .blit (self.imgFloorCure ,[X ,Y ])
                             elif overlay_tile ==12 :
                                 if not wall_only and self.map_bosses is not None:
                                     self.map_bosses.add((dx, dy))
@@ -1486,6 +1516,9 @@ class Game:
         if cocoon_cells: # 真実の繭の配置
             sx ,sy =random .choice (cocoon_cells )
             self.dungeon [sy ][sx ]=10
+        if (not self.demo_mode) and self.floor %10 ==9: # 回復床の配置
+            for x ,y in take_cells (1 ):
+                self.dungeon [y ][x ]=16
         if self.floor !=100:
             self.pl_x, self.pl_y = take_cells(1)[0] # プレイヤーの初期位置
         self.pl_d =1 
@@ -1592,6 +1625,14 @@ class Game:
             self.idx =120 
             self.tmr =0 
             return 
+        if self.dungeon [self.pl_y ][self.pl_x ]==16 :# 回復床に載った
+            self.dungeon [self.pl_y ][self.pl_x ]=0
+            self.pl_life =self.pl_lifemax
+            self.item_popup_text ="生命が　回復した"
+            self.se [2 ].play ()
+            self.idx =120
+            self.tmr =0
+            return
         if self.dungeon [self.pl_y ][self.pl_x ]==2 :# 繭に載った
             pos =(self.pl_x ,self.pl_y )
             if self.tutorial_enabled and self.floor ==1 and pos ==self.tutorial_room4_item_pos:
@@ -1644,19 +1685,19 @@ class Game:
         # 方向キーまたはWSADで上下左右に移動
         x =self.pl_x 
         y =self.pl_y 
-        if key [K_UP ]==1 or key [K_w ]==1 :
+        if self.input_up(key):
             self.pl_d =0 
             if self.dungeon [self.pl_y -1 ][self.pl_x ] not in (7 ,8 ,9 ,12 ,13 ,14 ,15 ):
                 self.pl_y =self.pl_y -1 
-        if key [K_DOWN ]==1 or key [K_s ]==1 :
+        if self.input_down(key):
             self.pl_d =1 
             if self.dungeon [self.pl_y +1 ][self.pl_x ] not in (7 ,8 ,9 ,12 ,13 ,14 ,15 ):
                 self.pl_y =self.pl_y +1 
-        if key [K_LEFT ]==1 or key [K_a ]==1 :
+        if self.input_left(key):
             self.pl_d =2 
             if self.dungeon [self.pl_y ][self.pl_x -1 ] not in (7 ,8 ,9 ,12 ,13 ,14 ,15 ):
                 self.pl_x =self.pl_x -1 
-        if key [K_RIGHT ]==1 or key [K_d ]==1 :
+        if self.input_right(key):
             self.pl_d =3 
             if self.dungeon [self.pl_y ][self.pl_x +1 ] not in (7 ,8 ,9 ,12 ,13 ,14 ,15 ):
                 self.pl_x =self.pl_x +1 
@@ -1732,6 +1773,7 @@ class Game:
         self.truth_fragment =0
         self.truth_fragment_floors = set()
         self.truth_fragment_collected_current_floor = False
+        self.floor99_trial_wall_talked =False
         self.heirloom_pendant =1
         self.tool_food =0
         self.tool_magic_water =0
@@ -1820,6 +1862,7 @@ class Game:
                 self.truth_fragment =loaddata ["truth_fragment"]
                 self.truth_fragment_floors =set (loaddata ["truth_fragment_floors"])
                 self.truth_fragment_collected_current_floor =bool (loaddata ["truth_fragment_collected_current_floor"])
+                self.floor99_trial_wall_talked =bool (loaddata ["floor99_trial_wall_talked"])
                 self.heirloom_pendant =loaddata ["heirloom_pendant"]
                 self.tool_food =loaddata ["tool_food"]
                 self.tool_magic_water =loaddata ["tool_magic_water"]
@@ -1938,6 +1981,7 @@ class Game:
             "truth_fragment": self.truth_fragment,
             "truth_fragment_floors": sorted (self.truth_fragment_floors),
             "truth_fragment_collected_current_floor": self.truth_fragment_collected_current_floor,
+            "floor99_trial_wall_talked": self.floor99_trial_wall_talked,
             "heirloom_pendant": self.heirloom_pendant,
             "tool_food": self.tool_food,
             "tool_magic_water": self.tool_magic_water,
@@ -1982,7 +2026,7 @@ class Game:
         line_height =32
         total_duration =len (lines )*line_duration
 
-        if key [K_s ]:
+        if self.input_down(key):
             if complete_callback:
                 complete_callback()
             return True
@@ -1990,10 +2034,10 @@ class Game:
         line_index =self.tmr //line_duration
         phase =self.tmr %line_duration
         if lock_attr and getattr(self, lock_attr, False):
-            if not (key [K_RETURN ]or key [K_RIGHT ]or key [K_z ]):
+            if not (key [K_RETURN ]or self.input_right(key)or key [K_z ]):
                 setattr(self, lock_attr, False)
         else:
-            if key [K_RETURN ]or key [K_RIGHT ]or key [K_z ]:
+            if key [K_RETURN ]or self.input_right(key)or key [K_z ]:
                 if line_index <len (lines )and phase <fade_in:
                     self.tmr =line_index *line_duration +fade_in
                     phase =fade_in
@@ -2005,7 +2049,7 @@ class Game:
         start_y =bg_top +90
         text_bottom =bg_top +int (bg_h *0.8 )
         max_lines =max (1 ,(text_bottom -start_y )//line_height +1 )
-        skip_label ="[S]kip"
+        skip_label ="[S]/[Down] Skip"
         skip_x =bg_left +bg_w -int (bg_w *0.1 )-fnt .size (skip_label )[0 ]
         self.draw_text (bg ,skip_label ,skip_x ,bg_top +40 ,fnt ,WHITE )
 
@@ -2231,6 +2275,11 @@ class Game:
                 mx =int (wx *scale )
                 my =int (wy *scale )
                 bg .fill ((255 ,255 ,0 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
+        for cx ,cy in self.map_cure_floors :
+            if 0 <=cy <len (self.dungeon )and 0 <=cx <len (self.dungeon [cy ])and self.dungeon [cy ][cx ]==16 :
+                mx =int (cx *scale )
+                my =int (cy *scale )
+                bg .fill ((0 ,192 ,255 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
         if self.fairy_pos :
             fx ,fy =self.fairy_pos
             mx =int (fx *scale )
@@ -2409,9 +2458,9 @@ class Game:
         ent =False 
         if self.menu_cmd >=len (MENU ):
             self.menu_cmd =len (MENU )-1 
-        if key [K_UP ]and self.menu_cmd >0 :
+        if self.input_up(key)and self.menu_cmd >0 :
             self.menu_cmd -=1 
-        if key [K_DOWN ]and self.menu_cmd <len (MENU )-1 :
+        if self.input_down(key)and self.menu_cmd <len (MENU )-1 :
             self.menu_cmd +=1 
         if key [K_RETURN ]or key [K_z ]:
             ent =True 
@@ -2461,9 +2510,9 @@ class Game:
         options = self.get_auto_equip_settings()
         if self.settings_cmd >= len(options):
             self.settings_cmd = len(options) - 1
-        if key[K_UP] and self.settings_cmd > 0:
+        if self.input_up(key) and self.settings_cmd > 0:
             self.settings_cmd -= 1
-        if key[K_DOWN] and self.settings_cmd < len(options) - 1:
+        if self.input_down(key) and self.settings_cmd < len(options) - 1:
             self.settings_cmd += 1
         if key[K_RETURN] or key[K_z]:
             ent = True
@@ -2980,9 +3029,9 @@ class Game:
         options = ["敵の図鑑", "アイテムの図鑑", "プロローグを見る"]
         if self.zukan_menu_cmd >= len(options):
             self.zukan_menu_cmd = len(options) - 1
-        if key[K_UP] and self.zukan_menu_cmd > 0:
+        if self.input_up(key) and self.zukan_menu_cmd > 0:
             self.zukan_menu_cmd -= 1
-        if key[K_DOWN] and self.zukan_menu_cmd < len(options) - 1:
+        if self.input_down(key) and self.zukan_menu_cmd < len(options) - 1:
             self.zukan_menu_cmd += 1
         if key[K_RETURN] or key[K_z]:
             ent = True
@@ -3011,19 +3060,19 @@ class Game:
             self.zukan_cursor = count - 1
         row = self.zukan_cursor // cols
         col = self.zukan_cursor % cols
-        if key[K_UP] and row > 0:
+        if self.input_up(key) and row > 0:
             nxt = self.zukan_cursor - cols
             if nxt < count:
                 self.zukan_cursor = nxt
-        if key[K_DOWN] and row < rows - 1:
+        if self.input_down(key) and row < rows - 1:
             nxt = self.zukan_cursor + cols
             if nxt < count:
                 self.zukan_cursor = nxt
-        if key[K_LEFT] and col > 0:
+        if self.input_left(key) and col > 0:
             nxt = self.zukan_cursor - 1
             if nxt < count:
                 self.zukan_cursor = nxt
-        if key[K_RIGHT] and col < cols - 1:
+        if self.input_right(key) and col < cols - 1:
             nxt = self.zukan_cursor + 1
             if nxt < count:
                 self.zukan_cursor = nxt
@@ -3106,13 +3155,13 @@ class Game:
             self.equip_cursor = count - 1
         row = self.equip_cursor // cols
         col = self.equip_cursor % cols
-        if key[K_UP] and row > 0:
+        if self.input_up(key) and row > 0:
             self.equip_cursor -= cols
-        if key[K_DOWN] and row < rows - 1:
+        if self.input_down(key) and row < rows - 1:
             self.equip_cursor += cols
-        if key[K_LEFT] and col > 0:
+        if self.input_left(key) and col > 0:
             self.equip_cursor -= 1
-        if key[K_RIGHT] and col < cols - 1:
+        if self.input_right(key) and col < cols - 1:
             self.equip_cursor += 1
         if key[K_RETURN] or key[K_z]:
             ent = True
@@ -3177,9 +3226,9 @@ class Game:
         if key [K_3 ]:
             self.save_cmd =2 
             ent =True 
-        if key [K_UP ]and self.save_cmd >0 :
+        if self.input_up(key)and self.save_cmd >0 :
             self.save_cmd -=1 
-        if key [K_DOWN ]and self.save_cmd <2 :
+        if self.input_down(key)and self.save_cmd <2 :
             self.save_cmd +=1 
         if key [K_RETURN ]or key [K_z ]:
             if not self.load_accept_lock:
@@ -3213,9 +3262,9 @@ class Game:
                 "移動しない",
             ]
         if enable_input:
-            if key [K_UP ]and self.stair_choice_cmd >0 :
+            if self.input_up(key)and self.stair_choice_cmd >0 :
                 self.stair_choice_cmd -=1 
-            if key [K_DOWN ]and self.stair_choice_cmd <len (options )-1 :
+            if self.input_down(key)and self.stair_choice_cmd <len (options )-1 :
                 self.stair_choice_cmd +=1 
             if key [K_RETURN ]or key [K_z ]:
                 ent =True 
@@ -3239,9 +3288,9 @@ class Game:
         ent =False
         options =["はい","いいえ"] if self.demo_mode else ["はい","セーブして話しかける","いいえ"]
         if enable_input:
-            if key [K_UP ]and self.boss_talk_choice_cmd >0 :
+            if self.input_up(key)and self.boss_talk_choice_cmd >0 :
                 self.boss_talk_choice_cmd -=1
-            if key [K_DOWN ]and self.boss_talk_choice_cmd <len (options )-1 :
+            if self.input_down(key)and self.boss_talk_choice_cmd <len (options )-1 :
                 self.boss_talk_choice_cmd +=1
             if key [K_RETURN ]or key [K_z ]:
                 ent =True
@@ -3264,7 +3313,8 @@ class Game:
         dialog .fill ((0 ,0 ,0 ,255 ))
         bg .blit (dialog ,[dlg_x ,dlg_y ])
         pygame .draw .rect (bg ,WHITE ,[dlg_x ,dlg_y ,dlg_w ,dlg_h ],2 )
-        self.draw_text (bg ,"強敵の気配を感じる\nこの階の探索を終了し、何者か確認しますか？",text_x ,text_y ,fnt ,WHITE )
+        for i ,line in enumerate (["強敵の気配を感じる","この階の探索を終了し、何者か確認しますか？"]):
+            self.draw_text (bg ,line ,text_x ,text_y +i *int (30 *scale_y ),fnt ,WHITE )
         sel_line_h =max (1 ,int (25 *scale_y ))
         box_h =max (1 ,int (15 *scale_y ))+sel_line_h *len (options )
         box_w =max (1 ,int ((280 if self.demo_mode else 360 )*scale_x ))
@@ -3316,8 +3366,6 @@ class Game:
             self.btl_cmd =6 
         if key [K_e ]:
             self.btl_cmd =7
-        if key [K_s ]:
-            self.btl_cmd =8
         row =0 
         col =0 
         for r, row_items in enumerate (grid ):
@@ -3326,7 +3374,7 @@ class Game:
                     row =r 
                     col =c 
                     break
-        if key [K_UP ]:
+        if self.input_up(key):
             if row >0 :
                 new_row =row -1 
                 max_col =max (i for i, v in enumerate (grid [new_row ]) if selectable (v ))
@@ -3335,7 +3383,7 @@ class Game:
                     new_col -=1 
                 if new_col >=0 :
                     self.btl_cmd =grid [new_row ][new_col ]
-        if key [K_DOWN ]:
+        if self.input_down(key):
             if row <len (grid )-1 :
                 new_row =row +1 
                 max_col =max (i for i, v in enumerate (grid [new_row ]) if selectable (v ))
@@ -3344,14 +3392,14 @@ class Game:
                     new_col -=1 
                 if new_col >=0 :
                     self.btl_cmd =grid [new_row ][new_col ]
-        if key [K_LEFT ]:
+        if self.input_left(key):
             if col >0 :
                 new_col =col -1 
                 while new_col >=0 and not selectable (grid [row ][new_col ]):
                     new_col -=1 
                 if new_col >=0 :
                     self.btl_cmd =grid [row ][new_col ]
-        if key [K_RIGHT ]:
+        if self.input_right(key):
             if col <len (grid [row ])-1 :
                 new_col =col +1 
                 while new_col <len (grid [row ]) and not selectable (grid [row ][new_col ]):
@@ -3433,8 +3481,14 @@ class Game:
                 self.set_message ("　敵は　力をためた!")
                 self.se [12 ].play ()
             action =False 
-        if self.emy_typ ==5 or self.emy_typ ==112:
-            suck = {5:5+self.emy_lev, 112:104}[self.emy_typ] + random .randint (1 ,{5:5, 112:12}[self.emy_typ] )
+        if self.emy_typ ==5:
+            give = 5+self.emy_lev + random .randint (1 ,5)
+            give = min(give, self.pl_magmax - self.pl_mag)
+            self.set_message (f"　魔力を　{give}　付与された!")
+            self.pl_mag =self.pl_mag +give 
+            action =False 
+        if self.emy_typ ==112:
+            suck = 104 + random .randint (1 ,12 )
             suck = min(suck, self.pl_mag)
             self.set_message (f"　魔力を　{suck}　吸収された!")
             self.pl_mag =self.pl_mag -suck 
@@ -3531,15 +3585,14 @@ class Game:
                         pygame .mixer .music .load (self.path +"/sound/bgm_title.mp3")
                         pygame .mixer .music .play (-1 )
                     self.title_mode = 0
-                    self.title_cmd = 0
                 screen .fill (BLACK )
                 title_rect =self.blit_scaled_bg (screen ,self.imgTitle )
                 if self.title_mode == 0:
                     options = ["はじめから", "つづきから", "体験版をプレイ"]
                     selected = self.title_cmd
-                    if key [K_UP ]and self.title_cmd >0 :
+                    if self.input_up(key)and self.title_cmd >0 :
                         self.title_cmd -=1 
-                    if key [K_DOWN ]and self.title_cmd <len (options )-1 :
+                    if self.input_down(key)and self.title_cmd <len (options )-1 :
                         self.title_cmd +=1 
                     if accept:
                         if self.title_cmd ==0 :
@@ -3567,9 +3620,9 @@ class Game:
                             "data[3] : 地下 {}階".format (self.floorlist [2 ])
                         ]
                         selected = self.save_cmd
-                        if key [K_UP ]and self.save_cmd >0 :
+                        if self.input_up(key)and self.save_cmd >0 :
                             self.save_cmd -=1 
-                        if key [K_DOWN ]and self.save_cmd <2 :
+                        if self.input_down(key)and self.save_cmd <2 :
                             self.save_cmd +=1 
                         if accept:
                             self.load_game_data (self.save_cmd )
@@ -3752,9 +3805,9 @@ class Game:
                             first_upgradable =self.find_first_upgradable_target_index (self.tool_weapon_choice_targets )
                             if first_upgradable >=0 :
                                 self.tool_weapon_choice_cmd =first_upgradable
-                    if key [K_UP ]:
+                    if self.input_up(key):
                         self.move_weapon_choice_cursor (-1 )
-                    if key [K_DOWN ]:
+                    if self.input_down(key):
                         self.move_weapon_choice_cursor (1 )
                     if (key [K_x ]or key [K_BACKSPACE ]) and not self.tool_back_lock:
                         self.tool_back_lock = True
@@ -3775,9 +3828,9 @@ class Game:
                             self.tool_weapon_choice_prompt = ""
                             self.tool_accept_lock = True
                 elif self.tool_growth_choice_active:
-                    if key [K_UP ]and self.tool_growth_choice_cmd >0 :
+                    if self.input_up(key)and self.tool_growth_choice_cmd >0 :
                         self.tool_growth_choice_cmd -=1
-                    if key [K_DOWN ]and self.tool_growth_choice_cmd <2 :
+                    if self.input_down(key)and self.tool_growth_choice_cmd <2 :
                         self.tool_growth_choice_cmd +=1
                     if (key [K_x ]or key [K_BACKSPACE ]) and not self.tool_back_lock:
                         self.tool_back_lock = True
@@ -3797,9 +3850,9 @@ class Game:
                         self.tool_growth_choice_active = False
                         self.tool_accept_lock = True
                 elif self.tool_confirm_active:
-                    if key [K_UP ]and self.tool_confirm_cmd >0 :
+                    if self.input_up(key)and self.tool_confirm_cmd >0 :
                         self.tool_confirm_cmd -=1 
-                    if key [K_DOWN ]and self.tool_confirm_cmd <1 :
+                    if self.input_down(key)and self.tool_confirm_cmd <1 :
                         self.tool_confirm_cmd +=1 
                     if (key [K_x ]or key [K_BACKSPACE ]) and not self.tool_back_lock:
                         self.tool_back_lock = True
@@ -3829,9 +3882,9 @@ class Game:
                         self.idx =30
                         self.tmr =0
                     else:
-                        if key [K_UP ]and self.tool_cmd >0 :
+                        if self.input_up(key)and self.tool_cmd >0 :
                             self.tool_cmd -=1 
-                        if key [K_DOWN ]and len (tool_entries )>0 and self.tool_cmd <len (tool_entries )-1 :
+                        if self.input_down(key)and len (tool_entries )>0 and self.tool_cmd <len (tool_entries )-1 :
                             self.tool_cmd +=1 
                         if accept and not self.tool_accept_lock and len (tool_entries )>0:
                             if tool_entries [self.tool_cmd ]["usable"]:
@@ -3919,9 +3972,9 @@ class Game:
                         if not (key [K_RETURN ]or key [K_z ]):
                             self.save_confirm_lock = False
                     options = ["Yes", "No"]
-                    if key [K_UP ]and self.confirm_cmd >0 :
+                    if self.input_up(key)and self.confirm_cmd >0 :
                         self.confirm_cmd -=1 
-                    if key [K_DOWN ]and self.confirm_cmd <len (options )-1 :
+                    if self.input_down(key)and self.confirm_cmd <len (options )-1 :
                         self.confirm_cmd +=1 
                     confirm_yes = False
                     confirm_no = False
@@ -4008,9 +4061,9 @@ class Game:
                 if self.title_confirm_lock:
                     if not (key [K_RETURN ]or key [K_z ]):
                         self.title_confirm_lock = False
-                if key [K_UP ]and self.confirm_cmd >0 :
+                if self.input_up(key)and self.confirm_cmd >0 :
                     self.confirm_cmd -=1 
-                if key [K_DOWN ]and self.confirm_cmd <len (options )-1 :
+                if self.input_down(key)and self.confirm_cmd <len (options )-1 :
                     self.confirm_cmd +=1 
                 if key [K_BACKSPACE ]or key [K_x ]:
                     self.menu_back_lock = True
@@ -4131,6 +4184,7 @@ class Game:
                     ty =self.pl_y -1
                     if front_tile ==8:
                         if self.floor ==99:
+                            self.floor99_trial_wall_talked =True
                             self.init_floor99_item_event ()
                             self.idx =131
                             self.tmr =0
@@ -4209,7 +4263,7 @@ class Game:
                 self.draw_dungeon (screen ,fontS )
                 if self.stair_choice_input_lock:
                     self.stair_choice_command (screen ,fontS ,key ,enable_input =False )
-                    if not (key [K_UP ]or key [K_DOWN ]or key [K_LEFT ]or key [K_RIGHT ]or key [K_RETURN ]or key [K_z ]or key [K_x ]or key [K_BACKSPACE ]):
+                    if not (self.input_direction(key)or key [K_RETURN ]or key [K_z ]or key [K_x ]or key [K_BACKSPACE ]):
                         self.stair_choice_input_lock = False
                 else:
                     if self.stair_choice_command (screen ,fontS ,key )==True :
@@ -4245,7 +4299,7 @@ class Game:
                 self.draw_dungeon (screen ,fontS )
                 if self.boss_talk_choice_input_lock:
                     self.boss_talk_choice_command (screen ,fontS ,key ,enable_input =False )
-                    if not (key [K_UP ]or key [K_DOWN ]or key [K_LEFT ]or key [K_RIGHT ]or key [K_RETURN ]or key [K_z ]or key [K_x ]or key [K_BACKSPACE ]):
+                    if not (self.input_direction(key)or key [K_RETURN ]or key [K_z ]or key [K_x ]or key [K_BACKSPACE ]):
                         self.boss_talk_choice_input_lock = False
                 else:
                     if self.boss_talk_choice_command (screen ,fontS ,key )==True :
@@ -4476,9 +4530,9 @@ class Game:
                             if i == self.item_choice:
                                 self.draw_text (screen ,"▶",arrow_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
                             self.draw_text (screen ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
-                        if key [K_UP ]and self.item_choice >0 :
+                        if self.input_up(key)and self.item_choice >0 :
                             self.item_choice -=1
-                        if key [K_DOWN ]and self.item_choice <1 :
+                        if self.input_down(key)and self.item_choice <1 :
                             self.item_choice +=1
                         if accept:
                             if self.item_choice ==0 :
@@ -4518,9 +4572,9 @@ class Game:
                             if i == self.item_choice:
                                 self.draw_text(screen, "▶", arrow_x, arrow_y + i * sel_line_h, fontS, WHITE)
                             self.draw_text(screen, option, text_sel_x, arrow_y + i * sel_line_h, fontS, WHITE)
-                        if key[K_UP] and self.item_choice > 0:
+                        if self.input_up(key) and self.item_choice > 0:
                             self.item_choice -= 1
-                        if key[K_DOWN] and self.item_choice < 1:
+                        if self.input_down(key) and self.item_choice < 1:
                             self.item_choice += 1
                         if accept:
                             if self.item_choice == 0:
@@ -4605,9 +4659,9 @@ class Game:
                             if i == self.item_choice:
                                 self.draw_text (screen ,"▶",arrow_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
                             self.draw_text (screen ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
-                        if key [K_UP ]and self.item_choice >0 :
+                        if self.input_up(key)and self.item_choice >0 :
                             self.item_choice -=1
-                        if key [K_DOWN ]and self.item_choice <len (options )-1 :
+                        if self.input_down(key)and self.item_choice <len (options )-1 :
                             self.item_choice +=1
                         if accept and self.item_reward is None:
                             self.item_reward =self.item_choice
@@ -4669,9 +4723,9 @@ class Game:
                             if i == self.item_choice:
                                 self.draw_text (screen ,"▶",arrow_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
                             self.draw_text (screen ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
-                        if key [K_UP ]and self.item_choice >0 :
+                        if self.input_up(key)and self.item_choice >0 :
                             self.item_choice -=1
-                        if key [K_DOWN ]and self.item_choice <1 :
+                        if self.input_down(key)and self.item_choice <1 :
                             self.item_choice +=1
                         if accept:
                             if self.item_choice ==0 :
@@ -4708,9 +4762,9 @@ class Game:
                             if i == self.item_choice:
                                 self.draw_text (screen ,"▶",arrow_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
                             self.draw_text (screen ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
-                        if key [K_UP ]and self.item_choice >0 :
+                        if self.input_up(key)and self.item_choice >0 :
                             self.item_choice -=1
-                        if key [K_DOWN ]and self.item_choice <1 :
+                        if self.input_down(key)and self.item_choice <1 :
                             self.item_choice +=1
                         if accept:
                             if self.item_choice ==0 :
@@ -4787,13 +4841,13 @@ class Game:
                                 self.draw_text (screen ,"▶",arrow_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
                             text_col =WHITE if targets [i ]["can_upgrade"] else GRAY
                             self.draw_text (screen ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fontS ,text_col )
-                        if key [K_UP ]:
+                        if self.input_up(key):
                             idx =self.item_choice -1
                             while idx >=0 and not targets [idx ]["can_upgrade"]:
                                 idx -=1
                             if idx >=0 :
                                 self.item_choice =idx
-                        if key [K_DOWN ]:
+                        if self.input_down(key):
                             idx =self.item_choice +1
                             while idx <len (targets )and not targets [idx ]["can_upgrade"]:
                                 idx +=1
@@ -4846,9 +4900,9 @@ class Game:
                             if i == self.item_choice:
                                 self.draw_text (screen ,"▶",arrow_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
                             self.draw_text (screen ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
-                        if key [K_UP ]and self.item_choice >0 :
+                        if self.input_up(key)and self.item_choice >0 :
                             self.item_choice -=1 
-                        if key [K_DOWN ]and self.item_choice <len (options )-1 :
+                        if self.input_down(key)and self.item_choice <len (options )-1 :
                             self.item_choice +=1 
                         if accept and self.item_reward is None:
                             self.item_reward =self.item_choice
