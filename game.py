@@ -47,6 +47,7 @@ BATTLE_UI_LAYOUT = {
 
 WEAPON_LEVEL_ATTRS = {"shield": "pl_shield", "armor": "pl_armor", "sword": "pl_sword"}
 EQUIP_SLOT_ATTRS = {"shield": "eq_shield", "armor": "eq_armor", "sword": "eq_sword"}
+MODE_LABELS = {"normal": "ノーマル", "hard": "ハード"}
 
 # 体験版用のフロア差し替え。ここを消せば体験版固有処理を追いやすい。
 DEMO_RULE_FLOORS = {3: 10, 4: 11}
@@ -75,14 +76,16 @@ class BufferedKeyState:
         return self.pressed[key_code] or key_code in self.buffered_keys
 
 
-# セーブデータ3枠の到達階を読み取り、タイトル画面の表示に使う一覧を返す
-def load_floorlist(base_path):
+# セーブデータ3枠の到達階と難易度を読み取り、タイトル画面の表示に使う一覧を返す
+def load_save_summaries(base_path):
     floorlist = []
+    modelist = []
     for i in range(3):
         with open(base_path + "/savedata/data{}.json".format(i+1), "r") as f:
             loaddata = json.load(f)
             floorlist.append(loaddata["floor"])
-    return floorlist
+            modelist.append(loaddata["mode"])
+    return floorlist, modelist
 
 
 class Game:
@@ -122,13 +125,15 @@ class Game:
         self.floor_variants_flipped = [pygame.transform.flip(img, True, False) for img in self.floor_variants]
         self.imgFloor[0] = self.floor_variants[0]
 
-        self.floorlist = load_floorlist(self.path)
+        self.floorlist, self.modelist = load_save_summaries(self.path)
 
         self.idx = 0
         self.title_mode = 0
         self.title_cmd = 0
+        self.difficulty_cmd = 0
         self.tmr = 0
         self.floor = 0
+        self.mode = "normal"
         self.demo_mode = False
         self.boss = 0
 
@@ -179,6 +184,7 @@ class Game:
         self.emy_step = 0
         self.emy_blink = 0
         self.emy_typ = 0
+        self.death_hint_id = "default"
 
         self.dmg_eff = 0
         self.menu_cmd = 0
@@ -722,6 +728,34 @@ class Game:
         self.emy_poison =0
         self.enemy115_forced_crit_delay =-1
 
+    # 死亡した階・戦闘種別・敵IDから敗北画面に出す攻略ヒントIDを決める
+    def get_death_hint_id(self):
+        fixed_hints ={
+            7 :"enemy_7",
+            110 :"boss_110",
+            111 :"boss_111",
+            112 :"boss_112",
+            114 :"boss_114",
+            115 :"boss_115",
+            116 :"boss_116",
+            118 :"boss_118",
+        }
+        if self.emy_typ in fixed_hints :
+            return fixed_hints [self.emy_typ ]
+        if self.emy_typ ==119 :
+            return random .choice (["boss_119_a","boss_119_b"])
+        if self.emy_typ ==120 :
+            return random .choice (["boss_120_a","boss_120_b"])
+        if self.boss ==1 and self.get_rule_floor ()==40:
+            return "boss_40"
+        auto_settings =[
+            setting for setting in self.get_auto_equip_settings ()
+            if setting ["type"]=="bool" and setting ["enabled"]
+        ]
+        if self.boss ==0 and any (not getattr (self ,setting ["attr"]) for setting in auto_settings ):
+            return "normal_auto_equip_off"
+        return "default"
+
     # サイファトゥが次回以降に確定クリティカルを出す遅延予約を登録する
     def queue_enemy115_forced_crit (self ,delay_turns ):
         if self.emy_typ !=115 :
@@ -1199,11 +1233,12 @@ class Game:
         self.event_talk_char_count = 0
         self.event_talk_last_tick = pygame.time.get_ticks()
 
-    # ダンジョン上に描画するボス用マップ画像を読み込みキャッシュする
+    # ダンジョン上に描画するボス用マップ画像を階層に応じて読み込みキャッシュする
     def get_boss_map_image(self):
-        cache_key = "boss_map"
+        cache_key = "lastboss_map" if self.floor ==100 else "boss_map"
         if cache_key not in self.boss_map_cache:
-            path = self.path + "/image/boss_map.png"
+            filename = "lastboss_map.png" if self.floor ==100 else "boss_map.png"
+            path = self.path + "/image/" +filename
             self.boss_map_cache[cache_key] = pygame.image.load(path)
         return self.boss_map_cache[cache_key]
 
@@ -1238,6 +1273,61 @@ class Game:
                     self.stair_prompted =False
                     return True
         return False
+
+    # ランダム生成で分断された床領域を通路でつなぎ、階段到達不能を防ぐ
+    def connect_floor_areas(self):
+        def collect_components():
+            visited =set ()
+            components =[]
+            for y in range (DUNGEON_H ):
+                for x in range (DUNGEON_W ):
+                    if self.dungeon [y ][x ]!=0 or (x ,y )in visited:
+                        continue
+                    component =[]
+                    stack =[(x ,y )]
+                    visited .add ((x ,y ))
+                    while stack:
+                        cx ,cy =stack .pop ()
+                        component .append ((cx ,cy ))
+                        for dx ,dy in ((1 ,0 ),(-1 ,0 ),(0 ,1 ),(0 ,-1 )):
+                            nx ,ny =cx +dx ,cy +dy
+                            if (0 <=nx <DUNGEON_W and 0 <=ny <DUNGEON_H and
+                                self.dungeon [ny ][nx ]==0 and (nx ,ny )not in visited):
+                                visited .add ((nx ,ny ))
+                                stack .append ((nx ,ny ))
+                    components .append (component )
+            return sorted (components ,key =len ,reverse =True )
+
+        def component_anchor (component ):
+            center_x =sum (x for x ,y in component )//len (component )
+            center_y =sum (y for x ,y in component )//len (component )
+            return min (component ,key =lambda pos: abs (pos [0 ]-center_x )+abs (pos [1 ]-center_y ))
+
+        def carve_floor (cx ,cy ):
+            for yy in range (max (1 ,cy -1 ),min (DUNGEON_H -1 ,cy +2 )):
+                for xx in range (max (1 ,cx -1 ),min (DUNGEON_W -1 ,cx +2 )):
+                    self.dungeon [yy ][xx ]=0
+
+        def carve_corridor (start ,goal ):
+            sx ,sy =start
+            gx ,gy =goal
+            if random .randint (0 ,1 )==0:
+                for x in range (min (sx ,gx ),max (sx ,gx )+1 ):
+                    carve_floor (x ,sy )
+                for y in range (min (sy ,gy ),max (sy ,gy )+1 ):
+                    carve_floor (gx ,y )
+            else:
+                for y in range (min (sy ,gy ),max (sy ,gy )+1 ):
+                    carve_floor (sx ,y )
+                for x in range (min (sx ,gx ),max (sx ,gx )+1 ):
+                    carve_floor (x ,gy )
+
+        components =collect_components ()
+        if len (components )<=1:
+            return
+        main_anchor =component_anchor (components [0 ])
+        for component in components [1:]:
+            carve_corridor (main_anchor ,component_anchor (component ))
 
     # 固定マップまたはランダム生成により現在階のダンジョン配列を作成する
     def make_dungeon (self ,ignore_fixed =False ):
@@ -1328,6 +1418,7 @@ class Game:
                         for step in range (1 ,center +1 ):
                             for ry in range (-hall_half ,hall_half +1 ):
                                 self.dungeon [dy +ry ][dx +step ]=0 
+        self.connect_floor_areas ()
         self.init_floor_variant_map()
         self.init_floor_flip_map()
         self.init_map_state()
@@ -1762,6 +1853,8 @@ class Game:
 
     # はじめから/体験版開始時のプレイヤー・所持品・マップ状態を初期化する
     def start_new_game (self ):
+        if self.demo_mode:
+            self.mode ="normal"
         self.floor =1
         self.set_floor_assets_for_current_floor ()
         self.make_dungeon ()
@@ -1851,6 +1944,7 @@ class Game:
         with open (self.path +"/savedata/data{}.json".format (slot_index +1 ),"r")as f :
             loaddata =json .load (f )
             self.floor =loaddata ["floor"]
+            self.mode =loaddata ["mode"]
             if self.floor >0 :
                 self.dungeon =loaddata ["dungeon"]
                 self.pl_x =loaddata ["pl_x"]
@@ -1974,6 +2068,7 @@ class Game:
     def make_current_save_data(self):
         return {
             "floor": self.floor,
+            "mode": self.mode,
             "pl_lifemax": self.pl_lifemax,
             "pl_life": self.pl_life,
             "pl_mag": self.pl_mag,
@@ -2333,14 +2428,16 @@ class Game:
         self.encountered_enemies.add(self.emy_typ)
         self.imgEnemy =pygame .image .load (self.path +"/image/enemy/enemy"+str (self.emy_typ )+"_"+str ((rule_floor -1 )//30 )+".png")
         self.emy_name =EMY_NAME [self.emy_typ ]
+        emy_life_data =EMY_LIFE_BY_MODE [self.mode ]
+        emy_str_data =EMY_STR_BY_MODE [self.mode ]
         tier =(rule_floor -1 )//10
-        base =max (1 ,int (2.4 *EMY_LIFE [self.emy_typ ]-100 ))
+        base =max (1 ,int (2.4 *emy_life_data [self.emy_typ ]-100 ))
         floor_mul =1.0 +0.16 *tier
         level_mul =1.0 +0.12 *(self.emy_lev -1 )/99
         level_add =(self.emy_lev -1 )*10
         self.emy_lifemax =int (base *floor_mul *level_mul +level_add +tier*45 )
         self.emy_life =self.emy_lifemax 
-        str_base =max (1 ,int (EMY_STR [self.emy_typ ]))
+        str_base =max (1 ,int (emy_str_data [self.emy_typ ]))
         str_level_add =(self.emy_lev -1 )
         self.emy_str =int (str_base *floor_mul *level_mul +str_level_add +tier*15)
         screen =pygame .display .get_surface ()
@@ -2358,9 +2455,11 @@ class Game:
         self.boss_image_path =""
         self.load_current_boss_image ()
         self.emy_name =EMY_NAME [self.emy_typ ]
-        self.emy_lifemax =EMY_LIFE [self.emy_typ ]
+        emy_life_data =EMY_LIFE_BY_MODE [self.mode ]
+        emy_str_data =EMY_STR_BY_MODE [self.mode ]
+        self.emy_lifemax =emy_life_data [self.emy_typ ]
         self.emy_life =self.emy_lifemax 
-        self.emy_str =EMY_STR [self.emy_typ ]
+        self.emy_str =emy_str_data [self.emy_typ ]
 
     # 指定フロアのitemWall報酬として武具セットを所定レベルで付与する
     def grant_weapon_set_for_floor (self ,floor ):
@@ -2805,6 +2904,8 @@ class Game:
     # どうぐ一覧に表示するアイテム名・個数・内部IDを現在所持状態から作る
     def get_tool_entries (self ):
         tools =[]
+        if self.truth_fragment >0 :
+            tools .append ({"id":"truth_fragment","name":TRE_NAME [10 ],"count":self.truth_fragment ,"usable":False })
         if self.tool_food >0 :
             tools .append ({"id":"food","name":TRE_NAME [3 ],"count":self.tool_food ,"usable":True })
         if self.tool_magic_water >0 :
@@ -3243,15 +3344,20 @@ class Game:
         self.draw_equip_description (bg ,fnt )
         return ent
 
+    # セーブ枠の階数と難易度をタイトル・セーブ画面用の表示文字列にする
+    def save_slot_labels (self ):
+        return [
+            "data{}/{} : 地下 {}階".format (i +1 ,MODE_LABELS [self.modelist [i ]],self.floorlist [i ])
+            for i in range (3 )
+        ]
+
     # セーブスロット選択、上書き確認、セーブ画面描画を処理する
     def save_command (self ,bg ,fnt ,key ):
         ent =False 
         if self.load_accept_lock:
             if not (key [K_RETURN ]or key [K_z ]):
                 self.load_accept_lock = False
-        SAVE =["data[1] : 地下 {}階".format (self.floorlist [0 ]),
-        "data[2] : 地下 {}階".format (self.floorlist [1 ]),
-        "data[3] : 地下 {}階".format (self.floorlist [2 ])]
+        SAVE =self.save_slot_labels ()
         if key [K_1 ]:
             self.save_cmd =0 
             ent =True 
@@ -3268,7 +3374,7 @@ class Game:
         if key [K_RETURN ]or key [K_z ]:
             if not self.load_accept_lock:
                 ent =True
-        win_w =360 
+        win_w =460
         line_h =32 
         win_h =line_h *len (SAVE )+20 
         screen_w ,screen_h =bg .get_size ()
@@ -3634,29 +3740,24 @@ class Game:
                         self.title_cmd +=1 
                     if accept:
                         if self.title_cmd ==0 :
-                            self.demo_mode =False
-                            self.prologue_input_lock = True
-                            self.idx =10 
-                            self.tmr =0 
+                            self.title_mode =2
+                            self.difficulty_cmd =0
                         elif self.title_cmd ==1 :
                             self.demo_mode =False
                             self.title_mode = 1
                         elif self.title_cmd ==2 :
                             self.demo_mode =True
+                            self.mode ="normal"
                             self.prologue_input_lock = True
                             self.idx =10
                             self.tmr =0
-                else:
+                elif self.title_mode ==1:
                     if key [K_x ]or key [K_BACKSPACE ]:
                         self.title_mode = 0
                         options = ["はじめから", "つづきから", "体験版をプレイ"]
                         selected = self.title_cmd
                     else:
-                        options = [
-                            "data[1] : 地下 {}階".format (self.floorlist [0 ]),
-                            "data[2] : 地下 {}階".format (self.floorlist [1 ]),
-                            "data[3] : 地下 {}階".format (self.floorlist [2 ])
-                        ]
+                        options =self.save_slot_labels ()
                         selected = self.save_cmd
                         if self.input_up(key)and self.save_cmd >0 :
                             self.save_cmd -=1 
@@ -3664,9 +3765,27 @@ class Game:
                             self.save_cmd +=1 
                         if accept:
                             self.load_game_data (self.save_cmd )
+                else:
+                    if key [K_x ]or key [K_BACKSPACE ]:
+                        self.title_mode =0
+                        options =["はじめから", "つづきから", "体験版をプレイ"]
+                        selected =self.title_cmd
+                    else:
+                        options =["ノーマル", "ハード"]
+                        selected =self.difficulty_cmd
+                        if self.input_up(key)and self.difficulty_cmd >0 :
+                            self.difficulty_cmd -=1
+                        if self.input_down(key)and self.difficulty_cmd <len (options )-1 :
+                            self.difficulty_cmd +=1
+                        if accept:
+                            self.demo_mode =False
+                            self.mode ="normal" if self.difficulty_cmd ==0 else "hard"
+                            self.prologue_input_lock =True
+                            self.idx =10
+                            self.tmr =0
                 rows = len (options )
                 line_h =32 
-                win_w =360 
+                win_w =460 if self.title_mode ==1 else 360
                 win_h =rows *line_h +20 
                 screen_w =screen .get_size ()[0 ]
                 win_x =(screen_w -win_w )//2 
@@ -4059,6 +4178,7 @@ class Game:
                                 json .dump (d ,f )
                             se [9 ].play ()
                             self.floorlist [self.save_cmd ]=self.floor
+                            self.modelist [self.save_cmd ]=self.mode
                             self.save_from_boss_talk =False
                             self.load_accept_lock =True
                             self.init_boss_talk ()
@@ -4074,6 +4194,7 @@ class Game:
                                 json .dump (d ,f )
                             se [9 ].play ()
                             self.floorlist [self.save_cmd ]=self.floor 
+                            self.modelist [self.save_cmd ]=self.mode
                             self.load_accept_lock = True
                             self.idx =40 
                     if confirm_no :
@@ -4085,6 +4206,7 @@ class Game:
                             json .dump (d ,f )
                         se [9 ].play ()
                         self.floorlist [self.save_cmd ]=self.floor
+                        self.modelist [self.save_cmd ]=self.mode
                         self.save_from_boss_talk =False
                         self.load_accept_lock =True
                         self.init_boss_talk ()
@@ -4100,6 +4222,7 @@ class Game:
                             json .dump (d ,f )
                         se [9 ].play ()
                         self.floorlist [self.save_cmd ]=self.floor 
+                        self.modelist [self.save_cmd ]=self.mode
                         self.load_accept_lock = True
                         self.idx =40 
 
@@ -4419,6 +4542,7 @@ class Game:
                             json .dump (d ,f )
                         se [9 ].play ()
                         self.floorlist [self.stair_save_slot ]=self.floor 
+                        self.modelist [self.stair_save_slot ]=self.mode
                         self.save_from_stair = False
                         self.load_accept_lock = True
                 if 6 <=self.tmr and self.tmr <=9 :
@@ -5793,6 +5917,7 @@ class Game:
             elif self.idx ==242 :# 敗北
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
+                    self.death_hint_id =self.get_death_hint_id ()
                     self.restore_battle_equip_session ()
                     pygame .mixer .music .stop ()
                     self.boss =0 
@@ -5818,6 +5943,8 @@ class Game:
                     msg_x =screen .get_size ()[0 ]//2 -font .size (msg )[0 ]//2
                     msg_y =screen .get_size ()[1 ]//2 -font .get_height ()//2
                     self.draw_text (screen ,msg ,msg_x ,msg_y ,font ,WHITE )
+                    hint =DEATH_HINTS .get (self.death_hint_id ,DEATH_HINTS ["default"])
+                    self.draw_bottom_description_window (screen ,fontS ,"攻略のヒント\n"+hint )
                 if self.tmr >=fade_frames +hold_frames :
                     self.idx =0
                     self.tmr =0
