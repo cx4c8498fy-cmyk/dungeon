@@ -2412,6 +2412,45 @@ class Game:
             pygame .mixer .music .load (self.path +"/sound/bgm_"+str ((rule_floor -1) //10 )+".mp3")
             pygame .mixer .music .play (-1 )
 
+    # TRUE_EPISODE後の記憶回想へ入り、フィールドBGM位置を保存して停止する
+    def start_true_episode_memory_scene(self):
+        if self.move_bgm_path and pygame .mixer .music .get_busy ():
+            now =time .time ()
+            self.move_bgm_pos_ms =self.normalize_bgm_pos_ms (self.move_bgm_path ,int ((now -self.move_bgm_start_time )*1000 ))
+            self.move_bgm_start_time =now -self.move_bgm_pos_ms /1000.0
+        pygame .mixer .music .stop ()
+        self.idx =134
+        self.tmr =0
+
+    # 黒背景の中央にTRUE_EPISODE後の記憶テキストをフェード表示する
+    def draw_true_episode_memory_scene(self, bg, fnt):
+        bg .fill (BLACK )
+        fade_in =10
+        hold =20
+        fade_out =10
+        cycle =fade_in +hold +fade_out
+        text_index =(self.tmr -1 )//cycle
+        if text_index >=len (TRUE_EPISODE_MEMORY_TEXTS ):
+            self.resume_dungeon_bgm ()
+            self.idx =100
+            self.tmr =0
+            return
+        frame =(self.tmr -1 )%cycle +1
+        if frame <=fade_in:
+            alpha =int (255 *frame /fade_in )
+        elif frame <=fade_in +hold:
+            alpha =255
+        else:
+            alpha =int (255 *(cycle -frame )/fade_out )
+        parts =TRUE_EPISODE_MEMORY_TEXTS [text_index ].split ("\n")
+        line_h =fnt .get_height ()+10
+        total_h =line_h *len (parts )
+        screen_w ,screen_h =bg .get_size ()
+        y =screen_h //2 -total_h //2
+        for i ,part in enumerate (parts ):
+            x =screen_w //2 -fnt .size (part )[0 ]//2
+            self.draw_text_alpha (bg ,part ,x ,y +i *line_h ,fnt ,WHITE ,alpha )
+
 
     # 通常戦の敵種・レベル・画像・能力値を現在階に応じて初期化する
     def init_battle (self ):
@@ -4662,6 +4701,9 @@ class Game:
                             self.idx =84 
                         self.tmr =0 
 
+            elif self.idx ==134 :# TRUE_EPISODE後の記憶回想
+                self.draw_true_episode_memory_scene (screen ,font )
+
             elif self.idx ==131 :# itemWallイベント
                 self.draw_dungeon (screen ,fontS )
                 layout =self.get_dialog_window_layout (screen )
@@ -4872,8 +4914,7 @@ class Game:
                                     self.tmr =0
                             else:
                                 self.true_episode_heard =True
-                                self.idx =100
-                                self.tmr =0
+                                self.start_true_episode_memory_scene ()
                     elif self.item_event_phase == 1:
                         if self.item_talk_index <len (self.item_talk_lines ):
                             line = self.item_talk_lines [self.item_talk_index ]
@@ -4958,8 +4999,7 @@ class Game:
                     finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
                     if finished:
                         self.true_episode_heard = True
-                        self.idx =100
-                        self.tmr =0
+                        self.start_true_episode_memory_scene ()
                 elif self.item_event_kind in ("blocked","locked_stairs","floor99_need"):
                     finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
                     if finished:
