@@ -1682,7 +1682,7 @@ class Game:
         if self.dungeon [self.pl_y ][self.pl_x ]==16 :# 回復床に載った
             self.dungeon [self.pl_y ][self.pl_x ]=0
             self.pl_life =self.pl_lifemax
-            self.item_popup_text ="生命が　回復した"
+            self.item_popup_text ="生命の　地底湖"
             self.se [2 ].play ()
             self.idx =120
             self.tmr =0
@@ -2322,17 +2322,17 @@ class Game:
             if 0 <=cy <len (self.dungeon )and 0 <=cx <len (self.dungeon [cy ])and self.dungeon [cy ][cx ] in (2 ,10 ):
                 mx =int (cx *scale )
                 my =int (cy *scale )
-                bg .fill ((255 ,150 ,210 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
+                bg .fill ((255 ,50 ,255 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
         for tx ,ty in self.map_tboxes :
             if 0 <=ty <len (self.dungeon )and 0 <=tx <len (self.dungeon [ty ])and self.dungeon [ty ][tx ]==1 :
                 mx =int (tx *scale )
                 my =int (ty *scale )
-                bg .fill ((220 ,160 ,0 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
+                bg .fill ((220 ,220 ,0 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
         for wx ,wy in self.map_wboxes :
             if 0 <=wy <len (self.dungeon )and 0 <=wx <len (self.dungeon [wy ])and self.dungeon [wy ][wx ]==4 :
                 mx =int (wx *scale )
                 my =int (wy *scale )
-                bg .fill ((220 ,160 ,0 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
+                bg .fill ((220 ,220 ,0 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
         for cx ,cy in self.map_cure_floors :
             if 0 <=cy <len (self.dungeon )and 0 <=cx <len (self.dungeon [cy ])and self.dungeon [cy ][cx ]==16 :
                 mx =int (cx *scale )
@@ -2345,7 +2345,7 @@ class Game:
             bg .fill ((0 ,192 ,255 ,220 ),[map_x +mx ,map_y +my ,marker ,marker ])
         px =int (self.pl_x *scale )
         py =int (self.pl_y *scale )
-        bg .fill ((190 ,0 ,0 ,220 ),[map_x +px ,map_y +py ,marker ,marker ])
+        bg .fill ((200 ,0 ,0 ,220 ),[map_x +px ,map_y +py ,marker ,marker ])
 
 
     # 戦闘前に保存した再生位置からフィールドBGMを再開する
@@ -3635,7 +3635,7 @@ class Game:
                 mgup =int (5 +0.8*armor_mag +random .randint (0 ,armor_mag //5 ))
                 self.add_pl_mag (mgup )
                 self.set_message ("　鎧の魔力 魔力 +{}" .format (mgup ))
-                self.se [9 ].play ()
+                self.se [8 ].play ()
             else :
                 self.tmr =self.tmr +1 
 
@@ -3646,19 +3646,19 @@ class Game:
             self.emy_powup =1 
             if random .random ()>0.7 :
                 self.emy_powup ={4:2 ,115:15 }[self.emy_typ ]
-                self.set_message ("　敵は　力をためた!")
-                self.se [12 ].play ()
+                self.set_message ("　敵は　力をためた！")
+                self.se [11 ].play ()
             action =False 
         if self.emy_typ ==5:
             give = 5+self.emy_lev + random .randint (1 ,5)
             give = min(give, self.pl_magmax - self.pl_mag)
-            self.set_message (f"　魔力を　{give}　付与された!")
+            self.set_message (f"　魔力を　{give}　付与された")
             self.pl_mag =self.pl_mag +give 
             action =False 
         if self.emy_typ ==112:
             suck = 104 + random .randint (1 ,12 )
             suck = min(suck, self.pl_mag)
-            self.set_message (f"　魔力を　{suck}　吸収された!")
+            self.set_message (f"　魔力を　{suck}　吸収された")
             self.pl_mag =self.pl_mag -suck 
             action =False 
         if self.emy_typ ==6 :
@@ -3678,7 +3678,7 @@ class Game:
             force_poison =self.enemy_poison_fail_count >=7
             if force_poison or random .random ()>{8:0.3, 111:0.84}[self.emy_typ]:
                 self.poison ={8:1, 111:2}[self.emy_typ]
-                self.set_message ("　毒を　くらった!")
+                self.set_message ("　毒を　くらった！")
                 self.enemy_poison_fail_count =0
                 action =False 
             else :
@@ -4233,7 +4233,7 @@ class Game:
                         if self.save_from_boss_talk:
                             with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
                                 json .dump (d ,f )
-                            se [9 ].play ()
+                            se [8 ].play ()
                             self.floorlist [self.save_cmd ]=self.floor
                             self.modelist [self.save_cmd ]=self.mode
                             self.save_from_boss_talk =False
@@ -4249,7 +4249,7 @@ class Game:
                         else:
                             with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
                                 json .dump (d ,f )
-                            se [9 ].play ()
+                            se [8 ].play ()
                             self.floorlist [self.save_cmd ]=self.floor 
                             self.modelist [self.save_cmd ]=self.mode
                             self.load_accept_lock = True
@@ -4261,7 +4261,7 @@ class Game:
                     if self.save_from_boss_talk:
                         with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
                             json .dump (d ,f )
-                        se [9 ].play ()
+                        se [8 ].play ()
                         self.floorlist [self.save_cmd ]=self.floor
                         self.modelist [self.save_cmd ]=self.mode
                         self.save_from_boss_talk =False
@@ -4277,7 +4277,7 @@ class Game:
                     else:
                         with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
                             json .dump (d ,f )
-                        se [9 ].play ()
+                        se [8 ].play ()
                         self.floorlist [self.save_cmd ]=self.floor 
                         self.modelist [self.save_cmd ]=self.mode
                         self.load_accept_lock = True
@@ -4586,7 +4586,7 @@ class Game:
                         d =self.make_current_save_data ()
                         with open (self.path +"/savedata/data{}.json".format (self.stair_save_slot +1 ),"w")as f :
                             json .dump (d ,f )
-                        se [9 ].play ()
+                        se [8 ].play ()
                         self.floorlist [self.stair_save_slot ]=self.floor 
                         self.modelist [self.stair_save_slot ]=self.mode
                         self.save_from_stair = False
@@ -5261,7 +5261,7 @@ class Game:
                     if self.emy_typ ==110 :
                         if random .random ()>0.7 :
                             self.set_message ("　攻撃は　防御された！")
-                            se [11 ].play ()
+                            se [10 ].play ()
                             dmg = dmg /2
                     if self.guard_remain >0 and self.emy_typ ==119 :
                         dmg =dmg *self.get_guard_damage_multiplier ("enemy")
@@ -5298,7 +5298,7 @@ class Game:
                 if self.tmr ==1 :
                     ice =0 
                     self.set_message ("　魔法による攻撃！")
-                    se [6 ].play ()
+                    se [5 ].play ()
                     active_ice_sword =self.get_active_weapon_level ("sword",1 )
                     if active_ice_sword >0 :
                         if random .random ()>0.95 -0.003 *active_ice_sword :
@@ -5378,7 +5378,7 @@ class Game:
                     if active_potion_armor >0 and random .random ()>0.7 :
                         self.powup =1.5 +0.01 *active_potion_armor
                         self.set_message ("　ちからをためた！")
-                        self.se [12 ].play ()
+                        self.se [11 ].play ()
                 if self.tmr ==11 :
                     if self.emy_typ ==116 or self.emy_typ ==120 :
                         self.idx =232 
@@ -5519,7 +5519,7 @@ class Game:
                     if random .random ()<0.01 *self.get_active_weapon_level ("shield",2 ):
                         self.guard_remain =4 
                     self.set_message ("　{}ターンの　守護を得た".format (self.guard_remain ))
-                    se [8 ].play ()
+                    se [7 ].play ()
                 if self.tmr ==6 :
                     self.guard =self.guard -1 
                 if self.tmr ==11 :
@@ -5560,7 +5560,7 @@ class Game:
                         if random .random ()>0.7 and self.emy_typ !=119 :
                             pro =0.3 +0.01 *active_defence_shield
                             self.set_message ("　盾で　防御した！")
-                            se [11 ].play ()
+                            se [10 ].play ()
                     if active_counter_shield >0 :
                         if random .random ()>0.65 :
                             cou =active_counter_shield
@@ -5610,7 +5610,7 @@ class Game:
                             self.emy_blink =2 
                             dmg =int (self.pl_str //20 +self.pl_str *cou *0.005 +random .randint (0 ,cou //5 ))
                             self.set_message (f"　{dmg}　カウンター！")
-                            se [11 ].play ()
+                            se [10 ].play ()
                             self.emy_life =self.emy_life -dmg 
                             if self.emy_life <=0 :
                                 self.emy_life =0 
@@ -5632,7 +5632,7 @@ class Game:
             elif self.idx ==231 :#destroy
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==5 :
-                    self.set_message (self.emy_name +"の デストロイ!")
+                    self.set_message (self.emy_name +"の デストロイ！")
                     se [1 ].play ()
                     self.emy_step =30 
                 if self.tmr ==9 :
@@ -5662,7 +5662,7 @@ class Game:
                         self.set_message ("　マギアの　チャージ！")
                     elif self.madoka >=1000 :
                         self.set_message ("　敵の　マギア")
-                        se [6 ].play ()
+                        se [5 ].play ()
                         self.emy_step =30 
                 if self.tmr ==9 :
                     if self.madoka <1000 :
@@ -5711,7 +5711,7 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
                     self.set_message ("　敵は　{}ターンの守護を得た".format (self.guard_remain ))
-                    se [8 ].play ()
+                    se [7 ].play ()
                 if self.tmr ==6 :
                     self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
@@ -5819,7 +5819,7 @@ class Game:
                     #     if random .random ()>0.7 and self.emy_typ !=119 :
                     #         pro =0.3 +0.01 *active_defence_shield
                     #         self.set_message ("　盾で　防御した！")
-                    #         se [11 ].play ()
+                    #         se [10 ].play ()
                     # if active_counter_shield >0 :
                     #     if random .random ()>0.65 :
                     #         cou =active_counter_shield
@@ -5841,7 +5841,7 @@ class Game:
                     #         self.emy_blink =2 
                     #         dmg =int (self.pl_str //10 +self.pl_str *cou *0.003 +random .randint (0 ,cou //5 ))
                     #         self.set_message (f"　{dmg}　のカウンター！")
-                    #         se [11 ].play ()
+                    #         se [10 ].play ()
                     #         self.emy_life =self.emy_life -dmg 
                     #         if self.emy_life <=0 :
                     #             self.emy_life =0 
@@ -5902,9 +5902,9 @@ class Game:
                         self.growth_essence_drop_battle =False
                     pygame .mixer .music .stop ()
                     if self.boss ==1 :
-                        se [7 ].play ()
+                        se [6 ].play ()
                     else :
-                        se [5 ].play ()
+                        se [4 ].play ()
                     self.pl_exp =self.pl_exp +int (EMY_EXP [self.emy_typ ]*(1 +0.01 *(self.emy_lev -1))*(1 +0.01 *self.truth_fragment ))
                     self.add_pl_mag (EMY_MAG_GAIN [self.emy_typ ])
                     if self.tutorial_enabled and self.tutorial_pending_battle:
@@ -5978,7 +5978,7 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
                     self.set_message ("レベルアップ！")
-                    se [4 ].play ()
+                    se [3 ].play ()
                     self.pl_level =self.pl_level +1 
                     lif_p =random .randint (10 ,20 )
                     str_p =random .randint (6 ,8 )
@@ -6089,7 +6089,7 @@ class Game:
                 if self.tmr ==1 :
                     self.treasure =random .choice ([7 ,8 ,9 ])
                     self.set_message (f"{TRE_NAME [self.treasure ]}を　落とした")
-                    self.se [9 ].play ()
+                    self.se [8 ].play ()
                 if self.tmr ==18 :
                     if self.treasure ==7 :
                         self.tool_sword_polish +=1
@@ -6109,7 +6109,7 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
                     self.set_message ("しんじつのかけらを　落とした")
-                    self.se [10 ].play ()
+                    self.se [9 ].play ()
                 if self.tmr ==18 :
                     self.truth_fragment =min (100 ,self.truth_fragment +1 )
                     self.truth_fragment_floors .add (self.floor )
@@ -6122,7 +6122,7 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
                     self.set_message ("成長エキスを　落とした")
-                    self.se [9 ].play ()
+                    self.se [8 ].play ()
                 if self.tmr ==18 :
                     self.tool_growth +=1
                     self.growth_essence_drop_battle =False
