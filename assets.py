@@ -73,7 +73,7 @@ def load_sounds(base_path: str) -> list:
         pygame.mixer.Sound(base_path + "/sound/se_blaze.wav"),
         pygame.mixer.Sound(base_path + "/sound/ohd_se_potion.wav"),
         pygame.mixer.Sound(base_path + "/sound/ohd_jin_gameover.wav"),
-        pygame.mixer.Sound(base_path + "/sound/jin_levup.wav"),
+        pygame.mixer.Sound(base_path + "/sound/jin_levup.mp3"),
         pygame.mixer.Sound(base_path + "/sound/jin_win.wav"),
         pygame.mixer.Sound(base_path + "/sound/se_magic.wav"),
         pygame.mixer.Sound(base_path + "/sound/jin_bosswin.wav"),
