@@ -229,6 +229,7 @@ class Game:
         self.emy_poison = 0
         self.enemy115_forced_crit_delay = -1
         self.madoka = 0
+        self.pl_burn_turns = 0
         self.burn_turns = 0
         self.inferno = 0
         self.boss_mode = "normal"
@@ -729,6 +730,7 @@ class Game:
         self.powup =1
         self.madoka =0
         self.emy_powup =1
+        self.pl_burn_turns =0
         self.burn_turns =0
         self.inferno =0
         self.boss_mode = "normal"
@@ -1870,6 +1872,7 @@ class Game:
         self.powup =1
         self.emy_powup =1
         self.poison =0
+        self.pl_burn_turns =0
         self.auto_equip_attack_sword =False
         self.auto_equip_magic_staff =False
         self.auto_equip_bomb_cannon =False
@@ -1946,6 +1949,7 @@ class Game:
                 self.powup =1
                 self.emy_powup =1
                 self.poison =0
+                self.pl_burn_turns =0
                 self.save_from_stair = False
                 self.save_from_boss_talk = False
                 self.stair_save_slot = 0
@@ -2537,6 +2541,8 @@ class Game:
             status_entries .append ((f"守護 {'・'*self.guard_remain}",GREEN ))
         if self.poison >0 :
             status_entries .append ((f"毒 {'・'*self.poison}",COPPER ))
+        if self.pl_burn_turns >0 :
+            status_entries .append ((f"火傷 {'・'*self.pl_burn_turns}",RED ))
         if self.powup >1 :
             status_entries .append (("力↑",RED ))
         for i ,(status_txt ,status_col )in enumerate (status_entries ):
@@ -3288,11 +3294,15 @@ class Game:
         info = ENEMY_INFO.get(enemy_id, "情報が登録されていません。")
         img = self.get_enemy_catalog_image(enemy_id)
 
-        win_w = 760
+        view_rect = getattr(self, "dungeon_view_rect", None)
+        if view_rect:
+            view_left, view_top, view_w, view_h = view_rect
+        else:
+            view_left, view_top, view_w, view_h = self.blit_scaled_bg(bg, self.imgBtlBG, 0, 0, False)
+        win_w = int(view_w * 0.9)
         win_h = 430
-        screen_w, screen_h = bg.get_size()
-        win_x = (screen_w - win_w) // 2
-        win_y = (screen_h - win_h) // 2
+        win_x = view_left + (view_w - win_w) // 2
+        win_y = view_top + (view_h - win_h) // 2
         pygame.draw.rect(bg, BLACK, [win_x, win_y, win_w, win_h])
         pygame.draw.rect(bg, WHITE, [win_x, win_y, win_w, win_h], 2)
 
@@ -3305,10 +3315,21 @@ class Game:
         bg.blit(draw_img, [img_x, img_y])
         pygame.draw.rect(bg, WHITE, [win_x + 30, win_y + 90, max_w, max_h], 1)
 
-        self.draw_text(bg, name, win_x + 320, win_y + 45, self.get_font(22), WHITE)
-        parts = str(info).split("\n")
+        text_x = win_x + 320
+        text_w = max(1, win_x + win_w - 30 - text_x)
+        self.draw_text(bg, name, text_x, win_y + 45, self.get_font(22), WHITE)
+        parts = []
+        for raw_line in str(info).split("\n"):
+            line = ""
+            for ch in raw_line:
+                if line and fnt.size(line + ch)[0] > text_w:
+                    parts.append(line)
+                    line = ch
+                else:
+                    line += ch
+            parts.append(line)
         for i, part in enumerate(parts):
-            self.draw_text(bg, part, win_x + 320, win_y + 110 + i * 28, fnt, WHITE)
+            self.draw_text(bg, part, text_x, win_y + 110 + i * 28, fnt, WHITE)
         self.draw_text(bg, "[X]/[Back] 戻る", win_x + win_w - 180, win_y + win_h - 36, fnt, WHITE)
         arrow_font = self.get_font(44)
         if self.find_zukan_detail_neighbor(-1) >= 0:
@@ -3746,6 +3767,7 @@ class Game:
                     self.floor99_trial_battle_active =False
                     self.floor99_trial_post_pending =False
                     self.reset_enemy_battle_params ()
+                    self.pl_burn_turns =0
                     self.tool_weapon_choice_active =False
                     self.tool_weapon_choice_cmd =0
                     self.tool_weapon_choice_targets =[]
@@ -5266,11 +5288,21 @@ class Game:
                     if self.guard_remain >0 and self.emy_typ ==119 :
                         dmg =dmg *self.get_guard_damage_multiplier ("enemy")
                     dmg =max (1 +cri ,int (EMY_APRO [self.emy_typ ] * dmg /(2 *self.poison +1 )))
+                    if self.pl_burn_turns >0 :
+                        dmg =int (dmg *1.5 )
                     self.emy_blink =5 
                     self.set_message (f"　{dmg}　ダメージ！")
                 if self.tmr ==11 :
                     self.emy_life =self.emy_life -dmg 
-                    if self.emy_life <=0 :
+                    if self.pl_burn_turns >0 :
+                        burn_recoil =random .randint (380 ,420 )
+                        self.set_message ("　火傷の反動 -{}".format (burn_recoil ))
+                        self.pl_life =self.pl_life -burn_recoil
+                        if self.pl_life <=0 :
+                            self.pl_life =0
+                            self.idx =242
+                            self.tmr =0
+                    if self.idx ==220 and self.emy_life <=0 :
                         self.emy_life =0 
                         self.idx =241 
                         self.tmr =0
@@ -5334,6 +5366,7 @@ class Game:
                     if self.emy_typ ==118 :
                         self.boss_mode = "ice"
                     if ice ==1 :
+                        self.emy_powup =1
                         self.set_message ("　敵は　凍りついた！")
                     else :
                         self.tmr =self.tmr +3
@@ -5606,7 +5639,17 @@ class Game:
                         self.idx =242 
                         self.tmr =0 
                     else:
-                        if cou >0 :
+                        if self.pl_burn_turns >0 :
+                            burn_counter =random .randint (680 ,720 )
+                            self.set_message ("　火傷の反撃 {}　ダメージ！".format (burn_counter ))
+                            se [0 ].play ()
+                            self.emy_blink =2
+                            self.emy_life =self.emy_life -burn_counter
+                            if self.emy_life <=0 :
+                                self.emy_life =0
+                                self.idx =241
+                                self.tmr =0
+                        if self.idx ==230 and cou >0 :
                             self.emy_blink =2 
                             dmg =int (self.pl_str //20 +self.pl_str *cou *0.005 +random .randint (0 ,cou //5 ))
                             self.set_message (f"　{dmg}　カウンター！")
@@ -5622,6 +5665,8 @@ class Game:
                 if self.tmr ==18 :
                     self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
+                    if self.idx ==230 and self.pl_burn_turns >0 :
+                        self.pl_burn_turns =max (self.pl_burn_turns -1 ,0 )
                     if self.emy_typ ==6 and self.idx ==236 :
                         self.tmr =0 
                 if self.tmr ==22 :
@@ -5644,6 +5689,8 @@ class Game:
                         self.pl_life =0 
                         self.idx =242 
                         self.tmr =0 
+                    else :
+                        self.pl_burn_turns =3
                 if self.tmr ==19 :
                     if self.emy_action (screen ):
                         self.tmr =self.tmr +3 
