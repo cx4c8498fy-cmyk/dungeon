@@ -66,12 +66,14 @@ class BufferedKeyState:
 def load_save_summaries(base_path):
     floorlist = []
     modelist = []
+    extralist = []
     for i in range(3):
         with open(base_path + "/savedata/data{}.json".format(i+1), "r") as f:
             loaddata = json.load(f)
             floorlist.append(loaddata["floor"])
             modelist.append(loaddata["mode"])
-    return floorlist, modelist
+            extralist.append(loaddata["extra_stage"])
+    return floorlist, modelist, extralist
 
 
 class Game:
@@ -113,7 +115,7 @@ class Game:
         self.floor_variants_flipped = [pygame.transform.flip(img, True, False) for img in self.floor_variants]
         self.imgFloor[0] = self.floor_variants[0]
 
-        self.floorlist, self.modelist = load_save_summaries(self.path)
+        self.floorlist, self.modelist, self.extralist = load_save_summaries(self.path)
 
         self.idx = 0
         self.title_mode = 0
@@ -121,6 +123,7 @@ class Game:
         self.difficulty_cmd = 0
         self.tmr = 0
         self.floor = 0
+        self.extra_stage = 0
         self.mode = "normal"
         self.boss = 0
 
@@ -220,10 +223,12 @@ class Game:
         self.save_cmd = 0
         self.save_from_stair = False
         self.save_from_boss_talk = False
+        self.save_from_ending_extra = False
         self.stair_save_slot = 0
         self.stair_choice_cmd = 0
         self.stair_prompted = False
         self.stair_choice_input_lock = False
+        self.ending_save_choice_input_lock = False
         self.boss_talk_choice_cmd = 2
         self.boss_talk_choice_input_lock = False
         self.boss_transition_mode = False
@@ -233,7 +238,7 @@ class Game:
         self.emy_powup = 1
         self.poison = 0
         self.emy_poison = 0
-        self.enemy115_forced_crit_delay = -1
+        self.emy_defence = False
         self.madoka = 0
         self.pl_burn_turns = 0
         self.burn_turns = 0
@@ -292,6 +297,7 @@ class Game:
         self.tool_desc_last_tick = 0
         self.item_popup_text = ""
         self.enemy_poison_fail_count = 0
+        self.enemy_powup_fail_count = 0
         self.item_event_phase = 0
         self.item_choice = 0
         self.item_reward = None
@@ -335,6 +341,7 @@ class Game:
         self.floor99_trial_battle_active = False
         self.floor99_trial_post_pending = False
         self.floor_transition_target = None
+        self.show_thanks_after_recollection = False
         self.reset_tutorial_runtime()
 
     # フロアごとの床タイル差し替え結果を保持する辞書を初期化する
@@ -693,8 +700,9 @@ class Game:
     def reset_enemy_battle_params(self):
         self.emy_skip_turn =False
         self.enemy_poison_fail_count =0
+        self.enemy_powup_fail_count =0
         self.emy_poison =0
-        self.enemy115_forced_crit_delay =-1
+        self.emy_defence =False
 
     # 死亡した階・戦闘種別・敵IDから敗北画面に出す攻略ヒントIDを決める
     def get_death_hint_id(self):
@@ -723,15 +731,6 @@ class Game:
         if self.boss ==0 and self.floor >=31 and any (not getattr (self ,setting ["attr"]) for setting in auto_settings ):
             return "normal_auto_equip_off"
         return "default"
-
-    # サイファトゥが次回以降に確定クリティカルを出す遅延予約を登録する
-    def queue_enemy115_forced_crit (self ,delay_turns ):
-        if self.emy_typ !=115 :
-            return
-        if self.enemy115_forced_crit_delay <0 :
-            self.enemy115_forced_crit_delay =delay_turns
-        else :
-            self.enemy115_forced_crit_delay =min (self.enemy115_forced_crit_delay ,delay_turns )
 
     # プレイヤー側の守護・毒・力ためなど、戦闘単位の一時値を初期化する
     def reset_player_battle_params(self):
@@ -869,11 +868,13 @@ class Game:
 
     # 固定マップJSONを読み込み、標準サイズへパディングし座標も補正する
     def load_fixed_floor_data(self, floor_value):
-        if floor_value not in (1, 100):
+        if self.extra_stage >0:
+            filename ="extra.json"
+        elif floor_value in (1 ,100):
+            filename ="floor_{}.json".format(floor_value)
+        else:
             return None
-        floor_path = os.path.join(self.path, "floor_{}.json".format(floor_value))
-        if not os.path.exists(floor_path):
-            return None
+        floor_path = os.path.join(self.path, "fixed_maps", filename)
         with open(floor_path, "r") as f:
             data = json.load(f)
         dungeon = data.get("dungeon")
@@ -956,6 +957,42 @@ class Game:
                     padded[offset_y + y][offset_x + x] = dungeon[y][x]
         
         return padded, (offset_x, offset_y)
+
+    # 現在階または移動演出中の階層名を、通常階層/Extraに応じて作る
+    def get_floor_display_text(self, floor_value=None):
+        if self.extra_stage >0:
+            return "Extra {}".format(self.extra_stage)
+        if floor_value is None:
+            floor_value =self.floor
+        return "地下 {}階".format(floor_value)
+
+    # Extraステージ用の固定マップを読み込み、開始位置と描画状態を初期化する
+    def start_extra_stage(self, stage, play_bgm=True):
+        self.extra_stage =stage
+        self.floor =100
+        self.boss =0
+        self.truth_fragment_drop_battle =False
+        self.growth_essence_drop_battle =False
+        self.floor99_trial_missing =0
+        self.floor99_trial_total =0
+        self.floor99_trial_battle_active =False
+        self.floor99_trial_post_pending =False
+        self.save_from_stair =False
+        self.save_from_boss_talk =False
+        self.floor_transition_target =None
+        self.floor_transition_delta =1
+        self.floor_title_active =False
+        self.set_floor_assets_for_current_floor ()
+        self.make_dungeon ()
+        self.put_event ()
+        self.reset_player_battle_params ()
+        self.reset_enemy_battle_params ()
+        if play_bgm:
+            self.move_bgm_path =self.path +"/sound/bgm_9.mp3"
+            self.move_bgm_pos_ms =0
+            self.move_bgm_start_time =time .time ()
+            pygame .mixer .music .load (self.move_bgm_path )
+            pygame .mixer .music .play (-1 )
 
     # floor_1.jsonのチュートリアル定義から壁・ゲート・イベント座標を初期化する
     def setup_tutorial_floor(self, progress_data=None):
@@ -1057,6 +1094,13 @@ class Game:
 
     # 現在のボスに対応する戦闘前または戦闘後の会話を準備する
     def init_boss_talk(self, mode="init"):
+        if self.extra_stage >0:
+            self.boss_talk_kind =mode
+            self.boss_talk_lines =["強敵が　こちらを見ている"]
+            self.boss_talk_index =0
+            self.boss_talk_char_count =0
+            self.boss_talk_last_tick =pygame.time.get_ticks()
+            return
         boss_floor = self.floor
         boss_id = 9 + int(boss_floor // 10)
         boss_map_id = boss_id - 10
@@ -1214,9 +1258,9 @@ class Game:
 
     # ダンジョン上に描画するボス用マップ画像を階層に応じて読み込みキャッシュする
     def get_boss_map_image(self):
-        cache_key = "lastboss_map" if self.floor ==100 else "boss_map"
+        cache_key = "lastboss_map" if self.floor ==100 and self.extra_stage ==0 else "boss_map"
         if cache_key not in self.boss_map_cache:
-            filename = "lastboss_map.png" if self.floor ==100 else "boss_map.png"
+            filename = "lastboss_map.png" if self.floor ==100 and self.extra_stage ==0 else "boss_map.png"
             path = self.path + "/image/" +filename
             self.boss_map_cache[cache_key] = pygame.image.load(path)
         return self.boss_map_cache[cache_key]
@@ -1515,14 +1559,15 @@ class Game:
         self.update_minimap_grid (new_seen )
         if self.idx ==100 :
             self.draw_minimap (bg ,bg_rect ,new_seen )
-        floor_text ="地下 {}階".format (self.floor)
+        floor_text =self.get_floor_display_text ()
         floor_x =view_left +60
         floor_y =view_top +view_h -40
         self.draw_text (bg ,floor_text ,floor_x ,floor_y ,fnt ,WHITE )
-        fragment_status ="取得済" if self.truth_fragment_collected_current_floor else "未取得"
-        fragment_text ="かけら：" +fragment_status
-        fragment_x =floor_x +fnt .size (floor_text )[0 ]+18
-        self.draw_text (bg ,fragment_text ,fragment_x ,floor_y ,fnt ,WHITE )
+        if self.extra_stage ==0:
+            fragment_status ="取得済" if self.truth_fragment_collected_current_floor else "未取得"
+            fragment_text ="かけら：" +fragment_status
+            fragment_x =floor_x +fnt .size (floor_text )[0 ]+18
+            self.draw_text (bg ,fragment_text ,fragment_x ,floor_y ,fnt ,WHITE )
         if self.idx !=85 :
             self.draw_para (bg ,fnt ,bg_rect )# 主人公の能力を表示
 
@@ -1537,6 +1582,13 @@ class Game:
         fixed_event_wall_front =None
         fixed_player_start =None
         rule_floor =self.floor
+        if self.extra_stage >0 and self.fixed_floor_data:
+            self.pl_x, self.pl_y =self.fixed_floor_data ["pl_start"]
+            self.pl_d =1
+            self.pl_a =5
+            self.truth_fragment_collected_current_floor =True
+            self.stair_prompted =False
+            return
         if self.fixed_floor_data and self.floor == 1: # チュートリアルフロアの配置
             self.setup_tutorial_floor()
             self.pl_x, self.pl_y = self.fixed_floor_data["pl_start"]
@@ -1855,6 +1907,7 @@ class Game:
     # はじめから開始時のプレイヤー・所持品・マップ状態を初期化する
     def start_new_game (self ):
         self.floor =1
+        self.extra_stage =0
         self.truth_fragment =0
         self.truth_fragment_floors = set()
         self.floor_warp_floors = {1}
@@ -1897,10 +1950,12 @@ class Game:
         self.reset_enemy_battle_params ()
         self.save_from_stair = False
         self.save_from_boss_talk = False
+        self.save_from_ending_extra = False
         self.stair_save_slot = 0
         self.stair_choice_cmd = 0
         self.stair_prompted = False
         self.stair_choice_input_lock = False
+        self.ending_save_choice_input_lock =False
         self.boss_talk_choice_cmd = 2
         self.boss_talk_choice_input_lock = False
         self.boss_transition_mode = False
@@ -1918,6 +1973,7 @@ class Game:
         self.tool_notice_text = ""
         self.tool_notice_timer = 0
         self.true_episode_heard = False
+        self.show_thanks_after_recollection =False
         self.encountered_enemies = set()
         self.powup =1
         self.emy_powup =1
@@ -1948,6 +2004,7 @@ class Game:
         with open (self.path +"/savedata/data{}.json".format (slot_index +1 ),"r")as f :
             loaddata =json .load (f )
             self.floor =loaddata ["floor"]
+            self.extra_stage =loaddata ["extra_stage"]
             self.mode =loaddata ["mode"]
             if self.floor >0 :
                 self.dungeon =loaddata ["dungeon"]
@@ -2004,10 +2061,12 @@ class Game:
                 self.pl_burn_turns =0
                 self.save_from_stair = False
                 self.save_from_boss_talk = False
+                self.save_from_ending_extra = False
                 self.stair_save_slot = 0
                 self.stair_choice_cmd = 0
                 self.stair_prompted = False
                 self.stair_choice_input_lock = False
+                self.ending_save_choice_input_lock =False
                 self.boss_talk_choice_cmd = 2
                 self.boss_talk_choice_input_lock = False
                 self.boss_transition_mode = False
@@ -2024,6 +2083,7 @@ class Game:
                 self.tool_warp_choice_cmd =0
                 self.tool_notice_text = ""
                 self.tool_notice_timer = 0
+                self.show_thanks_after_recollection =False
                 self.pl_shield =loaddata ["shield"]
                 self.pl_armor =loaddata ["armor"]
                 self.pl_sword =loaddata ["sword"]
@@ -2079,6 +2139,7 @@ class Game:
     def make_current_save_data(self):
         return {
             "floor": self.floor,
+            "extra_stage": self.extra_stage,
             "mode": self.mode,
             "pl_lifemax": self.pl_lifemax,
             "pl_life": self.pl_life,
@@ -2480,9 +2541,9 @@ class Game:
     def draw_true_episode_memory_scene(self, bg, fnt):
         self.draw_center_text_sequence (bg ,fnt ,TRUE_EPISODE_MEMORY_TEXTS ,100 ,resume_bgm =True )
 
-    # エピローグ後の感謝メッセージを表示し、終了後にエンディング回想へ進める
+    # エピローグ後の感謝メッセージを表示し、終了後にExtraセーブ確認へ進める
     def draw_epilogue_thanks_scene(self, bg, fnt):
-        self.draw_center_text_sequence (bg ,fnt ,EPILOGUE_THANKS_TEXTS ,84 )
+        self.draw_center_text_sequence (bg ,fnt ,EPILOGUE_THANKS_TEXTS ,89 )
 
 
     # 通常戦の敵種・レベル・画像・能力値を現在階に応じて初期化する
@@ -2522,7 +2583,10 @@ class Game:
     def init_bossbattle (self ):
         boss_floor = self.floor
         self.emy_lev =1
-        self.emy_typ =109 +int (boss_floor //10 ) +self.change
+        if self.extra_stage >0:
+            self.emy_typ =110 +(self.extra_stage -1 )%9
+        else:
+            self.emy_typ =109 +int (boss_floor //10 ) +self.change
         self.encountered_enemies.add(self.emy_typ)
         self.boss_image_path =""
         self.load_current_boss_image ()
@@ -2592,6 +2656,8 @@ class Game:
             enemy_state_entries .append ((f"火傷 {'・'*self.burn_turns}",RED ))
         if self.emy_powup >1 :
             enemy_state_entries .append (("力↑",RED ))
+        if self.emy_defence :
+            enemy_state_entries .append (("ぼうぎょ",BLUE ))
         if self.emy_poison >0 :
             enemy_state_entries .append ((f"毒 {'・'*self.emy_poison}",COPPER ))
         if self.emy_typ ==118 :
@@ -3507,10 +3573,11 @@ class Game:
 
     # セーブ枠の階数と難易度をタイトル・セーブ画面用の表示文字列にする
     def save_slot_labels (self ):
-        return [
-            "data{}/{} : 地下 {}階".format (i +1 ,MODE_LABELS [self.modelist [i ]],self.floorlist [i ])
-            for i in range (3 )
-        ]
+        labels =[]
+        for i in range (3 ):
+            progress = "Extra {}".format (self.extralist [i ]) if self.extralist [i ]>0 else "地下 {}階".format (self.floorlist [i ])
+            labels .append ("data{}/{} : {}".format (i +1 ,MODE_LABELS [self.modelist [i ]],progress ))
+        return labels
 
     # セーブスロット選択、上書き確認、セーブ画面描画を処理する
     def save_command (self ,bg ,fnt ,key ):
@@ -3578,6 +3645,40 @@ class Game:
                 self.draw_text (bg ,"▶",win_x +20 ,y ,fnt ,WHITE )
             self.draw_text (bg ,label ,win_x +50 ,y ,fnt ,WHITE )
         return ent 
+
+    # エンディング後にExtra開始データを保存するか選択する
+    def ending_extra_save_choice_command (self ,bg ,fnt ,key ,enable_input =True ):
+        ent =False
+        options =["はい","いいえ"]
+        if enable_input:
+            if self.input_up(key)and self.confirm_cmd >0 :
+                self.confirm_cmd -=1
+            if self.input_down(key)and self.confirm_cmd <len (options )-1 :
+                self.confirm_cmd +=1
+            if key [K_RETURN ]or key [K_z ]:
+                ent =True
+        layout =self.get_dialog_window_layout (bg )
+        self.draw_dialog_window (bg ,layout ,alpha =255 )
+        self.draw_dialog_text (bg ,fnt ,layout ,"セーブしますか？")
+        scale_x =layout ["scale_x"]
+        scale_y =layout ["scale_y"]
+        view_left =layout ["view_left"]
+        view_top =layout ["view_top"]
+        sel_line_h =max (1 ,int (25 *scale_y ))
+        box_h =max (1 ,int (15 *scale_y ))+sel_line_h *len (options )
+        box_w =max (1 ,int (280 *scale_x ))
+        box_x =view_left +int (520 *scale_x )
+        box_y =view_top +int (420 *scale_y )
+        arrow_x =view_left +int (540 *scale_x )
+        text_sel_x =view_left +int (560 *scale_x )
+        arrow_y =view_top +int (435 *scale_y )
+        pygame .draw .rect (bg ,BLACK ,[box_x ,box_y ,box_w ,box_h ])
+        pygame .draw .rect (bg ,WHITE ,[box_x ,box_y ,box_w ,box_h ],2 )
+        for i ,option in enumerate (options ):
+            if i ==self.confirm_cmd:
+                self.draw_text (bg ,"▶",arrow_x ,arrow_y +i *sel_line_h ,fnt ,WHITE )
+            self.draw_text (bg ,option ,text_sel_x ,arrow_y +i *sel_line_h ,fnt ,WHITE )
+        return ent
 
     # ボスへ話しかける前の確認とセーブ選択を描画・処理する
     def boss_talk_choice_command (self ,bg ,fnt ,key ,enable_input =True ):
@@ -3770,12 +3871,19 @@ class Game:
     # 敵種・ボスモード・状態に応じた敵ターン行動を選択し、効果を適用する
     def emy_action (self ,bg ):
         action =True 
+        self.emy_defence =False
         if self.emy_typ ==4 or self.emy_typ ==115 :
             self.emy_powup =1 
-            if random .random ()>0.7 :
+            force_powup =self.emy_typ ==115 and self.enemy_powup_fail_count >=4
+            if force_powup or random .random ()>0.7 :
                 self.emy_powup ={4:2 ,115:15 }[self.emy_typ ]
                 self.set_message ("　敵は　力をためた！")
                 self.se [11 ].play ()
+                self.enemy_powup_fail_count =0
+            elif self.emy_typ ==115 :
+                self.emy_defence =True
+                self.enemy_powup_fail_count +=1
+                self.set_message ("　敵は　からだをかためた！")
             action =False 
         if self.emy_typ ==5:
             give = 5+self.emy_lev + random .randint (1 ,5)
@@ -3854,6 +3962,7 @@ class Game:
 
             if self.idx ==0 :# タイトル画面
                 if self.tmr ==1 :
+                    self.extra_stage =0
                     self.truth_fragment =0
                     self.truth_fragment_floors = set()
                     self.floor_warp_floors ={1}
@@ -3876,6 +3985,9 @@ class Game:
                     self.floor99_trial_total =0
                     self.floor99_trial_battle_active =False
                     self.floor99_trial_post_pending =False
+                    self.save_from_ending_extra =False
+                    self.ending_save_choice_input_lock =False
+                    self.show_thanks_after_recollection =False
                     self.reset_enemy_battle_params ()
                     self.pl_burn_turns =0
                     self.floor_transition_target =None
@@ -4325,7 +4437,10 @@ class Game:
                         self.settings_accept_lock =True
 
             elif self.idx ==40 :#セーブデータ選択
-                self.draw_dungeon (screen ,fontS )
+                if self.save_from_ending_extra:
+                    screen .fill (BLACK )
+                else:
+                    self.draw_dungeon (screen ,fontS )
                 if self.save_command (screen ,fontS ,key )==True :
                     self.confirm_cmd =0 
                     self.save_confirm_lock = True
@@ -4343,12 +4458,19 @@ class Game:
                         self.boss_talk_choice_input_lock =True
                         self.idx =113
                         self.tmr =0
+                    elif self.save_from_ending_extra:
+                        self.idx =89
+                        self.tmr =0
+                        self.ending_save_choice_input_lock =True
                     else:
                         self.menu_back_lock = True
                         self.idx =30 
 
             elif self.idx ==50 :#確認とセーブ
-                self.draw_dungeon (screen ,fontS )
+                if self.save_from_ending_extra:
+                    screen .fill (BLACK )
+                else:
+                    self.draw_dungeon (screen ,fontS )
                 d =self.make_current_save_data ()
                 if key [K_x ]==1 or key [K_BACKSPACE ]==1 :
                     self.load_accept_lock = True
@@ -4388,12 +4510,24 @@ class Game:
                             self.draw_text (screen ,"▶",win_x +20 ,y ,fontS ,WHITE )
                         self.draw_text (screen ,label ,win_x +50 ,y ,fontS ,WHITE )
                     if confirm_yes :
-                        if self.save_from_boss_talk:
+                        if self.save_from_ending_extra:
                             with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
                                 json .dump (d ,f )
                             se [8 ].play ()
                             self.floorlist [self.save_cmd ]=self.floor
                             self.modelist [self.save_cmd ]=self.mode
+                            self.extralist [self.save_cmd ]=self.extra_stage
+                            self.save_from_ending_extra =False
+                            self.load_accept_lock =True
+                            self.idx =88
+                            self.tmr =0
+                        elif self.save_from_boss_talk:
+                            with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
+                                json .dump (d ,f )
+                            se [8 ].play ()
+                            self.floorlist [self.save_cmd ]=self.floor
+                            self.modelist [self.save_cmd ]=self.mode
+                            self.extralist [self.save_cmd ]=self.extra_stage
                             self.save_from_boss_talk =False
                             self.load_accept_lock =True
                             self.init_boss_talk ()
@@ -4410,18 +4544,31 @@ class Game:
                             se [8 ].play ()
                             self.floorlist [self.save_cmd ]=self.floor 
                             self.modelist [self.save_cmd ]=self.mode
+                            self.extralist [self.save_cmd ]=self.extra_stage
                             self.load_accept_lock = True
                             self.idx =40 
                     if confirm_no :
                         self.load_accept_lock = True
                         self.idx =40 
                 else :
-                    if self.save_from_boss_talk:
+                    if self.save_from_ending_extra:
                         with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
                             json .dump (d ,f )
                         se [8 ].play ()
                         self.floorlist [self.save_cmd ]=self.floor
                         self.modelist [self.save_cmd ]=self.mode
+                        self.extralist [self.save_cmd ]=self.extra_stage
+                        self.save_from_ending_extra =False
+                        self.load_accept_lock =True
+                        self.idx =88
+                        self.tmr =0
+                    elif self.save_from_boss_talk:
+                        with open (self.path +"/savedata/data{}.json".format (self.save_cmd +1 ),"w")as f :
+                            json .dump (d ,f )
+                        se [8 ].play ()
+                        self.floorlist [self.save_cmd ]=self.floor
+                        self.modelist [self.save_cmd ]=self.mode
+                        self.extralist [self.save_cmd ]=self.extra_stage
                         self.save_from_boss_talk =False
                         self.load_accept_lock =True
                         self.init_boss_talk ()
@@ -4438,6 +4585,7 @@ class Game:
                         se [8 ].play ()
                         self.floorlist [self.save_cmd ]=self.floor 
                         self.modelist [self.save_cmd ]=self.mode
+                        self.extralist [self.save_cmd ]=self.extra_stage
                         self.load_accept_lock = True
                         self.idx =40 
 
@@ -4488,11 +4636,16 @@ class Game:
 
             elif self.idx ==82 :# エピローグ
                 if self.draw_epilogue (screen ,fontS ,key ):
-                    self.idx =83
+                    self.show_thanks_after_recollection =True
+                    self.idx =84
                     self.tmr =0 
 
             elif self.idx ==83 :# エピローグ後メッセージ
+                before_idx =self.idx
                 self.draw_epilogue_thanks_scene (screen ,font )
+                if before_idx ==83 and self.idx ==89:
+                    self.confirm_cmd =0
+                    self.ending_save_choice_input_lock =True
 
             elif self.idx ==84 :# ラスボス会話後フェードアウト
                 self.draw_dungeon (screen ,fontS )
@@ -4533,9 +4686,30 @@ class Game:
                 if self.tmr >=cycle_len :
                     self.recollection_stage +=1
                     if self.recollection_stage >=10 :
-                        self.idx =88
+                        if self.show_thanks_after_recollection:
+                            self.show_thanks_after_recollection =False
+                            self.idx =83
+                        else:
+                            self.idx =88
                         self.tmr =0
                     else:
+                        self.tmr =0
+
+            elif self.idx ==89 :# エンディング後Extraセーブ確認
+                screen .fill (BLACK )
+                if self.ending_save_choice_input_lock:
+                    self.ending_extra_save_choice_command (screen ,fontS ,key ,enable_input =False )
+                    if not (self.input_direction(key)or key [K_RETURN ]or key [K_z ]or key [K_x ]or key [K_BACKSPACE ]):
+                        self.ending_save_choice_input_lock =False
+                else:
+                    if self.ending_extra_save_choice_command (screen ,fontS ,key ):
+                        if self.confirm_cmd ==0:
+                            self.start_extra_stage (1 ,play_bgm =False )
+                            self.save_from_ending_extra =True
+                            self.load_accept_lock =True
+                            self.idx =40
+                        else:
+                            self.idx =88
                         self.tmr =0
 
             elif self.idx ==88 :# タイトル遷移待機
@@ -4555,7 +4729,7 @@ class Game:
                     view_left =0 
                     view_top =0 
                     view_w ,view_h =screen .get_size ()
-                menu_label ="[M]enu "
+                menu_label ="[M] メニュー"
                 menu_x =view_left +view_w -int (view_w *0.1 )-fontS .size (menu_label )[0 ]
                 self.draw_text (screen ,menu_label ,menu_x ,view_top +40 ,fontS ,WHITE )
                 if self.dungeon [self.pl_y ][self.pl_x ]!=3 :
@@ -4711,13 +4885,14 @@ class Game:
                     self.draw_dungeon (screen ,fontS )
                 if self.floor_title_active and self.floor_title_pos :
                     disp_floor =self.floor
+                    title_text =self.get_floor_display_text (disp_floor )
                     x ,y =self.floor_title_pos
                 else:
                     if self.tmr <=5 :
                         disp_floor =transition_target if transition_target is not None else self.floor +transition_delta
                     else:
                         disp_floor =self.floor
-                    title_text =f"地下 {disp_floor}階"
+                    title_text =self.get_floor_display_text (disp_floor )
                     screen_w ,screen_h =screen .get_size ()
                     x =screen_w //2 -font .size (title_text )[0 ]//2
                     y =screen_h //2 -font .get_height ()//2
@@ -4746,6 +4921,7 @@ class Game:
                         se [8 ].play ()
                         self.floorlist [self.stair_save_slot ]=self.floor 
                         self.modelist [self.stair_save_slot ]=self.mode
+                        self.extralist [self.stair_save_slot ]=self.extra_stage
                         self.save_from_stair = False
                         self.load_accept_lock = True
                 if 6 <=self.tmr and self.tmr <=9 :
@@ -4757,7 +4933,7 @@ class Game:
                     fade =pygame .Surface (screen .get_size (),pygame .SRCALPHA )
                     fade .fill ((0 ,0 ,0 ,alpha ))
                     screen .blit (fade ,[0 ,0 ])
-                self.draw_text (screen ,f"地下 {disp_floor}階" ,x ,y ,font ,WHITE )
+                self.draw_text (screen ,title_text ,x ,y ,font ,WHITE )
                 if self.tmr ==14 :
                     self.floor_title_active = False
                     self.floor_title_pos = None
@@ -5272,7 +5448,7 @@ class Game:
                     self.imgBtlBG =pygame .image .load (self.path +f"/image/btlbg/btlbg{bg_idx}.png")
                     if self.boss ==1 :
                         self.init_bossbattle ()
-                        battle_bgm ="bgm_battle_2.mp3" if self.floor ==100 else "bgm_battle_1.mp3"
+                        battle_bgm ="bgm_battle_2.mp3" if self.floor ==100 and self.extra_stage ==0 else "bgm_battle_1.mp3"
                         pygame .mixer .music .load (self.path +"/sound/"+battle_bgm)
                         pygame .mixer .music .play (-1 )
                         self.init_message ()
@@ -5362,7 +5538,6 @@ class Game:
                         dmg_add = self.pl_sword [0 ]
                         if random .random ()>0.7 :
                             cri =1 
-                            self.queue_enemy115_forced_crit (1 )
                             se [0 ].play ()
                             self.set_message ("　会心の一撃！")
                     dmg =self.pl_str +random .randint (0 ,9 )
@@ -5380,6 +5555,9 @@ class Game:
                     dmg =max (1 +cri ,int (EMY_APRO [self.emy_typ ] * dmg /(2 *self.poison +1 )))
                     if self.pl_burn_turns >0 :
                         dmg =int (dmg *1.5 )
+                    if self.emy_defence :
+                        dmg =max (1 ,int (dmg *0.3 ))
+                        self.emy_defence =False
                     self.emy_blink =5 
                     self.set_message (f"　{dmg}　ダメージ！")
                 if self.tmr ==11 :
@@ -5425,7 +5603,6 @@ class Game:
                     if active_ice_sword >0 :
                         if random .random ()>0.95 -0.003 *active_ice_sword :
                             ice =1
-                            self.queue_enemy115_forced_crit (0 )
                     dmg_add = 0 if active_ice_sword == 0 else self.pl_sword [1 ]
                     dmg =self.pl_str *1.5 +random .randint (0 ,9 )+ dmg_add
                     if self.guard_remain >0 and self.emy_typ ==119 :
@@ -5433,6 +5610,9 @@ class Game:
                     dmg =max (1 ,int(EMY_MPRO [self.emy_typ ] *dmg) )
                     if self.boss_mode == "ice":
                         dmg =0 
+                    if self.emy_defence :
+                        dmg =0 if dmg <=0 else max (1 ,int (dmg *0.3 ))
+                        self.emy_defence =False
                 blit_time =8
                 if self.tmr <=blit_time :
                     magic_effect =self.imgEffect [4 ]if self.get_active_weapon_level ("sword",1 )>0 else self.imgEffect [1 ]
@@ -5538,6 +5718,9 @@ class Game:
                     dmg =max (1 ,int(EMY_BPRO [self.emy_typ ] *dmg) )
                     if self.burn_turns >0 or self.boss_mode == "fire":
                         dmg =0
+                    if self.emy_defence :
+                        dmg =0 if dmg <=0 else max (1 ,int (dmg *0.3 ))
+                        self.emy_defence =False
                     if self.emy_typ ==113:
                         self.emy_skip_turn = True
                 if self.tmr ==11 :
@@ -5704,14 +5887,6 @@ class Game:
                             se [0 ].play ()
                             self.set_message ("　会心の一撃！")
                             dmg =dmg *1.5
-                    if self.emy_typ ==115 and self.enemy115_forced_crit_delay >=0 :
-                        if self.enemy115_forced_crit_delay ==0 :
-                            se [0 ].play ()
-                            self.set_message ("　会心の一撃！")
-                            dmg =dmg *15
-                            self.enemy115_forced_crit_delay =-1
-                        else :
-                            self.enemy115_forced_crit_delay =self.enemy115_forced_crit_delay -1
                     if self.emy_typ ==117 : #インフェルノの火力が低下
                         dmg = int(dmg * (1.5-self.emy_life/self.emy_lifemax))
                         self.inferno =max (100 ,self.inferno -(15 +random .randint (0 ,10 )))
@@ -6166,7 +6341,18 @@ class Game:
                 self.truth_fragment_drop_battle =False
                 self.growth_essence_drop_battle =False
                 self.reset_enemy_battle_params ()
-                if self.emy_typ ==120 :
+                if self.extra_stage >0 and self.boss ==1:
+                    time .sleep (1 )
+                    self.resume_dungeon_bgm ()
+                    self.boss =0
+                    self.extra_stage +=1
+                    self.boss_transition_mode =False
+                    self.floor_transition_target =100
+                    self.floor_transition_delta =0
+                    self.floor_title_active =False
+                    self.idx =110
+                    self.tmr =0
+                elif self.emy_typ ==120 :
                     time .sleep (1 )
                     self.boss =0 
                     if self.true_episode_heard:
