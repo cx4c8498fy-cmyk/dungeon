@@ -50,6 +50,7 @@ EQUIP_SLOT_ATTRS = {"shield": "eq_shield", "armor": "eq_armor", "sword": "eq_swo
 MODE_LABELS = {"normal": "ノーマル", "hard": "ハード"}
 
 ZUKAN_ENEMY_THUMB_SCALE = 0.5
+DUNGEON_DEAD_END_BRAID_RATE = 0.85
 
 
 class BufferedKeyState:
@@ -241,6 +242,8 @@ class Game:
         self.emy_defence = False
         self.madoka = 0
         self.pl_burn_turns = 0
+        self.poison_decay_pending = False
+        self.pl_burn_turn_decay_pending = False
         self.burn_turns = 0
         self.inferno = 0
         self.boss_mode = "normal"
@@ -483,9 +486,9 @@ class Game:
     def get_fairy_upgrade_targets(self):
         cap = self.get_fairy_upgrade_level_cap()
         return [
-            {"label": "傷薬", "attr": "potion_lv", "can_upgrade": self.potion_lv < cap},
-            {"label": "爆弾", "attr": "blazegem_lv", "can_upgrade": self.blazegem_lv < cap},
-            {"label": "守護", "attr": "guard_lv", "can_upgrade": self.guard_lv < cap},
+            {"label": "傷薬（レベル {}）".format (self.potion_lv +1 ), "attr": "potion_lv", "can_upgrade": self.potion_lv < cap},
+            {"label": "爆弾（レベル {}）".format (self.blazegem_lv +1 ), "attr": "blazegem_lv", "can_upgrade": self.blazegem_lv < cap},
+            {"label": "守護（レベル {}）".format (self.guard_lv +1 ), "attr": "guard_lv", "can_upgrade": self.guard_lv < cap},
         ]
 
     # 妖精イベントで最初にカーソルを置ける強化可能項目のindexを返す
@@ -741,10 +744,27 @@ class Game:
         self.madoka =0
         self.emy_powup =1
         self.pl_burn_turns =0
+        self.poison_decay_pending =False
+        self.pl_burn_turn_decay_pending =False
         self.burn_turns =0
         self.inferno =0
         self.boss_mode = "normal"
         self.change =0
+
+    # ターンを消費するプレイヤー行動を開始し、毒・守護などの残りターンを進める
+    def begin_player_status_turn(self):
+        self.guard_remain =max (self.guard_remain -1 ,0 )
+        self.poison_decay_pending =self.poison >0
+        self.pl_burn_turn_decay_pending =self.pl_burn_turns >0
+
+    # プレイヤー行動中に効果を発揮した毒・火傷の残りターンを進める
+    def finish_player_status_turn(self):
+        if self.poison_decay_pending:
+            self.poison =max (self.poison -1 ,0 )
+            self.poison_decay_pending =False
+        if self.pl_burn_turn_decay_pending:
+            self.pl_burn_turns =max (self.pl_burn_turns -1 ,0 )
+            self.pl_burn_turn_decay_pending =False
 
     # 敵に付与された毒ダメージを処理し、撃破時は勝利状態へ遷移する
     def resolve_enemy_poison_tick(self):
@@ -1357,6 +1377,60 @@ class Game:
             for component in components [1:]:
                 carve_corridor (main_anchor ,component_anchor (component ))
 
+    # 迷路グリッド上の行き止まりを隣接通路へつなぎ、一本道を減らす
+    def braid_maze_dead_ends(self, maze):
+        if DUNGEON_DEAD_END_BRAID_RATE <=0:
+            return set ()
+        height =len (maze )
+        width =len (maze [0 ])
+        dirs =[(0 ,-1 ),(1 ,0 ),(0 ,1 ),(-1 ,0 )]
+        braided_cells =set ()
+        for _ in range (2 ):
+            dead_ends =[]
+            for y in range (1 ,height -1 ):
+                for x in range (1 ,width -1 ):
+                    if maze [y ][x ]!=0:
+                        continue
+                    open_count =sum (
+                        1 for dx ,dy in dirs
+                        if maze [y +dy ][x +dx ]==0
+                    )
+                    if open_count ==1:
+                        dead_ends .append ((x ,y ))
+            if not dead_ends:
+                break
+            random .shuffle (dead_ends )
+            carved =False
+            for x ,y in dead_ends:
+                if random .random ()>DUNGEON_DEAD_END_BRAID_RATE:
+                    continue
+                open_count =sum (
+                    1 for dx ,dy in dirs
+                    if maze [y +dy ][x +dx ]==0
+                )
+                if open_count !=1:
+                    continue
+                candidates =[]
+                for dx ,dy in dirs:
+                    wall_x =x +dx
+                    wall_y =y +dy
+                    beyond_x =x +dx *2
+                    beyond_y =y +dy *2
+                    if not (1 <=wall_x <width -1 and 1 <=wall_y <height -1 ):
+                        continue
+                    if not (1 <=beyond_x <width -1 and 1 <=beyond_y <height -1 ):
+                        continue
+                    if maze [wall_y ][wall_x ]==1 and maze [beyond_y ][beyond_x ]==0:
+                        candidates .append ((wall_x ,wall_y ))
+                if candidates:
+                    wall_x ,wall_y =random .choice (candidates )
+                    maze [wall_y ][wall_x ]=0
+                    braided_cells .add ((wall_x ,wall_y ))
+                    carved =True
+            if not carved:
+                break
+        return braided_cells
+
     # 固定マップまたはランダム生成により現在階のダンジョン配列を作成する
     def make_dungeon (self ,ignore_fixed =False ):
         self.fixed_floor_data = None
@@ -1407,6 +1481,7 @@ class Game:
                 dirs =[d for d in dirs if 0 <y +YP [d ]<maze_h -1 and 0 <x +XP [d ]<maze_w -1 ]
                 d =random .choice (dirs )
                 maze [y +YP [d ]][x +XP [d ]]=1 
+        braided_cells =self.braid_maze_dead_ends (maze )
 
         #迷路からダンジョンを生成
         for y in range (DUNGEON_H ):
@@ -1422,7 +1497,7 @@ class Game:
                         bossfloor =80 
                     else :
                         bossfloor =0 
-                    if random .randint (0 ,99 )<20 +bossfloor :
+                    if (x ,y )not in braided_cells and random .randint (0 ,99 )<20 +bossfloor :
                         for ry in range (-center ,center +1 ):
                             for rx in range (-center ,center +1 ):
                                 self.dungeon [dy +ry ][dx +rx ]=0 
@@ -1643,13 +1718,13 @@ class Game:
             if stairs_cells:
                 sx ,sy =stairs_cells [0 ]
                 self.dungeon [sy ][sx ]=3
-        t_box_num = 7 if is_boss_floor else 4
-        for x, y in take_cells(t_box_num): # 宝箱の配置
+        t_box_num = 7 if is_boss_floor else 4 # 宝箱の配置
+        for x, y in take_cells(t_box_num):
             self.dungeon[y][x] = 1
-        w_box_num = 0 if rule_floor < 11 else 7 if is_boss_floor else 4 if rule_floor < 91 else 5
-        for x ,y in take_cells (w_box_num ): # 強化素材箱の配置
+        w_box_num = 0 if rule_floor < 11 else 7 if is_boss_floor else 4 # 強化素材箱の配置
+        for x ,y in take_cells (w_box_num ):
             self.dungeon [y ][x ]=4
-        cocoon_target =30 if is_boss_floor else 18
+        cocoon_target =28 if is_boss_floor else 16
         cocoon_cells =take_cells (cocoon_target )
         for x ,y in cocoon_cells: # 繭の配置
             self.dungeon [y ][x ]=2
@@ -1979,6 +2054,8 @@ class Game:
         self.emy_powup =1
         self.poison =0
         self.pl_burn_turns =0
+        self.poison_decay_pending =False
+        self.pl_burn_turn_decay_pending =False
         self.auto_equip_attack_sword =False
         self.auto_equip_magic_staff =False
         self.auto_equip_bomb_cannon =False
@@ -2059,6 +2136,8 @@ class Game:
                 self.emy_powup =1
                 self.poison =0
                 self.pl_burn_turns =0
+                self.poison_decay_pending =False
+                self.pl_burn_turn_decay_pending =False
                 self.save_from_stair = False
                 self.save_from_boss_talk = False
                 self.save_from_ending_extra = False
@@ -2565,7 +2644,7 @@ class Game:
         emy_str_data =EMY_STR_BY_MODE [self.mode ]
         tier =(rule_floor -1 )//10
         base =max (1 ,int (2.4 *emy_life_data [self.emy_typ ]-100 ))
-        floor_mul =1.0 +0.17 *tier
+        floor_mul =1.0 +{"normal":0.17 ,"hard":0.20 }[self.mode ]*tier
         level_mul =1.0 +0.13 *(self.emy_lev -1 )/99
         level_add =(self.emy_lev -1 )*10
         self.emy_lifemax =int (base *floor_mul *level_mul +level_add +tier*45 )
@@ -3909,11 +3988,11 @@ class Game:
             self.se [2 ].play ()
             self.emy_life =min (self.emy_life +cure ,self.emy_lifemax )
             action =False 
-        self.poison =max (self.poison -1 ,0 )
         if self.emy_typ ==8 or self.emy_typ ==111:
             force_poison =self.enemy_poison_fail_count >=7
             if force_poison or random .random ()>{8:0.3, 111:0.84}[self.emy_typ]:
                 self.poison ={8:1, 111:2}[self.emy_typ]
+                self.poison_decay_pending =False
                 self.set_message ("　毒を　くらった！")
                 self.se [12 ].play ()
                 self.enemy_poison_fail_count =0
@@ -3990,6 +4069,8 @@ class Game:
                     self.show_thanks_after_recollection =False
                     self.reset_enemy_battle_params ()
                     self.pl_burn_turns =0
+                    self.poison_decay_pending =False
+                    self.pl_burn_turn_decay_pending =False
                     self.floor_transition_target =None
                     self.tool_weapon_choice_active =False
                     self.tool_weapon_choice_cmd =0
@@ -5476,11 +5557,14 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
                     self.restore_battle_equip_session ()
+                    self.finish_player_status_turn ()
                     self.btl_cmd =0 
                     self.set_message ("プレイヤーのターン")
-                    self.guard_remain =max (self.guard_remain -1 ,0 )
                 if self.battle_command (screen ,fontS ,key )==True :
-                    if self.btl_cmd in (1 ,2 ,3 ,4 ,5 ) and self.powup >1 :
+                    turn_consuming_cmd = self.btl_cmd in {0 ,1 ,2 ,3 ,4 ,5 }
+                    if turn_consuming_cmd:
+                        self.begin_player_status_turn ()
+                    if turn_consuming_cmd and self.powup >1 :
                         self.powup =1
                     if self.btl_cmd ==0 :#Attack
                         self.apply_auto_equip_for_battle_command (0 )
@@ -5641,7 +5725,6 @@ class Game:
                     else :
                         self.tmr =self.tmr +3
                 if self.tmr ==18 : # プレイヤーの毒処理
-                    self.poison =max (self.poison -1 ,0 )
                     if ice*self.poison >0 :
                         self.set_message (f"　毒 {self.poison *40}ダメージ！")
                         self.pl_life =self.pl_life -self.poison *40 
@@ -5931,8 +6014,6 @@ class Game:
                 if self.tmr ==18 :
                     self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
-                    if self.idx ==230 and self.pl_burn_turns >0 :
-                        self.pl_burn_turns =max (self.pl_burn_turns -1 ,0 )
                     if self.emy_typ ==6 and self.idx ==236 :
                         self.tmr =0 
                 if self.tmr ==22 :
@@ -5956,7 +6037,9 @@ class Game:
                         self.idx =242 
                         self.tmr =0 
                     else :
+                        self.set_message (f"火傷してしまった！")
                         self.pl_burn_turns =3
+                        self.pl_burn_turn_decay_pending =False
                 if self.tmr ==19 :
                     if self.emy_action (screen ):
                         self.tmr =self.tmr +3 
@@ -6108,7 +6191,9 @@ class Game:
                         self.idx =242 
                         self.tmr =0 
                     else :
+                        self.set_message (f"火傷してしまった！")
                         self.pl_burn_turns =3
+                        self.pl_burn_turn_decay_pending =False
                 if self.tmr ==16 :
                     self.resolve_enemy_poison_tick ()
                     self.apply_armor_effects ()
@@ -6118,53 +6203,15 @@ class Game:
 
             elif self.idx ==239 :# 毒攻撃
                 self.draw_battle (screen ,fontS )
-                defence =self.get_equipped_defence ()
                 if self.tmr ==1 :
                     self.set_message (self.emy_name +"のターン")
-                    pro =0 
-                    cou =0 
                 if self.tmr ==5 :
                     self.set_message (f"　{self.emy_name}の　毒攻撃！")
                     se [12 ].play ()
                     self.emy_step =30 
-                # if self.tmr ==8 :
-                    # active_defence_shield =self.get_active_weapon_level ("shield",0 )
-                    # active_counter_shield =self.get_active_weapon_level ("shield",1 )
-                    # if active_defence_shield >0 :
-                    #     if random .random ()>0.7 and self.emy_typ !=119 :
-                    #         pro =0.3 +0.01 *active_defence_shield
-                    #         self.set_message ("　盾で　防御した！")
-                    #         se [10 ].play ()
-                    # if active_counter_shield >0 :
-                    #     if random .random ()>0.65 :
-                    #         cou =active_counter_shield
-                    # dmg =max (self.emy_str +random .randint (0 ,9 )-defence ,1 )
-                    # dmg =int (dmg /(1 +pro ))* self.emy_powup
-                    # if self.guard_remain >0 :
-                    #     dmg =int (dmg *self.get_guard_damage_multiplier ())
-                    # self.set_message (f"　{dmg}　ダメージ！")
-                    # self.dmg_eff =6
-                    # self.emy_step =0 
-                # if self.tmr ==12 :
-                #     self.pl_life =self.pl_life -dmg 
-                #     if self.pl_life <=0 :
-                #         self.pl_life =0 
-                #         self.idx =242 
-                #         self.tmr =0 
-                    # else:
-                    #     if cou >0 :
-                    #         self.emy_blink =2 
-                    #         dmg =int (self.pl_str //10 +self.pl_str *cou *0.003 +random .randint (0 ,cou //5 ))
-                    #         self.set_message (f"　{dmg}　のカウンター！")
-                    #         se [10 ].play ()
-                    #         self.emy_life =self.emy_life -dmg 
-                    #         if self.emy_life <=0 :
-                    #             self.emy_life =0 
-                    #             self.idx =241 
-                    #             self.tmr =0 
                 if self.tmr ==8 :
-                    # self.poison =max (self.poison -1 ,0 )
                     self.poison = 4
+                    self.poison_decay_pending =False
                     self.set_message ("　毒を くらった！")
                     self.set_message (f"　毒 {self.poison *40}ダメージ！")
                     self.pl_life =self.pl_life -self.poison *40 
