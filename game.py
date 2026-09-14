@@ -237,13 +237,13 @@ class Game:
         self.btl_cmd = 0
         self.powup = 1
         self.emy_powup = 1
+        self.powup_new_this_turn = False
+        self.emy_powup_new_this_turn = False
         self.poison = 0
         self.emy_poison = 0
         self.emy_defence = False
         self.madoka = 0
         self.pl_burn_turns = 0
-        self.poison_decay_pending = False
-        self.pl_burn_turn_decay_pending = False
         self.burn_turns = 0
         self.inferno = 0
         self.boss_mode = "normal"
@@ -463,10 +463,6 @@ class Game:
     def normalize_bgm_pos_ms(self, path, pos_ms):
         length_ms =self.get_bgm_length_ms (path )
         return pos_ms %length_ms
-
-    # プレイヤーの現在魔力を増減し、0から最大魔力の範囲に収める
-    def add_pl_mag(self, amount):
-        self.pl_mag = max(0, min(self.pl_mag + amount, self.pl_magmax))
 
     # 消費アイテムの所持数を加算し、戦闘アイテムとワープは99個上限に収める
     def add_inventory_count(self, attr, amount):
@@ -743,33 +739,23 @@ class Game:
         self.powup =1
         self.madoka =0
         self.emy_powup =1
+        self.powup_new_this_turn =False
+        self.emy_powup_new_this_turn =False
         self.pl_burn_turns =0
-        self.poison_decay_pending =False
-        self.pl_burn_turn_decay_pending =False
         self.burn_turns =0
         self.inferno =0
         self.boss_mode = "normal"
         self.change =0
 
-    # ターンを消費するプレイヤー行動を開始し、毒・守護などの残りターンを進める
-    def begin_player_status_turn(self):
+    # ターン終了時にプレイヤー側の継続状態を1ターン分進める
+    def advance_player_status_turn_end(self):
         self.guard_remain =max (self.guard_remain -1 ,0 )
-        self.poison_decay_pending =self.poison >0
-        self.pl_burn_turn_decay_pending =self.pl_burn_turns >0
-
-    # プレイヤー行動中に効果を発揮した毒・火傷の残りターンを進める
-    def finish_player_status_turn(self):
-        if self.poison_decay_pending:
-            self.poison =max (self.poison -1 ,0 )
-            self.poison_decay_pending =False
-        if self.pl_burn_turn_decay_pending:
-            self.pl_burn_turns =max (self.pl_burn_turns -1 ,0 )
-            self.pl_burn_turn_decay_pending =False
+        self.poison =max (self.poison -1 ,0 )
+        self.pl_burn_turns =max (self.pl_burn_turns -1 ,0 )
 
     # 敵に付与された毒ダメージを処理し、撃破時は勝利状態へ遷移する
     def resolve_enemy_poison_tick(self):
         if self.emy_poison <= 0:
-            self.tmr =self.tmr +1 
             return 0
         dmg = self.emy_poison * 40
         self.set_message (f"　毒 {dmg}ダメージ！")
@@ -2052,10 +2038,10 @@ class Game:
         self.encountered_enemies = set()
         self.powup =1
         self.emy_powup =1
+        self.powup_new_this_turn =False
+        self.emy_powup_new_this_turn =False
         self.poison =0
         self.pl_burn_turns =0
-        self.poison_decay_pending =False
-        self.pl_burn_turn_decay_pending =False
         self.auto_equip_attack_sword =False
         self.auto_equip_magic_staff =False
         self.auto_equip_bomb_cannon =False
@@ -2134,10 +2120,10 @@ class Game:
                 self.battle_auto_equip_used =False
                 self.powup =1
                 self.emy_powup =1
+                self.powup_new_this_turn =False
+                self.emy_powup_new_this_turn =False
                 self.poison =0
                 self.pl_burn_turns =0
-                self.poison_decay_pending =False
-                self.pl_burn_turn_decay_pending =False
                 self.save_from_stair = False
                 self.save_from_boss_talk = False
                 self.save_from_ending_extra = False
@@ -2644,8 +2630,8 @@ class Game:
         emy_str_data =EMY_STR_BY_MODE [self.mode ]
         tier =(rule_floor -1 )//10
         base =max (1 ,int (2.4 *emy_life_data [self.emy_typ ]-100 ))
-        floor_mul =1.0 +{"normal":0.17 ,"hard":0.20 }[self.mode ]*tier
-        level_mul =1.0 +0.13 *(self.emy_lev -1 )/99
+        floor_mul =1.0 +{"normal":0.17 ,"hard":0.21 }[self.mode ]*tier
+        level_mul =1.0 +{"normal":0.13 ,"hard":0.15 }[self.mode ] *(self.emy_lev -1 )/99
         level_add =(self.emy_lev -1 )*10
         self.emy_lifemax =int (base *floor_mul *level_mul +level_add +tier*45 )
         self.emy_life =self.emy_lifemax 
@@ -3283,10 +3269,10 @@ class Game:
         elif tool_id =="magic_water" and self.tool_magic_water >0 :
             self.tool_magic_water -=1 
             self.pl_life =min (self.pl_life +20 ,self.pl_lifemax )
-            self.add_pl_mag (20 )
+            self.pl_mag =min (self.pl_mag +20 ,self.pl_magmax )
         elif tool_id =="magic_seed" and self.tool_magic_seed >0 :
             self.tool_magic_seed -=1 
-            self.add_pl_mag (100 )
+            self.pl_mag =min (self.pl_mag +100 ,self.pl_magmax )
             if self.tutorial_enabled and self.floor ==1 :
                 self.tutorial_progress ["room4_item_used"]=True
                 self.update_tutorial_floor_state ()
@@ -3924,38 +3910,15 @@ class Game:
             self.message [i ]=self.message [i +1 ]
         self.message [9 ]=msg 
 
-    # 装備中の鎧に応じてターン終了時の回復・魔力回復・力ため効果を処理する
-    def apply_armor_effects (self ):
-        armor_heal =self.get_active_weapon_level ("armor",0 )
-        armor_mag =self.get_active_weapon_level ("armor",1 )
-        if armor_heal >0 :
-            if random .random ()>0.5 :
-                cure =max (1 ,int (armor_heal //2 +random .randint (0 ,10 )))
-                cure =min (cure ,self.pl_lifemax -self.pl_life )
-                if cure >0 :
-                    self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
-                    self.set_message ("　鎧の癒し 生命 +{}" .format (cure ))
-                    self.se [2 ].play ()
-            else :
-                self.tmr =self.tmr +1 
-        if armor_mag >0 :
-            if random .random ()>0.5 :
-                mgup =int (5 +0.8*armor_mag +random .randint (0 ,armor_mag //5 ))
-                self.add_pl_mag (mgup )
-                self.set_message ("　鎧の魔力 魔力 +{}" .format (mgup ))
-                self.se [8 ].play ()
-            else :
-                self.tmr =self.tmr +1 
-
     # 敵種・ボスモード・状態に応じた敵ターン行動を選択し、効果を適用する
     def emy_action (self ,bg ):
         action =True 
         self.emy_defence =False
         if self.emy_typ ==4 or self.emy_typ ==115 :
-            self.emy_powup =1 
             force_powup =self.emy_typ ==115 and self.enemy_powup_fail_count >=4
             if force_powup or random .random ()>0.7 :
                 self.emy_powup ={4:2 ,115:15 }[self.emy_typ ]
+                self.emy_powup_new_this_turn =True
                 self.set_message ("　敵は　力をためた！")
                 self.se [11 ].play ()
                 self.enemy_powup_fail_count =0
@@ -3992,7 +3955,6 @@ class Game:
             force_poison =self.enemy_poison_fail_count >=7
             if force_poison or random .random ()>{8:0.3, 111:0.84}[self.emy_typ]:
                 self.poison ={8:1, 111:2}[self.emy_typ]
-                self.poison_decay_pending =False
                 self.set_message ("　毒を　くらった！")
                 self.se [12 ].play ()
                 self.enemy_poison_fail_count =0
@@ -4069,8 +4031,6 @@ class Game:
                     self.show_thanks_after_recollection =False
                     self.reset_enemy_battle_params ()
                     self.pl_burn_turns =0
-                    self.poison_decay_pending =False
-                    self.pl_burn_turn_decay_pending =False
                     self.floor_transition_target =None
                     self.tool_weapon_choice_active =False
                     self.tool_weapon_choice_cmd =0
@@ -4827,7 +4787,7 @@ class Game:
                     self.stair_choice_input_lock = True
                     self.idx =111 
                     self.tmr =0 
-                if self.idx ==100 and accept and self.pl_d == 0:
+                if accept and self.pl_d == 0:
                     front_tile =self.get_front_tile_id ()
                     tx =self.pl_x
                     ty =self.pl_y -1
@@ -4897,7 +4857,7 @@ class Game:
                                 self.init_item_event ()
                             self.idx =131
                             self.tmr =0
-                if self.idx ==100 and accept and self.get_front_tile_id ()==12:
+                if accept and self.get_front_tile_id ()==12:
                     self.boss_talk_choice_cmd =2
                     self.boss_talk_choice_input_lock = True
                     self.idx =113
@@ -5517,6 +5477,8 @@ class Game:
                     self.start_battle_equip_session ()
                     self.growth_essence_drop_battle =False
                     self.powup =1
+                    self.powup_new_this_turn =False
+                    self.emy_powup_new_this_turn =False
                     self.reset_enemy_battle_params ()
                     if self.move_bgm_path :
                         now =time .time ()
@@ -5557,15 +5519,9 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
                     self.restore_battle_equip_session ()
-                    self.finish_player_status_turn ()
                     self.btl_cmd =0 
                     self.set_message ("プレイヤーのターン")
                 if self.battle_command (screen ,fontS ,key )==True :
-                    turn_consuming_cmd = self.btl_cmd in {0 ,1 ,2 ,3 ,4 ,5 }
-                    if turn_consuming_cmd:
-                        self.begin_player_status_turn ()
-                    if turn_consuming_cmd and self.powup >1 :
-                        self.powup =1
                     if self.btl_cmd ==0 :#Attack
                         self.apply_auto_equip_for_battle_command (0 )
                         self.idx =220 
@@ -5627,7 +5583,6 @@ class Game:
                     dmg =self.pl_str +random .randint (0 ,9 )
                     dmg =dmg *(1 +0.01 *cri *self.pl_sword [0 ]) +dmg_add
                     dmg =dmg *self.powup
-                    self.powup =1
                 if self.tmr ==7 :
                     if self.emy_typ ==110 :
                         if random .random ()>0.7 :
@@ -5654,7 +5609,7 @@ class Game:
                             self.pl_life =0
                             self.idx =242
                             self.tmr =0
-                    if self.idx ==220 and self.emy_life <=0 :
+                    if self.emy_life <=0 :
                         self.emy_life =0 
                         self.idx =241 
                         self.tmr =0
@@ -5720,7 +5675,6 @@ class Game:
                     if self.emy_typ ==118 :
                         self.boss_mode = "ice"
                     if ice ==1 :
-                        self.emy_powup =1
                         self.set_message ("　敵は　凍りついた！")
                     else :
                         self.tmr =self.tmr +3
@@ -5736,17 +5690,14 @@ class Game:
                         self.tmr =self.tmr +4
                 if self.tmr ==24 :
                     if ice ==1 :
-                        self.apply_armor_effects ()
+                        self.idx =229
+                        self.tmr =0
                     elif self.emy_typ ==120 :
                         self.idx =239
                         self.tmr =0
                     else :
                         self.idx =230 
                         self.tmr =0 
-                if self.tmr ==26 :
-                    self.idx =210 
-                    self.tmr =0 
-
             elif self.idx ==222 :# Potion
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
@@ -5763,6 +5714,7 @@ class Game:
                     active_potion_armor =self.get_active_weapon_level ("armor",2 )
                     if active_potion_armor >0 and random .random ()>0.7 :
                         self.powup =1.5 +0.01 *active_potion_armor
+                        self.powup_new_this_turn =True
                         self.set_message ("　ちからをためた！")
                         self.se [11 ].play ()
                 if self.tmr ==11 :
@@ -5902,6 +5854,40 @@ class Game:
                             setattr (self ,attr ,not getattr (self ,attr ,False ))
                         self.settings_accept_lock =True
 
+            elif self.idx ==229 :# ターン終了処理
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    poison_result =self.resolve_enemy_poison_tick ()
+                    if poison_result ==0 :
+                        self.tmr =7
+                if self.tmr ==7 :
+                    armor_heal =self.get_active_weapon_level ("armor",0 )
+                    armor_mag =self.get_active_weapon_level ("armor",1 )
+                    if armor_heal >0 and self.pl_life <self.pl_lifemax and random .random ()>0.5 :
+                        cure =max (1 ,int (armor_heal //2 +random .randint (0 ,10 )))
+                        cure =min (cure ,self.pl_lifemax -self.pl_life )
+                        self.pl_life =min (self.pl_life +cure ,self.pl_lifemax )
+                        self.set_message ("　鎧の癒し 生命 +{}" .format (cure ))
+                        self.se [2 ].play ()
+                    elif armor_mag >0 and self.pl_mag <self.pl_magmax and random .random ()>0.5 :
+                        mgup =int (5 +0.8 *armor_mag +random .randint (0 ,armor_mag //5 ))
+                        mgup =min (mgup ,self.pl_magmax -self.pl_mag )
+                        self.pl_mag =min (self.pl_mag +mgup ,self.pl_magmax )
+                        self.set_message ("　鎧の魔力 魔力 +{}" .format (mgup ))
+                        self.se [8 ].play ()
+                    else:
+                        self.tmr =13
+                if self.tmr ==13 :
+                    if not self.powup_new_this_turn :
+                        self.powup =1
+                    if not self.emy_powup_new_this_turn :
+                        self.emy_powup =1
+                    self.powup_new_this_turn =False
+                    self.emy_powup_new_this_turn =False
+                    self.advance_player_status_turn_end ()
+                    self.idx =210
+                    self.tmr =0
+
             elif self.idx ==224 :#guard
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
@@ -5910,7 +5896,6 @@ class Game:
                         self.guard_remain =4 
                     self.set_message ("　{}ターンの　守護を得た".format (self.guard_remain ))
                     se [7 ].play ()
-                if self.tmr ==6 :
                     self.guard =self.guard -1 
                 if self.tmr ==11 :
                     if self.emy_typ ==116 or self.emy_typ ==120 :
@@ -5998,7 +5983,7 @@ class Game:
                                 self.emy_life =0
                                 self.idx =241
                                 self.tmr =0
-                        if self.idx ==230 and cou >0 :
+                        if cou >0 :
                             self.emy_blink =2 
                             dmg =int (self.pl_str //20 +self.pl_str *cou *0.005 +random .randint (0 ,cou //5 ))
                             self.set_message (f"　{dmg}　カウンター！")
@@ -6011,14 +5996,9 @@ class Game:
                 if self.tmr ==14 :
                     if self.emy_action (screen ):
                         self.tmr =self.tmr +3 
-                if self.tmr ==18 :
-                    self.resolve_enemy_poison_tick ()
-                    self.apply_armor_effects ()
-                    if self.emy_typ ==6 and self.idx ==236 :
-                        self.tmr =0 
                 if self.tmr ==22 :
-                    self.idx =210 
-                    self.tmr =0 
+                    self.idx =229
+                    self.tmr =0
 
 
             elif self.idx ==231 :#destroy
@@ -6039,15 +6019,12 @@ class Game:
                     else :
                         self.set_message (f"火傷してしまった！")
                         self.pl_burn_turns =3
-                        self.pl_burn_turn_decay_pending =False
                 if self.tmr ==19 :
                     if self.emy_action (screen ):
                         self.tmr =self.tmr +3 
-                if self.tmr ==23 :
-                    self.apply_armor_effects ()
                 if self.tmr ==26 :
-                    self.idx =210 
-                    self.tmr =0 
+                    self.idx =229
+                    self.tmr =0
 
             elif self.idx ==232 :#Magia
                 self.draw_battle (screen ,fontS )
@@ -6080,12 +6057,9 @@ class Game:
                 if self.tmr ==20 :
                     if self.emy_action (screen ):
                         self.tmr =self.tmr +3 
-                if self.tmr ==24 :
-                    self.resolve_enemy_poison_tick ()
-                    self.apply_armor_effects ()
                 if self.tmr ==28 :
-                    self.idx =210 
-                    self.tmr =0 
+                    self.idx =229
+                    self.tmr =0
 
 
             elif self.idx ==233 :#敵のポーション
@@ -6096,32 +6070,26 @@ class Game:
                     se [2 ].play ()
                 if self.tmr ==6 :
                     self.emy_life =min (self.emy_lifemax ,self.emy_life +cure )
-                if self.tmr ==11 :
-                    self.resolve_enemy_poison_tick ()
-                    self.apply_armor_effects ()
                 if self.tmr ==15 :
-                    self.idx =210 
-                    self.tmr =0 
+                    self.idx =229
+                    self.tmr =0
 
             elif self.idx ==234 :#敵のガード
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
                     self.set_message ("　敵は　{}ターンの守護を得た".format (self.guard_remain ))
                     se [7 ].play ()
-                if self.tmr ==6 :
-                    self.resolve_enemy_poison_tick ()
-                    self.apply_armor_effects ()
                 if self.tmr ==10 :
-                    self.idx =210 
-                    self.tmr =0 
+                    self.idx =229
+                    self.tmr =0
 
             elif self.idx ==235 :#逃亡？
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
                     self.set_message ("　敵は　こちらを見つめている")
                 if self.tmr ==6 :
-                    self.idx =210 
-                    self.tmr =0 
+                    self.idx =229
+                    self.tmr =0
 
             elif self.idx ==236 :#敵の逃亡
                 self.draw_battle (screen ,fontS )
@@ -6165,12 +6133,9 @@ class Game:
                             self.emy_life =0 
                             self.idx =241 
                             self.tmr =0
-                if self.tmr ==16 :
-                    self.resolve_enemy_poison_tick ()
-                    self.apply_armor_effects ()
                 if self.tmr ==20 :
-                    self.idx =210 
-                    self.tmr =0 
+                    self.idx =229
+                    self.tmr =0
 
             elif self.idx ==238 :# 豪炎
                 self.draw_battle (screen ,fontS )
@@ -6193,13 +6158,9 @@ class Game:
                     else :
                         self.set_message (f"火傷してしまった！")
                         self.pl_burn_turns =3
-                        self.pl_burn_turn_decay_pending =False
-                if self.tmr ==16 :
-                    self.resolve_enemy_poison_tick ()
-                    self.apply_armor_effects ()
                 if self.tmr ==20 :
-                    self.idx =210 
-                    self.tmr =0 
+                    self.idx =229
+                    self.tmr =0
 
             elif self.idx ==239 :# 毒攻撃
                 self.draw_battle (screen ,fontS )
@@ -6211,7 +6172,6 @@ class Game:
                     self.emy_step =30 
                 if self.tmr ==8 :
                     self.poison = 4
-                    self.poison_decay_pending =False
                     self.set_message ("　毒を くらった！")
                     self.set_message (f"　毒 {self.poison *40}ダメージ！")
                     self.pl_life =self.pl_life -self.poison *40 
@@ -6219,12 +6179,9 @@ class Game:
                         self.pl_life =0 
                         self.idx =242 
                         self.tmr =0 
-                if self.tmr ==18 :
-                    self.resolve_enemy_poison_tick ()
-                    self.apply_armor_effects ()
                 if self.tmr ==22 :
-                    self.idx =210 
-                    self.tmr =0 
+                    self.idx =229
+                    self.tmr =0
 
             elif self.idx ==240 :# 逃げられる？
                 self.draw_battle (screen ,fontS )
@@ -6268,7 +6225,7 @@ class Game:
                     else :
                         se [4 ].play ()
                     self.pl_exp =self.pl_exp +int (EMY_EXP [self.emy_typ ]*(1 +0.01 *(self.emy_lev -1))*(1 +0.01 *self.truth_fragment ))
-                    self.add_pl_mag (EMY_MAG_GAIN [self.emy_typ ])
+                    self.pl_mag =min (self.pl_mag +EMY_MAG_GAIN [self.emy_typ ],self.pl_magmax )
                     if self.tutorial_enabled and self.tutorial_pending_battle:
                         if self.tutorial_pending_battle =="room3":
                             self.tutorial_progress ["room3_enemy_defeated"]=True
@@ -6351,7 +6308,7 @@ class Game:
                     self.pl_lifemax =self.pl_lifemax +lif_p
                     self.pl_life =self.pl_life +lif_p
                     self.pl_magmax =self.pl_magmax +magmax_p
-                    self.add_pl_mag (mag_p )
+                    self.pl_mag =min (self.pl_mag +mag_p ,self.pl_magmax )
                     self.pl_str =self.pl_str +str_p
                     self.clamp_player_core_stats ()
                     self.set_message (f"　最大生命 +{lif_p}")
