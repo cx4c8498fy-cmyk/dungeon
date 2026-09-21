@@ -155,7 +155,6 @@ class Game:
         self.truth_fragment_floors = set()
         self.truth_fragment_collected_current_floor = False
         self.floor_warp_floors = {1}
-        self.floor99_trial_wall_talked = False
         self.heirloom_pendant = 1
         self.empty_can = 0
         self.tool_food = 0
@@ -240,6 +239,7 @@ class Game:
         self.powup_new_this_turn = False
         self.emy_powup_new_this_turn = False
         self.poison = 0
+        self.poison_new_this_turn = False
         self.emy_poison = 0
         self.emy_defence = False
         self.madoka = 0
@@ -339,10 +339,6 @@ class Game:
         self.map_surface_size = None
         self.fixed_floor_data = None
         self.last_talk_mode = 1
-        self.floor99_trial_missing = 0
-        self.floor99_trial_total = 0
-        self.floor99_trial_battle_active = False
-        self.floor99_trial_post_pending = False
         self.floor_transition_target = None
         self.show_thanks_after_recollection = False
         self.reset_tutorial_runtime()
@@ -401,8 +397,6 @@ class Game:
     # 指定フロアの階段が重要イベント未達成でロック中かを判定する
     def is_stairs_locked(self, floor=None):
         check_floor = self.floor if floor is None else floor
-        if check_floor == 99:
-            return not self.floor99_trial_wall_talked
         if check_floor not in LOCKED_STAIRS_ITEM_WALL_FLOORS:
             return False
         return any(7 in row for row in self.dungeon)
@@ -736,6 +730,7 @@ class Game:
         self.btl_cmd =0
         self.guard_remain =0
         self.poison =0
+        self.poison_new_this_turn =False
         self.powup =1
         self.madoka =0
         self.emy_powup =1
@@ -750,7 +745,10 @@ class Game:
     # ターン終了時にプレイヤー側の継続状態を1ターン分進める
     def advance_player_status_turn_end(self):
         self.guard_remain =max (self.guard_remain -1 ,0 )
-        self.poison =max (self.poison -1 ,0 )
+        if self.poison_new_this_turn :
+            self.poison_new_this_turn =False
+        else:
+            self.poison =max (self.poison -1 ,0 )
         self.pl_burn_turns =max (self.pl_burn_turns -1 ,0 )
 
     # 敵に付与された毒ダメージを処理し、撃破時は勝利状態へ遷移する
@@ -771,7 +769,7 @@ class Game:
 
     # アイアンドウブ撃破時に強化素材を落とす通常戦かを判定する
     def should_drop_iron_upgrade(self):
-        return self.boss ==0 and self.emy_typ ==10 and not self.floor99_trial_battle_active
+        return self.boss ==0 and self.emy_typ ==10
 
     # 装備画面の表示indexを武具IDへ変換する
     def display_index_to_weapon_id(self, weapon_index):
@@ -904,6 +902,8 @@ class Game:
                     data["item_wall_pos"] = (data["item_wall_pos"][0] + offset_x, data["item_wall_pos"][1] + offset_y)
                 if "event_wall_pos" in data:
                     data["event_wall_pos"] = (data["event_wall_pos"][0] + offset_x, data["event_wall_pos"][1] + offset_y)
+                if "info_wall_pos" in data:
+                    data["info_wall_pos"] = (data["info_wall_pos"][0] + offset_x, data["info_wall_pos"][1] + offset_y)
                 
                 # Adjust all tutorial coordinates
                 if "tutorial" in data and isinstance(data["tutorial"], dict):
@@ -979,10 +979,6 @@ class Game:
         self.boss =0
         self.truth_fragment_drop_battle =False
         self.growth_essence_drop_battle =False
-        self.floor99_trial_missing =0
-        self.floor99_trial_total =0
-        self.floor99_trial_battle_active =False
-        self.floor99_trial_post_pending =False
         self.save_from_stair =False
         self.save_from_boss_talk =False
         self.floor_transition_target =None
@@ -1151,39 +1147,19 @@ class Game:
                 "おお　あわれなニンゲンよ。\nそなたに恵みを　授けよう",
             ]
 
-    # 99階infoWallで不足かけら数に応じた試練・報酬イベントを開始する
-    def init_floor99_item_event(self):
-        if not self.truth_fragment_collected_current_floor:
-            self.init_item_event(kind="floor99_need", lines=FLOOR99_NEED_FRAGMENT_TALK)
-            return
-        if self.floor99_trial_missing > 0 and self.floor99_trial_total > 0:
-            done_count = max(0, self.floor99_trial_total - self.floor99_trial_missing)
-            lines = [line.format(x=done_count, y=self.floor99_trial_missing) for line in FLOOR99_TRIAL_PROGRESS_LINES]
-            self.init_item_event(kind="floor99_continue", lines=lines)
-            return
-        collected_1to99 = len({f for f in self.truth_fragment_floors if 1 <= f <= 99})
-        self.floor99_trial_missing = max(0, 99 - collected_1to99)
-        self.floor99_trial_total = self.floor99_trial_missing
-        if self.floor99_trial_missing > 0:
-            lines = [line.format(n=self.floor99_trial_missing) for line in FLOOR99_TRIAL_OFFER_LINES]
-            self.init_item_event(kind="floor99_offer", lines=lines)
-        else:
-            self.init_item_event(kind="floor99_bonus", reward_count=5, lines=FLOOR99_COMPLETE_LINES)
-
-    # 99階の試練用に敵種抽選と残り回数を設定し、戦闘へ遷移する
-    def start_floor99_trial_battle(self):
-        if self.floor99_trial_missing <= 0:
-            return
-        self.floor99_trial_battle_active = True
-        self.floor99_trial_post_pending = False
-        self.truth_fragment_drop_battle = False
-        self.growth_essence_drop_battle = False
-        self.idx = 200
-        self.tmr = 0
-
-    # 99階の試練完了後にかけら付与と報酬選択イベントを開始する
-    def init_floor99_after_trial_event(self):
-        self.init_item_event(kind="floor99_after", reward_count=5, lines=[FLOOR99_AFTER_TRIAL_LINES[0]])
+    # 未入手のしんじつのかけらがある階を、100階infoWallで表示する文章へ変換する
+    def get_missing_truth_fragment_lines(self):
+        missing = [floor for floor in range(1, 101) if floor not in self.truth_fragment_floors]
+        if not missing:
+            return ["しんじつのかけらは　すべての階で　入手済みだ"]
+        floor_lines = []
+        for i in range(0, len(missing), 8):
+            floors = "、".join(f"{floor}階" for floor in missing[i:i + 8])
+            floor_lines.append(floors)
+        lines = ["しんじつのかけらを　まだ入手していない階は　次の通りだ\n" + "\n".join(floor_lines[:2])]
+        for i in range(2, len(floor_lines), 3):
+            lines.append("\n".join(floor_lines[i:i + 3]))
+        return lines
 
     # 現在のitemWall種別に応じて、選択肢と付与アイテム情報を返す
     def get_item_wall_rewards(self):
@@ -1193,7 +1169,7 @@ class Game:
                 {"label": "爆弾", "attr": "blazegem", "treasure": 1},
                 {"label": "守護", "attr": "guard", "treasure": 2},
             ]
-        if self.item_event_kind in ("item_upgrade", "floor99_bonus", "floor99_after"):
+        if self.item_event_kind == "item_upgrade":
             return [
                 {"label": TRE_NAME[8], "attr": "tool_shield_harden", "treasure": 8},
                 {"label": TRE_NAME[9], "attr": "tool_armor_patch", "treasure": 9},
@@ -1219,6 +1195,12 @@ class Game:
     # 現在階に対応するinfoWall会話を読み込み、文字送り状態を初期化する
     def init_info_talk(self):
         self.tutorial_active_stage = 0
+        if self.floor ==100:
+            self.event_talk_lines =self.get_missing_truth_fragment_lines ()
+            self.event_talk_index =0
+            self.event_talk_char_count =0
+            self.event_talk_last_tick =pygame.time.get_ticks()
+            return
         talk_floor = self.floor
         talk = INFO_TALK.get(talk_floor, "古い壁画だ。文字がかすれていて読み取れない。")
         if isinstance(talk, str):
@@ -1641,6 +1623,7 @@ class Game:
         fixed_item_wall_placed =False
         fixed_item_wall_front =None
         fixed_event_wall_front =None
+        fixed_info_wall_front =None
         fixed_player_start =None
         rule_floor =self.floor
         if self.extra_stage >0 and self.fixed_floor_data:
@@ -1677,6 +1660,13 @@ class Game:
                     self.dungeon [wy ][wx ]=8
                     self.event_wall_pos =(wx ,wy )
                     fixed_event_wall_front =(wx ,wy +1 )
+            info_wall_pos =self.parse_pos (self.fixed_floor_data.get ("info_wall_pos"))
+            if info_wall_pos:
+                wx ,wy =info_wall_pos
+                if (0 <=wx <DUNGEON_W and 0 <=wy <DUNGEON_H -1 and
+                    self.dungeon [wy ][wx ]==9 and self.dungeon [wy +1 ][wx ]==0 ):
+                    self.dungeon [wy ][wx ]=13
+                    fixed_info_wall_front =(wx ,wy +1 )
         floor_cells =[
             (x ,y )
             for y in range (3 ,DUNGEON_H -3 )
@@ -1684,6 +1674,7 @@ class Game:
             if (self.dungeon [y ][x ]==0 and
                 (x ,y )!=fixed_item_wall_front and
                 (x ,y )!=fixed_event_wall_front and
+                (x ,y )!=fixed_info_wall_front and
                 (x ,y )!=fixed_player_start)
         ]
         random .shuffle (floor_cells )
@@ -1710,7 +1701,7 @@ class Game:
         w_box_num = 0 if rule_floor < 11 else 7 if is_boss_floor else 4 # 強化素材箱の配置
         for x ,y in take_cells (w_box_num ):
             self.dungeon [y ][x ]=4
-        cocoon_target =28 if is_boss_floor else 16
+        cocoon_target =16 if self.floor ==10 else 28 if is_boss_floor else 16
         cocoon_cells =take_cells (cocoon_target )
         for x ,y in cocoon_cells: # 繭の配置
             self.dungeon [y ][x ]=2
@@ -1756,7 +1747,7 @@ class Game:
             if wall_cells:
                 wx, wy = random.choice(wall_cells)
                 self.dungeon[wy][wx] = 8
-        place_info_wall = (self.floor in INFO_TALK or self.floor ==99)
+        place_info_wall = self.floor in INFO_TALK
         if place_info_wall: # 情報壁を配置
             wall_cells =[
                 (x ,y )
@@ -1989,7 +1980,6 @@ class Game:
         self.guard =2 
         self.guard_lv =0
         self.truth_fragment_collected_current_floor = False
-        self.floor99_trial_wall_talked =False
         self.wall_book_read_floors =set()
         self.heirloom_pendant =1
         self.empty_can =0
@@ -2004,10 +1994,6 @@ class Game:
         self.item_popup_text =""
         self.truth_fragment_drop_battle =False
         self.growth_essence_drop_battle =False
-        self.floor99_trial_missing =0
-        self.floor99_trial_total =0
-        self.floor99_trial_battle_active =False
-        self.floor99_trial_post_pending =False
         self.reset_enemy_battle_params ()
         self.save_from_stair = False
         self.save_from_boss_talk = False
@@ -2041,6 +2027,7 @@ class Game:
         self.powup_new_this_turn =False
         self.emy_powup_new_this_turn =False
         self.poison =0
+        self.poison_new_this_turn =False
         self.pl_burn_turns =0
         self.auto_equip_attack_sword =False
         self.auto_equip_magic_staff =False
@@ -2090,7 +2077,6 @@ class Game:
                 self.truth_fragment_floors =set (loaddata ["truth_fragment_floors"])
                 self.floor_warp_floors =set (loaddata ["floor_warp_floors"])
                 self.truth_fragment_collected_current_floor =bool (loaddata ["truth_fragment_collected_current_floor"])
-                self.floor99_trial_wall_talked =bool (loaddata ["floor99_trial_wall_talked"])
                 self.wall_book_read_floors =set (loaddata ["wall_book_read_floors"])
                 self.heirloom_pendant =loaddata ["heirloom_pendant"]
                 self.empty_can =loaddata ["empty_can"]
@@ -2112,10 +2098,6 @@ class Game:
                 self.item_popup_text =""
                 self.truth_fragment_drop_battle =False
                 self.growth_essence_drop_battle =False
-                self.floor99_trial_missing =0
-                self.floor99_trial_total =0
-                self.floor99_trial_battle_active =False
-                self.floor99_trial_post_pending =False
                 self.reset_enemy_battle_params ()
                 self.battle_auto_equip_used =False
                 self.powup =1
@@ -2123,6 +2105,7 @@ class Game:
                 self.powup_new_this_turn =False
                 self.emy_powup_new_this_turn =False
                 self.poison =0
+                self.poison_new_this_turn =False
                 self.pl_burn_turns =0
                 self.save_from_stair = False
                 self.save_from_boss_talk = False
@@ -2223,7 +2206,6 @@ class Game:
             "truth_fragment_floors": sorted (self.truth_fragment_floors),
             "floor_warp_floors": sorted (self.floor_warp_floors),
             "truth_fragment_collected_current_floor": self.truth_fragment_collected_current_floor,
-            "floor99_trial_wall_talked": self.floor99_trial_wall_talked,
             "wall_book_read_floors": sorted (self.wall_book_read_floors),
             "heirloom_pendant": self.heirloom_pendant,
             "empty_can": self.empty_can,
@@ -2614,15 +2596,11 @@ class Game:
     # 通常戦の敵種・レベル・画像・能力値を現在階に応じて初期化する
     def init_battle (self ):
         rule_floor =self.floor
-        if self.floor99_trial_battle_active:
-            self.emy_typ =random .choice ([7 ,8 ,9 ,10 ])
-            self.emy_lev =99
-        else:
-            self.emy_typ =random .randint (0 ,EMY_APPEAR [rule_floor -1 ] )
-            if self.truth_fragment_drop_battle and self.emy_typ ==6 :
-                while self.emy_typ ==6 :
-                    self.emy_typ =random .randint (0 ,EMY_APPEAR [rule_floor -1 ] )
-            self.emy_lev =random .randint (1 ,rule_floor )
+        self.emy_typ =random .randint (0 ,EMY_APPEAR [rule_floor -1 ] )
+        if self.truth_fragment_drop_battle and self.emy_typ ==6 :
+            while self.emy_typ ==6 :
+                self.emy_typ =random .randint (0 ,EMY_APPEAR [rule_floor -1 ] )
+        self.emy_lev =random .randint (1 ,rule_floor )
         self.encountered_enemies.add(self.emy_typ)
         self.imgEnemy =pygame .image .load (self.path +"/image/enemy/enemy"+str (self.emy_typ )+"_"+str ((rule_floor -1 )//30 )+".png")
         self.emy_name =EMY_NAME [self.emy_typ ]
@@ -2630,7 +2608,7 @@ class Game:
         emy_str_data =EMY_STR_BY_MODE [self.mode ]
         tier =(rule_floor -1 )//10
         base =max (1 ,int (2.4 *emy_life_data [self.emy_typ ]-100 ))
-        floor_mul =1.0 +{"normal":0.17 ,"hard":0.21 }[self.mode ]*tier
+        floor_mul =1.0 +{"normal":0.17 ,"hard":0.23 }[self.mode ]*tier
         level_mul =1.0 +{"normal":0.13 ,"hard":0.15 }[self.mode ] *(self.emy_lev -1 )/99
         level_add =(self.emy_lev -1 )*10
         self.emy_lifemax =int (base *floor_mul *level_mul +level_add +tier*45 )
@@ -3947,14 +3925,17 @@ class Game:
             action =False 
         if self.emy_typ ==7 or self.boss_mode == "ice":
             cure = self.emy_lifemax //{7:10, 118:100}[self.emy_typ] +random.randint (0, 10)
-            self.set_message ("　敵の回復 +{}".format (int (min (cure ,self.emy_lifemax -self.emy_life ))))
-            self.se [2 ].play ()
-            self.emy_life =min (self.emy_life +cure ,self.emy_lifemax )
-            action =False 
+            cure = min (cure ,self.emy_lifemax -self.emy_life )
+            if cure >0 :
+                self.set_message ("　敵の回復 +{}".format (cure ))
+                self.se [2 ].play ()
+                self.emy_life =min (self.emy_life +cure ,self.emy_lifemax )
+                action =False 
         if self.emy_typ ==8 or self.emy_typ ==111:
             force_poison =self.enemy_poison_fail_count >=7
             if force_poison or random .random ()>{8:0.3, 111:0.84}[self.emy_typ]:
                 self.poison ={8:1, 111:2}[self.emy_typ]
+                self.poison_new_this_turn =True
                 self.set_message ("　毒を　くらった！")
                 self.se [12 ].play ()
                 self.enemy_poison_fail_count =0
@@ -4022,10 +4003,6 @@ class Game:
                     self.item_popup_text =""
                     self.truth_fragment_drop_battle =False
                     self.growth_essence_drop_battle =False
-                    self.floor99_trial_missing =0
-                    self.floor99_trial_total =0
-                    self.floor99_trial_battle_active =False
-                    self.floor99_trial_post_pending =False
                     self.save_from_ending_extra =False
                     self.ending_save_choice_input_lock =False
                     self.show_thanks_after_recollection =False
@@ -4821,11 +4798,6 @@ class Game:
                                 self.init_info_talk()
                                 self.idx =132
                                 self.tmr =0
-                        elif self.floor ==99:
-                            self.floor99_trial_wall_talked =True
-                            self.init_floor99_item_event ()
-                            self.idx =131
-                            self.tmr =0
                         else:
                             self.init_info_talk()
                             self.idx =132
@@ -4845,7 +4817,7 @@ class Game:
                             self.idx =131
                             self.tmr =0
                         elif rule_floor >= 91 and not self.all_cocoons_cleared():
-                            self.init_item_event (kind="blocked", lines=["魔物を……滅ぼすのだ……"])
+                            self.init_item_event (kind="blocked", lines=["魔物を……滅ぼしてくるのだ……"])
                             self.idx =131
                             self.tmr =0
                         else:
@@ -5086,182 +5058,7 @@ class Game:
                 if self.item_event_phase == 1:
                     dialog_alpha = 100
                 self.draw_dialog_window (screen ,layout ,alpha =dialog_alpha )
-                if self.item_event_kind == "floor99_offer":
-                    if self.item_event_phase in (0 ,2 ,3 ):
-                        finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
-                        if finished:
-                            if self.item_event_phase ==0 :
-                                self.item_event_phase =1
-                            elif self.item_event_phase ==2 :
-                                self.start_floor99_trial_battle ()
-                            else:
-                                self.idx =100
-                                self.tmr =0
-                    elif self.item_event_phase ==1 :
-                        options =["はい","いいえ"]
-                        sel_line_h =max (1 ,int (25 *scale_y ))
-                        box_h =max (1 ,int (15 *scale_y ))+sel_line_h *len (options )
-                        box_w =max (1 ,int (280 *scale_x ))
-                        box_x =view_left +int (520 *scale_x )
-                        box_y =view_top +int (420 *scale_y )
-                        arrow_x =view_left +int (540 *scale_x )
-                        text_sel_x =view_left +int (560 *scale_x )
-                        arrow_y =view_top +int (435 *scale_y )
-                        pygame .draw .rect (screen ,BLACK ,[box_x ,box_y ,box_w ,box_h ])
-                        pygame .draw .rect (screen ,WHITE ,[box_x ,box_y ,box_w ,box_h ],2 )
-                        for i, option in enumerate(options):
-                            if i == self.item_choice:
-                                self.draw_text (screen ,"▶",arrow_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
-                            self.draw_text (screen ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
-                        if self.input_up(key)and self.item_choice >0 :
-                            self.item_choice -=1
-                        if self.input_down(key)and self.item_choice <1 :
-                            self.item_choice +=1
-                        if accept:
-                            if self.item_choice ==0 :
-                                self.item_talk_lines =FLOOR99_TRIAL_ACCEPT_LINES
-                                self.item_event_phase =2
-                            else:
-                                self.item_talk_lines =FLOOR99_TRIAL_DECLINE_LINES
-                                self.item_event_phase =3
-                            self.item_talk_index =0
-                            self.item_talk_char_count =0
-                            self.item_talk_last_tick =pygame .time .get_ticks ()
-                elif self.item_event_kind == "floor99_continue":
-                    if self.item_event_phase in (0, 2, 3):
-                        finished = self.step_item_event_talk(screen, fontS, layout, accept)
-                        if finished:
-                            if self.item_event_phase == 0:
-                                self.item_event_phase = 1
-                            elif self.item_event_phase == 2:
-                                self.start_floor99_trial_battle()
-                            else:
-                                self.resume_dungeon_bgm()
-                                self.idx = 100
-                                self.tmr = 0
-                    elif self.item_event_phase == 1:
-                        options = ["はい", "いいえ"]
-                        sel_line_h = max(1, int(25 * scale_y))
-                        box_h = max(1, int(15 * scale_y)) + sel_line_h * len(options)
-                        box_w = max(1, int(280 * scale_x))
-                        box_x = view_left + int(520 * scale_x)
-                        box_y = view_top + int(420 * scale_y)
-                        arrow_x = view_left + int(540 * scale_x)
-                        text_sel_x = view_left + int(560 * scale_x)
-                        arrow_y = view_top + int(435 * scale_y)
-                        pygame.draw.rect(screen, BLACK, [box_x, box_y, box_w, box_h])
-                        pygame.draw.rect(screen, WHITE, [box_x, box_y, box_w, box_h], 2)
-                        for i, option in enumerate(options):
-                            if i == self.item_choice:
-                                self.draw_text(screen, "▶", arrow_x, arrow_y + i * sel_line_h, fontS, WHITE)
-                            self.draw_text(screen, option, text_sel_x, arrow_y + i * sel_line_h, fontS, WHITE)
-                        if self.input_up(key) and self.item_choice > 0:
-                            self.item_choice -= 1
-                        if self.input_down(key) and self.item_choice < 1:
-                            self.item_choice += 1
-                        if accept:
-                            if self.item_choice == 0:
-                                self.item_talk_lines = FLOOR99_TRIAL_ACCEPT_LINES
-                                self.item_event_phase = 2
-                                self.item_talk_index = 0
-                                self.item_talk_char_count = 0
-                                self.item_talk_last_tick = pygame.time.get_ticks()
-                            else:
-                                self.floor99_trial_battle_active = False
-                                self.item_talk_lines = FLOOR99_TRIAL_DECLINE_LINES
-                                self.item_event_phase = 3
-                                self.item_talk_index = 0
-                                self.item_talk_char_count = 0
-                                self.item_talk_last_tick = pygame.time.get_ticks()
-
-                elif self.item_event_kind in ("floor99_bonus","floor99_after"):
-                    reward_entries =self.get_item_wall_rewards ()
-                    if len (reward_entries )==0 :
-                        self.idx =100
-                        self.tmr =0
-                    elif self.item_event_phase in (0 ,2 ,4 ):
-                        finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
-                        if finished:
-                            if self.item_event_phase ==0 :
-                                if self.item_event_kind =="floor99_after":
-                                    self.truth_fragment =min (100 ,self.truth_fragment +self.floor99_trial_total )
-                                    self.item_event_popup_timer =0
-                                    self.item_event_phase =1
-                                else:
-                                    self.item_event_phase =3
-                            elif self.item_event_phase ==2 :
-                                self.item_event_phase =3
-                            elif self.item_event_phase ==4 :
-                                selected =self.item_reward if self.item_reward is not None else self.item_choice
-                                selected =max (0 ,min (selected ,len (reward_entries )-1 ))
-                                self.treasure =reward_entries [selected ]["treasure"]
-                                self.dungeon [self.pl_y -1 ][self.pl_x ]=9
-                                self.floor99_trial_battle_active =False
-                                self.floor99_trial_post_pending =False
-                                self.floor99_trial_missing =0
-                                self.floor99_trial_total =0
-                                self.idx =120
-                                self.tmr =0
-                            if self.item_event_phase in (3 ,4 ):
-                                self.item_talk_index =0
-                                self.item_talk_char_count =0
-                                self.item_talk_last_tick =pygame .time .get_ticks ()
-                        self.tmr =0
-                    elif self.item_event_phase ==1 :
-                        win_w =360
-                        win_x =view_left +(view_w -win_w )//2
-                        title_top =view_top
-                        title_h =view_h
-                        x = win_x + win_w//2 - 42
-                        y = title_top +int (title_h *0.4 )
-                        dialog = pygame.Surface((400, 100), pygame.SRCALPHA)
-                        dialog.fill((0, 0, 0, 100))
-                        screen.blit(dialog, [x-100, y-40])
-                        item_text =f"{TRE_NAME [10 ]} x {self.floor99_trial_total}"
-                        self.draw_text (screen ,item_text ,x ,y ,font ,WHITE )
-                        self.item_event_popup_timer +=1
-                        if self.item_event_popup_timer >=10 :
-                            self.item_talk_lines =FLOOR99_AFTER_TRIAL_LINES [1 :]
-                            self.item_talk_index =0
-                            self.item_talk_char_count =0
-                            self.item_talk_last_tick =pygame .time .get_ticks ()
-                            self.item_event_phase =2
-                    elif self.item_event_phase ==3 :
-                        options =[entry ["label"]for entry in reward_entries ]
-                        sel_line_h =max (1 ,int (25 *scale_y ))
-                        box_h =max (1 ,int (15 *scale_y ))+sel_line_h *len (options )
-                        box_w =max (1 ,int (280 *scale_x ))
-                        box_x =view_left +int (520 *scale_x )
-                        box_y =view_top +int (420 *scale_y )
-                        arrow_x =view_left +int (540 *scale_x )
-                        text_sel_x =view_left +int (560 *scale_x )
-                        arrow_y =view_top +int (435 *scale_y )
-                        pygame .draw .rect (screen ,BLACK ,[box_x ,box_y ,box_w ,box_h ])
-                        pygame .draw .rect (screen ,WHITE ,[box_x ,box_y ,box_w ,box_h ],2 )
-                        for i, option in enumerate(options):
-                            if i == self.item_choice:
-                                self.draw_text (screen ,"▶",arrow_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
-                            self.draw_text (screen ,option ,text_sel_x ,arrow_y + i *sel_line_h ,fontS ,WHITE )
-                        if self.input_up(key)and self.item_choice >0 :
-                            self.item_choice -=1
-                        if self.input_down(key)and self.item_choice <len (options )-1 :
-                            self.item_choice +=1
-                        if accept and self.item_reward is None:
-                            self.item_reward =self.item_choice
-                        if self.item_reward is not None:
-                            selected =max (0 ,min (self.item_reward ,len (reward_entries )-1 ))
-                            attr =reward_entries [selected ]["attr"]
-                            self.add_inventory_count (attr ,self.item_reward_count )
-                            if self.item_event_kind =="floor99_after":
-                                self.item_talk_lines =FLOOR99_AFTER_TRIAL_REWARD_LINE
-                            else:
-                                self.item_talk_lines =FLOOR99_COMPLETE_REWARD_LINE
-                            self.item_talk_index =0
-                            self.item_talk_char_count =0
-                            self.item_talk_last_tick =pygame .time .get_ticks ()
-                            self.item_event_phase =4
-
-                elif self.item_event_kind == "true_episode_event":
+                if self.item_event_kind == "true_episode_event":
                     if self.item_event_phase in (0, 2, 3):
                         finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
                         if finished:
@@ -5318,7 +5115,7 @@ class Game:
                     if finished:
                         self.true_episode_heard = True
                         self.start_true_episode_memory_scene ()
-                elif self.item_event_kind in ("blocked","locked_stairs","floor99_need","floor_warp_learned"):
+                elif self.item_event_kind in ("blocked","locked_stairs","floor_warp_learned"):
                     finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
                     if finished:
                         self.idx =100
@@ -5479,6 +5276,7 @@ class Game:
                     self.powup =1
                     self.powup_new_this_turn =False
                     self.emy_powup_new_this_turn =False
+                    self.poison_new_this_turn =False
                     self.reset_enemy_battle_params ()
                     if self.move_bgm_path :
                         now =time .time ()
@@ -5638,6 +5436,7 @@ class Game:
                     ice =0 
                     self.set_message ("　魔法による攻撃！")
                     se [5 ].play ()
+                    self.pl_mag =max (0 ,self.pl_mag -100 )
                     active_ice_sword =self.get_active_weapon_level ("sword",1 )
                     if active_ice_sword >0 :
                         if random .random ()>0.95 -0.003 *active_ice_sword :
@@ -5666,7 +5465,6 @@ class Game:
                     self.set_message (f"　{dmg}　ダメージ！")
                 if self.tmr ==11 :
                     self.emy_life =self.emy_life -dmg 
-                    self.pl_mag =max (0 ,self.pl_mag -100 )
                     if self.emy_life <=0 :
                         self.emy_life =0 
                         self.idx =241 
@@ -5698,6 +5496,7 @@ class Game:
                     else :
                         self.idx =230 
                         self.tmr =0 
+
             elif self.idx ==222 :# Potion
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
@@ -5995,8 +5794,8 @@ class Game:
                                 self.tmr =0 
                 if self.tmr ==14 :
                     if self.emy_action (screen ):
-                        self.tmr =self.tmr +3 
-                if self.tmr ==22 :
+                        self.tmr =self.tmr +2
+                if self.tmr ==20 :
                     self.idx =229
                     self.tmr =0
 
@@ -6021,8 +5820,8 @@ class Game:
                         self.pl_burn_turns =3
                 if self.tmr ==19 :
                     if self.emy_action (screen ):
-                        self.tmr =self.tmr +3 
-                if self.tmr ==26 :
+                        self.tmr =self.tmr +2 
+                if self.tmr ==23 :
                     self.idx =229
                     self.tmr =0
 
@@ -6056,8 +5855,8 @@ class Game:
                         self.tmr =0 
                 if self.tmr ==20 :
                     if self.emy_action (screen ):
-                        self.tmr =self.tmr +3 
-                if self.tmr ==28 :
+                        self.tmr =self.tmr +2
+                if self.tmr ==24 :
                     self.idx =229
                     self.tmr =0
 
@@ -6070,7 +5869,7 @@ class Game:
                     se [2 ].play ()
                 if self.tmr ==6 :
                     self.emy_life =min (self.emy_lifemax ,self.emy_life +cure )
-                if self.tmr ==15 :
+                if self.tmr ==7 :
                     self.idx =229
                     self.tmr =0
 
@@ -6079,7 +5878,7 @@ class Game:
                 if self.tmr ==1 :
                     self.set_message ("　敵は　{}ターンの守護を得た".format (self.guard_remain ))
                     se [7 ].play ()
-                if self.tmr ==10 :
+                if self.tmr ==7 :
                     self.idx =229
                     self.tmr =0
 
@@ -6087,7 +5886,7 @@ class Game:
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
                     self.set_message ("　敵は　こちらを見つめている")
-                if self.tmr ==6 :
+                if self.tmr ==7 :
                     self.idx =229
                     self.tmr =0
 
@@ -6096,10 +5895,6 @@ class Game:
                 if self.tmr ==1 :
                     self.set_message ("　敵は逃げていった")
                 if self.tmr ==10 :
-                    self.floor99_trial_battle_active =False
-                    self.floor99_trial_post_pending =False
-                    self.floor99_trial_missing =0
-                    self.floor99_trial_total =0
                     self.idx =244 
 
 
@@ -6133,7 +5928,7 @@ class Game:
                             self.emy_life =0 
                             self.idx =241 
                             self.tmr =0
-                if self.tmr ==20 :
+                if self.tmr ==18 :
                     self.idx =229
                     self.tmr =0
 
@@ -6158,7 +5953,7 @@ class Game:
                     else :
                         self.set_message (f"火傷してしまった！")
                         self.pl_burn_turns =3
-                if self.tmr ==20 :
+                if self.tmr ==18 :
                     self.idx =229
                     self.tmr =0
 
@@ -6172,14 +5967,14 @@ class Game:
                     self.emy_step =30 
                 if self.tmr ==8 :
                     self.poison = 4
-                    self.set_message ("　毒を くらった！")
+                    self.poison_new_this_turn =True
                     self.set_message (f"　毒 {self.poison *40}ダメージ！")
                     self.pl_life =self.pl_life -self.poison *40 
                     if self.pl_life <=0 :
                         self.pl_life =0 
                         self.idx =242 
                         self.tmr =0 
-                if self.tmr ==22 :
+                if self.tmr ==14 :
                     self.idx =229
                     self.tmr =0
 
@@ -6190,10 +5985,6 @@ class Game:
                     if self.boss ==1 :
                         self.set_message ("　逃走に失敗した！")
                     elif random .randint (0 ,99 )<60 or self.emy_typ ==10:
-                        self.floor99_trial_battle_active =False
-                        self.floor99_trial_post_pending =False
-                        self.floor99_trial_missing =0
-                        self.floor99_trial_total =0
                         self.idx =244 
                     else :
                         self.set_message ("　逃走に失敗した！")
@@ -6217,8 +6008,6 @@ class Game:
                 if self.tmr ==2 :
                     self.set_message ("{}を　たおした！".format (self.emy_name ))
                     self.growth_essence_drop_battle =(self.boss ==0 and (self.emy_typ ==9 or random .random ()<0.05 ))
-                    if self.floor99_trial_battle_active and self.emy_typ !=9:
-                        self.growth_essence_drop_battle =False
                     pygame .mixer .music .stop ()
                     if self.boss ==1 :
                         se [6 ].play ()
@@ -6239,13 +6028,6 @@ class Game:
                     if self.pl_exp >=(self.pl_lifemax -250 )*20 :
                         self.idx =243 
                         self.tmr =0 
-                    elif self.floor99_trial_battle_active:
-                        self.floor99_trial_post_pending =True
-                        if self.growth_essence_drop_battle:
-                            self.idx =248
-                        else:
-                            self.idx =244
-                        self.tmr =0
                     elif self.should_drop_iron_upgrade ():
                         self.idx =246
                         self.tmr =0
@@ -6269,10 +6051,6 @@ class Game:
                     self.reset_enemy_battle_params ()
                     self.truth_fragment_drop_battle =False
                     self.growth_essence_drop_battle =False
-                    self.floor99_trial_battle_active =False
-                    self.floor99_trial_post_pending =False
-                    self.floor99_trial_missing =0
-                    self.floor99_trial_total =0
                     self.tutorial_pending_battle =""
                 fade_frames =20
                 hold_frames =75
@@ -6319,25 +6097,17 @@ class Game:
                     if self.pl_exp >(self.pl_lifemax -250 )*20 :
                         self.idx =243 
                         self.tmr =0 
-                    elif self.floor99_trial_battle_active:
-                        self.floor99_trial_post_pending =True
-                        if self.growth_essence_drop_battle:
-                            self.idx =248
-                        else:
-                            self.idx =244
-                        self.tmr =0
+                    elif self.should_drop_iron_upgrade ():
+                        self.idx =246
+                        self.tmr =0 
+                    elif self.growth_essence_drop_battle:
+                        self.idx =248
+                        self.tmr =0 
+                    elif self.truth_fragment_drop_battle:
+                        self.idx =247 
+                        self.tmr =0 
                     else :
-                        if self.should_drop_iron_upgrade ():
-                            self.idx =246
-                            self.tmr =0 
-                        elif self.growth_essence_drop_battle:
-                            self.idx =248
-                            self.tmr =0 
-                        elif self.truth_fragment_drop_battle:
-                            self.idx =247 
-                            self.tmr =0 
-                        else :
-                            self.idx =244 
+                        self.idx =244 
 
             elif self.idx ==244 :# 戦闘終了
                 self.restore_battle_equip_session ()
@@ -6373,28 +6143,8 @@ class Game:
                     self.idx =130 
                     self.tmr =0 
                 else :
-                    if self.floor99_trial_post_pending:
-                        self.floor99_trial_post_pending =False
-                        if self.floor99_trial_missing >1:
-                            done_count =max (0 ,self.floor99_trial_total -self.floor99_trial_missing +1 )
-                            self.floor99_trial_missing -=1
-                            self.floor99_trial_battle_active =False
-                            lines =[line .format (x =done_count ,y =self.floor99_trial_missing )for line in FLOOR99_TRIAL_PROGRESS_LINES ]
-                            self.init_item_event (kind ="floor99_continue",lines =lines )
-                            self.item_choice =0
-                            self.idx =131
-                            self.tmr =0
-                        else:
-                            self.floor99_trial_missing =0
-                            self.floor99_trial_battle_active =False
-                            self.resume_dungeon_bgm ()
-                            self.init_floor99_after_trial_event ()
-                            self.idx =131
-                            self.tmr =0
-                    else:
-                        self.resume_dungeon_bgm ()
-                        self.floor99_trial_battle_active =False
-                        self.idx =100 
+                    self.resume_dungeon_bgm ()
+                    self.idx =100 
 
             elif self.idx ==245 :#最終ボスの形態変化
                 self.draw_battle (screen ,fontS )
