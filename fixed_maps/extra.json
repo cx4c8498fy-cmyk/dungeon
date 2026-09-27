@@ -2,8 +2,8 @@
   "pl_start": [2, 16],
   "item_walls": [
     {"pos": [4, 13], "kind": "item_upgrade", "count": 5},
-    {"pos": [6, 13], "kind": "item", "count": 10},
-    {"pos": [8, 13], "kind": "item", "count": 10}
+    {"pos": [6, 13], "kind": "item", "count": 15},
+    {"pos": [8, 13], "kind": "item", "count": 15}
   ],
   "dungeon": [
     [9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9],

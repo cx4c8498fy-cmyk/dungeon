@@ -1102,7 +1102,8 @@ class Game:
     def init_boss_talk(self, mode="init"):
         if self.extra_stage >0:
             self.boss_talk_kind =mode
-            self.boss_talk_lines =["強敵が　こちらを見ている"]
+            self.emy_typ =120 +self.extra_stage %3
+            self.boss_talk_lines =EXTRA_BOSS_TALK [self.emy_typ ]
             self.boss_talk_index =0
             self.boss_talk_char_count =0
             self.boss_talk_last_tick =pygame.time.get_ticks()
@@ -2641,6 +2642,7 @@ class Game:
         self.emy_lev =1
         if self.extra_stage >0:
             self.emy_typ =120 +self.extra_stage%3
+            self.emy_lev =1 +(self.extra_stage -1 )//3
         else:
             self.emy_typ =109 +int (boss_floor //10 ) +self.change
         self.encountered_enemies.add(self.emy_typ)
@@ -2716,9 +2718,9 @@ class Game:
         if self.emy_powup >1 :
             enemy_state_entries .append (("力↑",RED ))
         if self.emy_defence :
-            enemy_state_entries .append (("ぼうぎょ",BLUE ))
+            enemy_state_entries .append (("ぼうぎょ",LBLUE ))
         if self.emy_poison >0 :
-            enemy_state_entries .append ((f"毒 {'・'*self.emy_poison}",COPPER ))
+            enemy_state_entries .append ((f"毒 {'・'*self.emy_poison}",GOLD ))
         if self.emy_typ ==118 or self.emy_typ ==122 :
             if self.boss_mode == "fire":
                 enemy_state_entries .append (("状態：炎",RED ))
@@ -2728,6 +2730,16 @@ class Game:
             magia_color =RED if self.madoka >=1000 else WHITE
             enemy_state_entries .insert (0 ,("マギア : "+str (self.madoka )+"/1000",magia_color ))
         enemy_state_line_h =fnt .get_height ()+2
+        enemy_panel_x =bg_left +panel ["x_offset"]
+        enemy_panel_y =enemy_name_y -10
+        enemy_panel_w =panel ["width"]
+        enemy_panel_h =max (
+            90 ,
+            enemy_state_y -enemy_panel_y +enemy_state_line_h *max (1 ,len (enemy_state_entries ))+10
+        )
+        enemy_panel =pygame .Surface ((enemy_panel_w ,enemy_panel_h ),pygame .SRCALPHA )
+        enemy_panel .fill ((0 ,0 ,0 ,100 ))
+        bg .blit (enemy_panel ,[enemy_panel_x ,enemy_panel_y ])
         for i ,(state_txt ,state_col )in enumerate (enemy_state_entries ):
             self.draw_text (bg ,state_txt ,bg_left +enemy_layout ["label_x_offset"],enemy_state_y +i *enemy_state_line_h ,fnt ,state_col )
         self.draw_bar (bg ,bg_left +enemy_layout ["bar_x_offset"],enemy_bar_y ,enemy_layout ["bar_width"],enemy_layout ["bar_height"],self.emy_life ,self.emy_lifemax )
@@ -2741,7 +2753,7 @@ class Game:
         if self.guard_remain >0 :
             status_entries .append ((f"守護 {'・'*self.guard_remain}",GREEN ))
         if self.poison >0 :
-            status_entries .append ((f"毒 {'・'*self.poison}",COPPER ))
+            status_entries .append ((f"毒 {'・'*self.poison}",GOLD ))
         if self.pl_burn_turns >0 :
             status_entries .append ((f"火傷 {'・'*self.pl_burn_turns}",RED ))
         if self.powup >1 :
@@ -3619,8 +3631,13 @@ class Game:
             pygame.draw.rect(bg, WHITE, [x, y, cell_w, cell_h], 1)
             owned = self.is_weapon_owned(i)
             trap_id = self.display_index_to_weapon_id(i)
-            label = WPN_NAME[trap_id] if owned else "？"
-            self.draw_text(bg, label, x + 8, y + cell_h // 2 - 10, fnt, WHITE)
+            if owned:
+                group, slot = self.weapon_index_to_group_slot(i)
+                level = self.get_weapon_level(group, slot)
+                self.draw_text(bg, WPN_NAME[trap_id], x + 8, y + 14, fnt, WHITE)
+                self.draw_text(bg, f"Lv.{level}", x + 8, y + 40, fnt, WHITE)
+            else:
+                self.draw_text(bg, "？", x + 8, y + cell_h // 2 - 10, fnt, WHITE)
             if self.is_weapon_equipped_index(i):
                 pygame.draw.rect(bg, GREEN, [x + 2, y + 2, cell_w - 4, cell_h - 4], 2)
             if i == self.equip_cursor:
@@ -3816,12 +3833,6 @@ class Game:
             self.btl_cmd =3 
         if key [K_g ]:
             self.btl_cmd =4 
-        if key [K_r ]and not self.tutorial_enabled:
-            self.btl_cmd =5 
-        if key [K_i ]:
-            self.btl_cmd =6 
-        if key [K_e ]:
-            self.btl_cmd =7
         row =0 
         col =0 
         for r, row_items in enumerate (grid ):
