@@ -51,6 +51,17 @@ MODE_LABELS = {"normal": "ノーマル", "hard": "ハード"}
 
 ZUKAN_ENEMY_THUMB_SCALE = 0.5
 DUNGEON_DEAD_END_BRAID_RATE = 0.85
+DIR_UP = "up"
+DIR_DOWN = "down"
+DIR_LEFT = "left"
+DIR_RIGHT = "right"
+DIRECTION_KEY_GROUPS = (
+    (DIR_UP, (K_UP, K_w)),
+    (DIR_DOWN, (K_DOWN, K_s)),
+    (DIR_LEFT, (K_LEFT, K_a)),
+    (DIR_RIGHT, (K_RIGHT, K_d)),
+)
+DIRECTION_REPEAT_DELAY_MS = 240
 
 
 class BufferedKeyState:
@@ -282,6 +293,10 @@ class Game:
         self.last_btl_bg_idx = None
         self.prev_return = False
         self.prev_z = False
+        self.direction_input = set()
+        self.direction_physical = set()
+        self.direction_held = set()
+        self.direction_hold_start_tick = 0
         self.boss_talk_char_count = 0
         self.boss_talk_last_tick = 0
         self.move_bgm_path = ""
@@ -352,25 +367,63 @@ class Game:
     def init_floor_flip_map(self):
         self.floor_flip_map = [[random.randint(0, 1) for j in range(DUNGEON_W)] for i in range(DUNGEON_H)]
 
+    # 現フレームの方向キー/WSAD入力を押下瞬間と長押しリピートに分けて更新する
+    def update_direction_input(self, key, now_tick):
+        buffered_dirs = self.get_directions_from_buffer(key)
+        held_dirs = self.get_directions_from_pressed(key)
+        self.direction_input = set()
+        self.direction_physical = held_dirs
+        if not held_dirs:
+            self.direction_held = set()
+            return
+        if buffered_dirs - self.direction_held:
+            self.direction_input = set(held_dirs)
+            self.direction_held = set(held_dirs)
+            self.direction_hold_start_tick = now_tick
+            return
+        if held_dirs != self.direction_held:
+            self.direction_input = set(held_dirs)
+            self.direction_held = set(held_dirs)
+            self.direction_hold_start_tick = now_tick
+            return
+        if now_tick - self.direction_hold_start_tick >= DIRECTION_REPEAT_DELAY_MS:
+            self.direction_input = set(held_dirs)
+
+    # KEYDOWNイベントに含まれる方向入力を集合で返す
+    def get_directions_from_buffer(self, key):
+        directions = set()
+        for direction, keys in DIRECTION_KEY_GROUPS:
+            if any(key_code in key.buffered_keys for key_code in keys):
+                directions.add(direction)
+        return directions
+
+    # 現在押下されている方向入力を集合で返す
+    def get_directions_from_pressed(self, key):
+        directions = set()
+        for direction, keys in DIRECTION_KEY_GROUPS:
+            if any(key.pressed[key_code] for key_code in keys):
+                directions.add(direction)
+        return directions
+
     # 矢印キーとWSADキーを同じ方向入力として判定する
     def input_up(self, key):
-        return key[K_UP] or key[K_w]
+        return DIR_UP in self.direction_input
 
     # 矢印キーとWSADキーを同じ方向入力として判定する
     def input_down(self, key):
-        return key[K_DOWN] or key[K_s]
+        return DIR_DOWN in self.direction_input
 
     # 矢印キーとWSADキーを同じ方向入力として判定する
     def input_left(self, key):
-        return key[K_LEFT] or key[K_a]
+        return DIR_LEFT in self.direction_input
 
     # 矢印キーとWSADキーを同じ方向入力として判定する
     def input_right(self, key):
-        return key[K_RIGHT] or key[K_d]
+        return DIR_RIGHT in self.direction_input
 
-    # いずれかの方向キー入力が押されているかを判定する
+    # いずれかの方向キー入力が物理的に押されているかを判定する
     def input_direction(self, key):
-        return self.input_up(key) or self.input_down(key) or self.input_left(key) or self.input_right(key)
+        return len(self.direction_physical) > 0
 
     # ミニマップ表示用の発見済み座標と特殊タイル座標の記録を初期化する
     def init_map_state(self):
@@ -769,7 +822,7 @@ class Game:
 
     # アイアンドウブ撃破時に強化素材を落とす通常戦かを判定する
     def should_drop_iron_upgrade(self):
-        return self.boss ==0 and self.emy_typ ==10
+        return self.boss ==0 and self.emy_typ ==12
 
     # 装備画面の表示indexを武具IDへ変換する
     def display_index_to_weapon_id(self, weapon_index):
@@ -2610,10 +2663,10 @@ class Game:
     # 通常戦の敵種・レベル・画像・能力値を現在階に応じて初期化する
     def init_battle (self ):
         rule_floor =self.floor
-        self.emy_typ =random .randint (0 ,EMY_APPEAR [rule_floor -1 ] )
-        if self.truth_fragment_drop_battle and self.emy_typ ==6 :
-            while self.emy_typ ==6 :
-                self.emy_typ =random .randint (0 ,EMY_APPEAR [rule_floor -1 ] )
+        enemy_candidates =list (EMY_APPEAR [rule_floor ] )
+        if self.truth_fragment_drop_battle:
+            enemy_candidates =[enemy_id for enemy_id in enemy_candidates if enemy_id !=6 ]
+        self.emy_typ =random .choice (enemy_candidates )
         self.emy_lev =random .randint (1 ,rule_floor )
         self.encountered_enemies.add(self.emy_typ)
         self.imgEnemy =pygame .image .load (self.path +"/image/enemy/enemy"+str (self.emy_typ )+"_"+str ((rule_floor -1 )//30 )+".png")
@@ -3354,8 +3407,6 @@ class Game:
             paths.append(self.path + f"/image/boss/boss_{enemy_id - 110}.png")
         else:
             paths.extend(self.path + f"/image/enemy/enemy{enemy_id}_{i}.png" for i in range(4))
-        if 10 <= enemy_id < 110:
-            paths.append(self.path + f"/image/boss/boss_{enemy_id - 10}.png")
         img = None
         for path in paths:
             if os.path.exists(path):
@@ -3999,6 +4050,7 @@ class Game:
 
             self.tmr =self.tmr +1 
             key =BufferedKeyState (pygame .key .get_pressed (),buffered_keys )
+            self.update_direction_input (key ,pygame .time .get_ticks ())
             accept =K_RETURN in buffered_keys or K_z in buffered_keys or (key [K_RETURN ]and not self.prev_return )or (key [K_z ]and not self.prev_z )
 
             if self.idx ==0 :# タイトル画面
@@ -6010,7 +6062,7 @@ class Game:
                 if self.tmr ==10 :
                     if self.boss ==1 :
                         self.set_message ("　逃走に失敗した！")
-                    elif random .randint (0 ,99 )<60 or self.emy_typ ==10:
+                    elif random .randint (0 ,99 )<60 or self.emy_typ ==12:
                         self.idx =244 
                     else :
                         self.set_message ("　逃走に失敗した！")
