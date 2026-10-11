@@ -82,6 +82,8 @@ def load_sounds(base_path: str) -> list:
         pygame.mixer.Sound(base_path + "/sound/se_defence.wav"),
         pygame.mixer.Sound(base_path + "/sound/se_powup.wav"),
         pygame.mixer.Sound(base_path + "/sound/se_poison.mp3"),
+        pygame.mixer.Sound(base_path + "/sound/se_fire.mp3"),
+        pygame.mixer.Sound(base_path + "/sound/se_hard.mp3"),
     ]
 
 

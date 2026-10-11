@@ -48,6 +48,40 @@ BATTLE_UI_LAYOUT = {
 WEAPON_LEVEL_ATTRS = {"shield": "pl_shield", "armor": "pl_armor", "sword": "pl_sword"}
 EQUIP_SLOT_ATTRS = {"shield": "eq_shield", "armor": "eq_armor", "sword": "eq_sword"}
 MODE_LABELS = {"normal": "ノーマル", "hard": "ハード"}
+TITLE_MAIN_OPTIONS = ["はじめから", "つづきから", "音楽をきく", "ゲーム終了"]
+MUSIC_DEFAULT_UNLOCKED = {"bgm_title.mp3", "bgm_battle_0.mp3", "bgm_battle_1.mp3"}
+MUSIC_FILE_ORDER = (
+    "bgm_title.mp3",
+    "bgm_battle_0.mp3",
+    "bgm_battle_1.mp3",
+    "bgm_battle_2.mp3",
+    "bgm_0.mp3",
+    "bgm_1.mp3",
+    "bgm_2.mp3",
+    "bgm_3.mp3",
+    "bgm_4.mp3",
+    "bgm_5.mp3",
+    "bgm_6.mp3",
+    "bgm_7.mp3",
+    "bgm_8.mp3",
+    "bgm_9.mp3",
+)
+MUSIC_LABELS = {
+    "bgm_title.mp3": "タイトル画面",
+    "bgm_battle_0.mp3": "通常戦闘BGM",
+    "bgm_battle_1.mp3": "通常ボス戦BGM",
+    "bgm_battle_2.mp3": "ラスボス戦BGM",
+    "bgm_0.mp3": "地下1-10階",
+    "bgm_1.mp3": "地下11-20階",
+    "bgm_2.mp3": "地下21-30階",
+    "bgm_3.mp3": "地下31-40階",
+    "bgm_4.mp3": "地下41-50階",
+    "bgm_5.mp3": "地下51-60階",
+    "bgm_6.mp3": "地下61-70階",
+    "bgm_7.mp3": "地下71-80階",
+    "bgm_8.mp3": "地下81-90階",
+    "bgm_9.mp3": "地下91-100階",
+}
 
 ZUKAN_ENEMY_THUMB_SCALE = 0.5
 DUNGEON_DEAD_END_BRAID_RATE = 0.85
@@ -132,6 +166,11 @@ class Game:
         self.idx = 0
         self.title_mode = 0
         self.title_cmd = 0
+        self.music_cmd = 0
+        self.music_playing_file = ""
+        self.music_entries = self.build_music_entries()
+        self.unlocked_music = set()
+        self.load_music_unlocks()
         self.difficulty_cmd = 0
         self.tmr = 0
         self.floor = 0
@@ -251,6 +290,7 @@ class Game:
         self.emy_powup_new_this_turn = False
         self.poison = 0
         self.poison_new_this_turn = False
+        self.player_frozen_next_turn = False
         self.emy_poison = 0
         self.emy_defence = False
         self.madoka = 0
@@ -499,6 +539,43 @@ class Game:
             se_volume = self.volume_level_to_value(self.se_volume_level)
             for sound in self.se:
                 sound.set_volume(se_volume)
+
+    # soundフォルダ内のBGMを音楽鑑賞メニュー用の固定順リストにする
+    def build_music_entries(self):
+        found = {os.path.basename(path) for path in glob.glob(self.path + "/sound/bgm_*")}
+        ordered = [name for name in MUSIC_FILE_ORDER if name in found]
+        ordered += sorted(found - set(ordered))
+        return [{"file": name, "label": MUSIC_LABELS.get(name, name)} for name in ordered]
+
+    # 音楽鑑賞メニューの全体解禁状況をJSONから読み込む
+    def load_music_unlocks(self):
+        music_files = {entry["file"] for entry in self.music_entries}
+        self.unlocked_music = set(MUSIC_DEFAULT_UNLOCKED) & music_files
+        path = self.path + "/savedata/music_unlocks.json"
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                data = json.load(f)
+            self.unlocked_music.update(set(data["unlocked"]) & music_files)
+        self.save_music_unlocks()
+
+    # 音楽鑑賞メニューの全体解禁状況をJSONへ保存する
+    def save_music_unlocks(self):
+        path = self.path + "/savedata/music_unlocks.json"
+        with open(path, "w") as f:
+            json.dump({"unlocked": sorted(self.unlocked_music)}, f, ensure_ascii=False, indent=2)
+
+    # 指定BGMを音楽鑑賞メニューで選択可能にする
+    def unlock_music(self, filename):
+        music_files = {entry["file"] for entry in self.music_entries}
+        if filename in music_files and filename not in self.unlocked_music:
+            self.unlocked_music.add(filename)
+            self.save_music_unlocks()
+
+    # 音楽鑑賞メニューやタイトル画面から指定BGMをループ再生する
+    def play_music_file(self, filename):
+        pygame.mixer.music.load(self.path + "/sound/" + filename)
+        pygame.mixer.music.play(-1)
+        self.apply_audio_volumes()
 
     # BGMファイルの長さをミリ秒で取得し、再利用のためキャッシュする
     def get_bgm_length_ms(self, path):
@@ -784,6 +861,7 @@ class Game:
         self.guard_remain =0
         self.poison =0
         self.poison_new_this_turn =False
+        self.player_frozen_next_turn =False
         self.powup =1
         self.madoka =0
         self.emy_powup =1
@@ -1050,6 +1128,7 @@ class Game:
             self.move_bgm_path =self.path +"/sound/bgm_9.mp3"
             self.move_bgm_pos_ms =0
             self.move_bgm_start_time =time .time ()
+            self.unlock_music (os.path.basename (self.move_bgm_path ))
             pygame .mixer .music .load (self.move_bgm_path )
             pygame .mixer .music .play (-1 )
 
@@ -2113,6 +2192,7 @@ class Game:
         self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor -1) //10 )+".mp3"
         self.move_bgm_pos_ms =0 
         self.move_bgm_start_time =time .time ()
+        self.unlock_music (os.path.basename (self.move_bgm_path ))
         pygame .mixer .music .load (self.move_bgm_path )
         pygame .mixer .music .play (-1 )
 
@@ -2231,6 +2311,7 @@ class Game:
                 self.move_bgm_path =self.path +"/sound/bgm_"+str ((self.floor-1) //10 )+".mp3"
                 self.move_bgm_pos_ms =0 
                 self.move_bgm_start_time =time .time ()
+                self.unlock_music (os.path.basename (self.move_bgm_path ))
                 pygame .mixer .music .load (self.move_bgm_path )
                 pygame .mixer .music .play (-1 )
                 self.apply_audio_volumes ()
@@ -2599,6 +2680,7 @@ class Game:
         if self.move_bgm_path :
             self.move_bgm_pos_ms =self.normalize_bgm_pos_ms (self.move_bgm_path ,self.move_bgm_pos_ms )
             requested_sec =self.move_bgm_pos_ms /1000.0
+            self.unlock_music (os.path.basename (self.move_bgm_path ))
             pygame .mixer .music .load (self.move_bgm_path )
             try:
                 pygame .mixer .music .play (-1 ,requested_sec )
@@ -2608,7 +2690,9 @@ class Game:
                 self.move_bgm_pos_ms =0
                 self.move_bgm_start_time =time .time ()
         else :
-            pygame .mixer .music .load (self.path +"/sound/bgm_"+str ((self.floor -1) //10 )+".mp3")
+            bgm_path =self.path +"/sound/bgm_"+str ((self.floor -1) //10 )+".mp3"
+            self.unlock_music (os.path.basename (bgm_path ))
+            pygame .mixer .music .load (bgm_path)
             pygame .mixer .music .play (-1 )
 
     # TRUE_EPISODE後の記憶回想へ入り、フィールドBGM位置を保存して停止する
@@ -3982,6 +4066,7 @@ class Game:
                 self.emy_defence =True
                 self.enemy_powup_fail_count +=1
                 self.set_message ("　敵は　からだをかためた！")
+                self.se [14 ].play ()
             action =False 
         if self.emy_typ ==5:
             give = self.emy_lev + random .randint (1 ,5)
@@ -4090,13 +4175,12 @@ class Game:
                     if self.keep_title_bgm_on_next_title:
                         self.keep_title_bgm_on_next_title = False
                     else:
-                        pygame .mixer .music .load (self.path +"/sound/bgm_title.mp3")
-                        pygame .mixer .music .play (-1 )
+                        self.play_music_file ("bgm_title.mp3")
                     self.title_mode = 0
                 screen .fill (BLACK )
                 title_rect =self.blit_scaled_bg (screen ,self.imgTitle )
                 if self.title_mode == 0:
-                    options = ["はじめから", "つづきから", "ゲーム終了"]
+                    options = TITLE_MAIN_OPTIONS
                     selected = self.title_cmd
                     if self.input_up(key)and self.title_cmd >0 :
                         self.title_cmd -=1 
@@ -4109,12 +4193,16 @@ class Game:
                         elif self.title_cmd ==1 :
                             self.title_mode = 1
                         elif self.title_cmd ==2 :
+                            self.title_mode =3
+                            self.music_cmd =0
+                            self.music_playing_file =""
+                        elif self.title_cmd ==3 :
                             pygame .quit ()
                             sys .exit ()
                 elif self.title_mode ==1:
                     if key [K_x ]or key [K_BACKSPACE ]:
                         self.title_mode = 0
-                        options = ["はじめから", "つづきから", "ゲーム終了"]
+                        options = TITLE_MAIN_OPTIONS
                         selected = self.title_cmd
                     else:
                         options =self.save_slot_labels ()
@@ -4125,10 +4213,37 @@ class Game:
                             self.save_cmd +=1 
                         if accept:
                             self.load_game_data (self.save_cmd )
+                elif self.title_mode ==3:
+                    if key [K_x ]or key [K_BACKSPACE ]:
+                        self.title_mode =0
+                        self.music_playing_file =""
+                        self.play_music_file ("bgm_title.mp3")
+                        options =TITLE_MAIN_OPTIONS
+                        selected =self.title_cmd
+                    else:
+                        options =[]
+                        for entry in self.music_entries:
+                            if entry ["file"] in self.unlocked_music:
+                                label =entry ["label"]
+                                if self.music_playing_file ==entry ["file"]:
+                                    label ="♪ " +label
+                            else:
+                                label ="？"
+                            options .append (label )
+                        if self.music_cmd >=len (options ):
+                            self.music_cmd =max (0 ,len (options )-1 )
+                        selected =self.music_cmd
+                        if self.input_up(key)and self.music_cmd >0 :
+                            self.music_cmd -=1
+                        if self.input_down(key)and self.music_cmd <len (options )-1 :
+                            self.music_cmd +=1
+                        if accept and self.music_entries and self.music_entries [self.music_cmd]["file"] in self.unlocked_music:
+                            self.music_playing_file =self.music_entries [self.music_cmd]["file"]
+                            self.play_music_file (self.music_playing_file )
                 else:
                     if key [K_x ]or key [K_BACKSPACE ]:
                         self.title_mode =0
-                        options =["はじめから", "つづきから", "ゲーム終了"]
+                        options =TITLE_MAIN_OPTIONS
                         selected =self.title_cmd
                     else:
                         options =["ノーマル", "ハード"]
@@ -4144,14 +4259,21 @@ class Game:
                             self.tmr =0
                 rows = len (options )
                 line_h =32 
-                win_w =460 if self.title_mode ==1 else 360
+                if self.title_mode ==1:
+                    win_w =460
+                elif self.title_mode ==3:
+                    win_w =560
+                else:
+                    win_w =360
                 win_h =rows *line_h +20 
-                screen_w =screen .get_size ()[0 ]
+                screen_w ,screen_h =screen .get_size ()
                 win_x =(screen_w -win_w )//2 
                 title_top =title_rect [1 ]
                 title_h =title_rect [3 ]
                 anchor_y =title_top +int (title_h *0.7 )
                 win_y =anchor_y -win_h //2 
+                if self.title_mode ==3:
+                    win_y =max (20 ,min (win_y ,screen_h -win_h -45 ))
                 title_win = pygame.Surface((win_w, win_h), pygame.SRCALPHA)
                 title_win.fill((0, 0, 0, 200))
                 screen.blit(title_win, [win_x, win_y])
@@ -4160,7 +4282,11 @@ class Game:
                     x = win_x +win_w //2 -fontS .size (label )[0 ]//2
                     if i == selected :
                         self.draw_text (screen ,"▶",x - 25 ,y ,fontS ,WHITE )
-                    self.draw_text (screen ,label ,x ,y ,fontS ,WHITE )
+                    color =GRAY if self.title_mode ==3 and label =="？" else WHITE
+                    self.draw_text (screen ,label ,x ,y ,fontS ,color )
+                if self.title_mode ==3:
+                    guide ="Z/Enter 再生　X/Back 戻る"
+                    self.draw_text (screen ,guide ,win_x +win_w //2 -fontS .size (guide )[0 ]//2 ,win_y +win_h +10 ,fontS ,WHITE )
 
             elif self.idx ==10 :# プロローグ
                 self.draw_prologue (screen ,fontS ,key )
@@ -5002,6 +5128,7 @@ class Game:
                             self.move_bgm_path =next_bgm_path
                             self.move_bgm_pos_ms =0 
                             self.move_bgm_start_time =time .time ()
+                            self.unlock_music (os.path.basename (self.move_bgm_path ))
                             pygame .mixer .music .load (self.move_bgm_path )
                             pygame .mixer .music .play (-1 )
                     self.make_dungeon ()
@@ -5397,8 +5524,13 @@ class Game:
                 if self.tmr ==1 :
                     self.restore_battle_equip_session ()
                     self.btl_cmd =0 
-                    self.set_message ("プレイヤーのターン")
-                if self.battle_command (screen ,fontS ,key )==True :
+                    if self.player_frozen_next_turn:
+                        self.player_frozen_next_turn =False
+                        self.idx =228
+                        self.tmr =0
+                    else:
+                        self.set_message ("プレイヤーのターン")
+                if self.idx ==210 and self.battle_command (screen ,fontS ,key )==True :
                     if self.btl_cmd ==0 :#Attack
                         self.apply_auto_equip_for_battle_command (0 )
                         self.idx =220 
@@ -5490,6 +5622,18 @@ class Game:
                         self.emy_life =0 
                         self.idx =241 
                         self.tmr =0
+                    elif self.emy_typ ==10:
+                        counter_dmg =self.emy_str +random .randint (0 ,9 )-self.get_equipped_defence ()
+                        if self.guard_remain >0 :
+                            counter_dmg =counter_dmg *self.get_guard_damage_multiplier ()
+                        counter_dmg =max (1 ,int (counter_dmg /(2 *self.emy_poison +1 )/2 ))
+                        self.set_message (f"　反撃！ {counter_dmg} ダメージ！")
+                        se [10 ].play ()
+                        self.pl_life =self.pl_life -counter_dmg
+                        if self.pl_life <=0 :
+                            self.pl_life =0
+                            self.idx =242
+                            self.tmr =0
                 if self.tmr ==12 :
                     if self.emy_typ ==118 or self.emy_typ ==122:
                         self.boss_mode = "normal"
@@ -5641,6 +5785,7 @@ class Game:
                     if self.emy_typ ==112:
                         self.burn_turns =4 
                         self.set_message ("　敵は　火傷した！")
+                        se [13 ].play ()
                     else:
                         active_bomb_sword =self.get_active_weapon_level ("sword",2 )
                         if active_bomb_sword >0 and random .random ()>0.7 :
@@ -5766,6 +5911,14 @@ class Game:
                     self.idx =210
                     self.tmr =0
 
+            elif self.idx ==228 :# プレイヤー凍結による行動不能
+                self.draw_battle (screen ,fontS )
+                if self.tmr ==1 :
+                    self.set_message ("　凍りついて動けない！")
+                if self.tmr ==9 :
+                    self.idx =230
+                    self.tmr =0
+
             elif self.idx ==224 :#guard
                 self.draw_battle (screen ,fontS )
                 if self.tmr ==1 :
@@ -5851,6 +6004,9 @@ class Game:
                         self.idx =242 
                         self.tmr =0 
                 if self.tmr ==13 :
+                    if self.emy_typ ==11 and self.pl_life >0 and random .random ()<0.25 :
+                        self.player_frozen_next_turn =True
+                        self.set_message ("　体が　凍りついた！")
                     if self.pl_burn_turns >0 :
                         burn_counter =random .randint (680 ,720 )
                         self.set_message ("　火傷の反動　{} ダメージ！".format (burn_counter ))
@@ -5902,6 +6058,7 @@ class Game:
                     else :
                         self.set_message (f"　火傷してしまった！")
                         self.pl_burn_turns =3
+                        se [13 ].play ()
                 if self.tmr ==19 :
                     if self.emy_action (screen ):
                         self.tmr =self.tmr +2 
@@ -6037,6 +6194,7 @@ class Game:
                     else :
                         self.set_message (f"　火傷してしまった！")
                         self.pl_burn_turns =3
+                        se [13 ].play ()
                 if self.tmr ==18 :
                     self.idx =229
                     self.tmr =0
@@ -6086,6 +6244,8 @@ class Game:
                 if self.tmr ==2 :
                     self.set_message ("{}を　たおした！".format (self.emy_name ))
                     self.growth_essence_drop_battle =(self.boss ==0 and (self.emy_typ ==9 or random .random ()<0.05 ))
+                    if self.boss ==1 and self.floor ==100 and self.extra_stage ==0 and self.emy_typ ==120:
+                        self.unlock_music ("bgm_battle_2.mp3")
                     pygame .mixer .music .stop ()
                     if self.boss ==1 :
                         se [6 ].play ()
