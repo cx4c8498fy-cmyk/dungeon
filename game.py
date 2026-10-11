@@ -10,6 +10,7 @@ import json
 import glob
 from pygame.locals import *
 from game_data import *
+from game_text import *
 from assets import load_images, load_sounds, load_floor_variants, load_wall_variants, make_wall_top
 
 
@@ -5697,6 +5698,7 @@ class Game:
                         self.boss_mode = "ice"
                     if ice ==1 :
                         self.set_message ("　敵は　凍りついた！")
+                        se [15 ].play ()
                     else :
                         self.tmr =self.tmr +5
                 if self.tmr ==18 :
@@ -6007,6 +6009,7 @@ class Game:
                     if self.emy_typ ==11 and self.pl_life >0 and random .random ()<0.25 :
                         self.player_frozen_next_turn =True
                         self.set_message ("　体が　凍りついた！")
+                        se [15 ].play ()
                     if self.pl_burn_turns >0 :
                         burn_counter =random .randint (680 ,720 )
                         self.set_message ("　火傷の反動　{} ダメージ！".format (burn_counter ))
