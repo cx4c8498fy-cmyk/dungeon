@@ -343,6 +343,10 @@ ITEM_WALL_WEAPON_SET_TALK = [
     "これを授けよう",
 ]
 
+ITEM_WALL_WEAPON_SET_OWNED_TALK = [
+    "すでに　必要なものは持っているようだな。\n健闘を祈る",
+]
+
 FAIRY_UPGRADE_TALK = [
     "神秘的な　力を　感じる\nアイテムを　強化することができそうだ",
     "どのアイテムの力を　強くしますか？",

@@ -1,5 +1,6 @@
 {
   "pl_start": [2, 16],
+  "floor_warp_pos": [3, 16],
   "item_walls": [
     {"pos": [4, 13], "kind": "item_upgrade", "count": 5},
     {"pos": [6, 13], "kind": "item", "count": 15},

@@ -69,9 +69,9 @@ MUSIC_FILE_ORDER = (
 )
 MUSIC_LABELS = {
     "bgm_title.mp3": "タイトル画面",
-    "bgm_battle_0.mp3": "通常戦闘BGM",
-    "bgm_battle_1.mp3": "通常ボス戦BGM",
-    "bgm_battle_2.mp3": "ラスボス戦BGM",
+    "bgm_battle_0.mp3": "通常戦闘",
+    "bgm_battle_1.mp3": "通常ボス戦",
+    "bgm_battle_2.mp3": "ラスボス戦",
     "bgm_0.mp3": "地下1-10階",
     "bgm_1.mp3": "地下11-20階",
     "bgm_2.mp3": "地下21-30階",
@@ -321,6 +321,7 @@ class Game:
 
         self.message = [""] * 10
         self.init_floor_variant_map()
+        self.init_wall_variant_map()
         self.init_floor_flip_map()
         self.prologue_lines = PROLOGUE_LINES
         self.prologue_input_lock = False
@@ -403,6 +404,14 @@ class Game:
     def init_floor_variant_map(self):
         count = max(len(self.floor_variants), 1)
         self.floor_var_map = [[random.randint(0, count - 1) for j in range(DUNGEON_W)] for i in range(DUNGEON_H)]
+
+    # 通常壁の差し替え結果を保持し、wall*_0を8割、wall*_1を2割で使う
+    def init_wall_variant_map(self):
+        count = len(self.wall_variantsA)
+        if count <=1:
+            self.wall_var_map =[[0 for j in range (DUNGEON_W )]for i in range (DUNGEON_H )]
+        else:
+            self.wall_var_map =[[1 if random .random ()<0.08 else 0 for j in range (DUNGEON_W )]for i in range (DUNGEON_H )]
 
     # 床タイルの左右反転パターンを保持する辞書を初期化する
     def init_floor_flip_map(self):
@@ -1036,6 +1045,8 @@ class Game:
                     data["event_wall_pos"] = (data["event_wall_pos"][0] + offset_x, data["event_wall_pos"][1] + offset_y)
                 if "info_wall_pos" in data:
                     data["info_wall_pos"] = (data["info_wall_pos"][0] + offset_x, data["info_wall_pos"][1] + offset_y)
+                if "floor_warp_pos" in data:
+                    data["floor_warp_pos"] = (data["floor_warp_pos"][0] + offset_x, data["floor_warp_pos"][1] + offset_y)
                 if "item_walls" in data and isinstance(data["item_walls"], list):
                     for entry in data["item_walls"]:
                         if isinstance(entry, dict) and "pos" in entry:
@@ -1557,6 +1568,7 @@ class Game:
             self.dungeon = fixed_data["dungeon"]
             self.fixed_floor_data = fixed_data
             self.init_floor_variant_map()
+            self.init_wall_variant_map()
             self.init_floor_flip_map()
             self.init_map_state()
             return
@@ -1638,6 +1650,7 @@ class Game:
                                 self.dungeon [dy +ry ][dx +step ]=0 
         self.connect_floor_areas ()
         self.init_floor_variant_map()
+        self.init_wall_variant_map()
         self.init_floor_flip_map()
         self.init_map_state()
 
@@ -1729,6 +1742,7 @@ class Game:
                             else:
                                 bg .blit (self.imgFloor [tile_id ],[X ,Y ])
                     if tile_id in (7 ,8 ,9 ,13 ,14 ,15 ):
+                        wall_variant =self.wall_var_map [dy ][dx ]
                         if tile_id ==8 and self.wall_event:
                             bg .blit (self.wall_event ,[X ,Y -40 ])
                         elif tile_id ==14 and self.wall_check:
@@ -1736,7 +1750,7 @@ class Game:
                         elif tile_id ==15 and self.wall_book:
                             bg .blit (self.wall_book ,[X ,Y -40 ])
                         else :
-                            bg .blit (self.imgWall ,[X ,Y -40 ])
+                            bg .blit (self.wall_variantsA [wall_variant ],[X ,Y -40 ])
                         if tile_id ==7 :
                             bg .blit (self.imgFloor [-1 ],[X ,Y ])
                         if tile_id ==13 :
@@ -1774,6 +1788,9 @@ class Game:
         fixed_player_start =None
         rule_floor =self.floor
         if self.extra_stage >0 and self.fixed_floor_data:
+            if self.extra_stage ==1:
+                wx ,wy =self.fixed_floor_data ["floor_warp_pos"]
+                self.dungeon [wy ][wx ]=17
             self.pl_x, self.pl_y =self.fixed_floor_data ["pl_start"]
             self.pl_d =1
             self.pl_a =5
@@ -1933,7 +1950,7 @@ class Game:
             return
         if self.dungeon [self.pl_y ][self.pl_x ]==17 :# ワープ記憶床に載った
             self.dungeon [self.pl_y ][self.pl_x ]=0
-            self.floor_warp_floors .add (self.floor )
+            self.floor_warp_floors .add (100 +self.extra_stage if self.extra_stage >0 else self.floor )
             self.init_item_event (kind ="floor_warp_learned",lines =["この場所への　行き方を　覚えた"])
             self.idx =131
             self.tmr =0
@@ -2802,12 +2819,25 @@ class Game:
         for trap_id in trap_ids :
             slot =trap_id //3
             if trap_id %3 ==0 :
-                self.pl_shield [slot ]=level
+                self.pl_shield [slot ]=max (self.pl_shield [slot ],level )
             elif trap_id %3 ==1 :
-                self.pl_armor [slot ]=level
+                self.pl_armor [slot ]=max (self.pl_armor [slot ],level )
             else :
-                self.pl_sword [slot ]=level
+                self.pl_sword [slot ]=max (self.pl_sword [slot ],level )
         self.update_player_images ()
+
+    # 指定フロアのitemWallで配布される武具セットを全て所持済みか判定する
+    def has_weapon_set_for_floor (self ,floor ):
+        _ ,trap_ids =ITEM_WALL_WEAPON_SET [floor ]
+        for trap_id in trap_ids :
+            slot =trap_id //3
+            if trap_id %3 ==0 and self.pl_shield [slot ]<=0 :
+                return False
+            if trap_id %3 ==1 and self.pl_armor [slot ]<=0 :
+                return False
+            if trap_id %3 ==2 and self.pl_sword [slot ]<=0 :
+                return False
+        return True
 
     # 現在値と最大値に応じた横長ゲージを描画する
     def draw_bar (self ,bg ,x ,y ,w ,h ,val ,ma ):
@@ -3428,7 +3458,12 @@ class Game:
 
     # 記憶済みワープ先の表示名と遷移先階を、キャンセル項目込みで返す
     def get_warp_choice_entries (self ):
-        entries =[{"label":f"地下 {floor}階","floor":floor}for floor in sorted (self.floor_warp_floors )]
+        entries =[]
+        for floor in sorted (self.floor_warp_floors ):
+            if floor >100:
+                entries .append ({"label":f"Extra {floor -100}","floor":100,"extra_stage":floor -100})
+            else:
+                entries .append ({"label":f"地下 {floor}階","floor":floor,"extra_stage":0})
         entries .append ({"label":"ワープしない","floor":None})
         return entries
 
@@ -3441,6 +3476,7 @@ class Game:
         self.tool_warp_choice_active =False
         if target_floor is None:
             return False
+        self.extra_stage =entries [self.tool_warp_choice_cmd ].get ("extra_stage",0 )
         self.tool_warp =max (0 ,self.tool_warp -1 )
         self.save_from_stair =False
         self.save_from_boss_talk =False
@@ -4217,8 +4253,9 @@ class Game:
                 elif self.title_mode ==3:
                     if key [K_x ]or key [K_BACKSPACE ]:
                         self.title_mode =0
+                        if self.music_playing_file not in ("" ,"bgm_title.mp3"):
+                            self.play_music_file ("bgm_title.mp3")
                         self.music_playing_file =""
-                        self.play_music_file ("bgm_title.mp3")
                         options =TITLE_MAIN_OPTIONS
                         selected =self.title_cmd
                     else:
@@ -5016,10 +5053,16 @@ class Game:
                                 self.idx =132
                                 self.tmr =0
                         elif rule_floor in ITEM_WALL_WEAPON_SET:
-                            self.init_item_event (
-                                kind ="weapon_set",
-                                lines =ITEM_WALL_WEAPON_SET_TALK
-                            )
+                            if self.has_weapon_set_for_floor (rule_floor ):
+                                self.init_item_event (
+                                    kind ="weapon_set_owned",
+                                    lines =ITEM_WALL_WEAPON_SET_OWNED_TALK
+                                )
+                            else:
+                                self.init_item_event (
+                                    kind ="weapon_set",
+                                    lines =ITEM_WALL_WEAPON_SET_TALK
+                                )
                             self.idx =131
                             self.tmr =0
                         elif rule_floor >= 91 and not self.all_cocoons_cleared():
@@ -5334,6 +5377,12 @@ class Game:
                         self.item_popup_text ="新たな装備"
                         self.dungeon [self.pl_y -1 ][self.pl_x ]=9
                         self.idx =120
+                        self.tmr =0
+                elif self.item_event_kind == "weapon_set_owned":
+                    finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
+                    if finished:
+                        self.dungeon [self.pl_y -1 ][self.pl_x ]=9
+                        self.idx =100
                         self.tmr =0
                 elif self.item_event_kind == "fairy_upgrade_gone":
                     finished =self.step_item_event_talk (screen ,fontS ,layout ,accept )
@@ -6211,7 +6260,7 @@ class Game:
                     se [12 ].play ()
                     self.emy_step =30 
                 if self.tmr ==8 :
-                    self.poison = 4
+                    self.poison =4 +(self.emy_lev +2 )//5
                     self.poison_new_this_turn =False
                 if self.tmr ==14 :
                     self.idx =229
